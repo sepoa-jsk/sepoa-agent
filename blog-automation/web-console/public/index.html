@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>세포아 블로그 콘솔</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<style>
+  :root {
+    --primary: #0747A6;
+    --primary-weak: #E8EFF9;
+    --dark: #0F172A;
+    --line: #E2E8F0;
+    --ink: #1E293B;
+    --muted: #64748B;
+    --bg: #F8FAFC;
+    --ok: #15803D;
+    --stop: #B45309;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+  }
+  header {
+    background: var(--dark);
+    color: #fff;
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 4px rgba(7,71,166,.25);
+  }
+  header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.2px; }
+  header span { font-size: 12px; color: #94A3B8; margin-left: auto; }
+
+  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 80px; }
+
+  /* 진입 선택 */
+  .entry {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 8px;
+  }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; cursor: pointer; transition: border-color .15s, box-shadow .15s;
+  }
+  .card:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(7,71,166,.08); }
+  .card.active { border-color: var(--primary); background: var(--primary-weak); }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  .panel {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px; margin-top: 16px;
+  }
+  .panel.hidden { display: none; }
+
+  /* 업로드 존 */
+  .drop {
+    border: 1.5px dashed #CBD5E1; border-radius: 10px; padding: 32px;
+    text-align: center; color: var(--muted); cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop.over { border-color: var(--primary); background: var(--primary-weak); }
+  .drop strong { color: var(--primary); }
+  .fileline { margin-top: 12px; font-size: 13px; color: var(--ink); display: none; }
+  .fileline.show { display: block; }
+
+  textarea {
+    width: 100%; min-height: 76px; border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px; font: inherit; resize: vertical;
+  }
+  textarea:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+  .btn {
+    appearance: none; border: 0; border-radius: 8px; padding: 11px 18px;
+    font: inherit; font-weight: 600; cursor: pointer; transition: opacity .15s;
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-ghost { background: #fff; color: var(--primary); border: 1px solid var(--primary); }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+
+  /* 진행 단계 표시 */
+  .steps { display: flex; gap: 6px; margin: 20px 0 4px; font-size: 12px; }
+  .steps .s {
+    flex: 1; text-align: center; padding: 8px 4px; border-radius: 6px;
+    background: #F1F5F9; color: var(--muted);
+  }
+  .steps .s.done { background: #DCFCE7; color: var(--ok); }
+  .steps .s.now { background: var(--primary); color: #fff; }
+
+  /* 결과 출력 */
+  .out {
+    margin-top: 16px; background: #0B1220; color: #E2E8F0;
+    border-radius: 10px; padding: 18px; font-size: 13.5px;
+    white-space: pre-wrap; word-break: break-word; line-height: 1.7;
+    max-height: 420px; overflow: auto;
+  }
+  .stopbar {
+    margin-top: 14px; padding: 12px 16px; border-radius: 8px;
+    background: #FEF3C7; color: var(--stop); font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .stats {
+    margin-top: 8px; font-size: 12px; color: var(--muted);
+    display: none; flex-wrap: wrap; gap: 6px 14px;
+  }
+  .stats.show { display: flex; }
+  .stats b { color: var(--ink); font-weight: 600; }
+  .loading {
+    display: none; margin-top: 16px; padding: 16px 18px;
+    background: var(--primary-weak); border: 1px solid var(--primary);
+    border-radius: 10px; align-items: center; gap: 14px;
+  }
+  .loading.show { display: flex; }
+  .spinner {
+    width: 24px; height: 24px; border-radius: 50%; flex: none;
+    border: 3px solid rgba(7,71,166,.2); border-top-color: var(--primary);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading .ltext { flex: 1; min-width: 0; }
+  .loading .ltitle { font-size: 14px; font-weight: 700; color: var(--primary); }
+  .loading .lsub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .btn-stop {
+    appearance: none; border: 1px solid var(--stop); background: #fff;
+    color: var(--stop); border-radius: 8px; padding: 8px 16px;
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; flex: none;
+  }
+  .btn-stop:disabled { opacity: .5; cursor: not-allowed; }
+  .err { color: #B91C1C; font-size: 13px; margin-top: 12px; }
+
+  .titlepick { display: flex; gap: 8px; margin-top: 14px; }
+  .titlepick button {
+    flex: 1; padding: 10px; border: 1px solid var(--line); background: #fff;
+    border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600;
+  }
+  .titlepick button:hover { border-color: var(--primary); color: var(--primary); }
+</style>
+</head>
+<body>
+<header>
+  <div class="dot"></div>
+  <h1>세포아 블로그 콘솔</h1>
+  <span>blog.naver.com/sepoa0127</span>
+</header>
+
+<div class="wrap">
+  <!-- 진입 방식 선택 -->
+  <div class="entry">
+    <div class="card" id="cardA" onclick="chooseEntry('A')">
+      <h3>워드 초안 올리기</h3>
+      <p>작성해 둔 .docx를 올리면 읽고 제목을 추천합니다.</p>
+    </div>
+    <div class="card" id="cardB" onclick="chooseEntry('B')">
+      <h3>주제만 입력하기</h3>
+      <p>"OO 주제로 써줘" 한 줄이면 시작합니다.</p>
+    </div>
+  </div>
+
+  <!-- 입구 A: 업로드 -->
+  <div class="panel hidden" id="panelA">
+    <div class="drop" id="drop">
+      <p><strong>클릭</strong> 또는 파일을 여기로 끌어다 놓기 (.docx)</p>
+      <div class="fileline" id="fileline"></div>
+    </div>
+    <input type="file" id="fileInput" accept=".docx,.doc" hidden />
+    <div class="row">
+      <button class="btn btn-primary" id="startAbtn" disabled onclick="startFromDocx()">읽고 제목 추천받기</button>
+    </div>
+  </div>
+
+  <!-- 입구 B: 주제 입력 -->
+  <div class="panel hidden" id="panelB">
+    <textarea id="topic" placeholder="예) 전자계약 도입 효과를 리스크 관리 관점에서 써줘"></textarea>
+    <div class="row">
+      <button class="btn btn-primary" id="startBbtn" onclick="startFromTopic()">주제로 시작하기</button>
+    </div>
+  </div>
+
+  <!-- 진행/결과 영역 -->
+  <div class="panel hidden" id="work">
+    <div class="steps" id="stepbar">
+      <div class="s" data-k="title">제목 선택</div>
+      <div class="s" data-k="keyword">키워드 승인</div>
+      <div class="s" data-k="body">본문·이미지</div>
+      <div class="s" data-k="verify">검증</div>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <div class="ltext">
+        <div class="ltitle" id="loadingText">Claude Code 하네스 실행 중…</div>
+        <div class="lsub" id="loadingSub">경과 0초</div>
+      </div>
+      <button class="btn-stop" id="stopBtn" onclick="stopRun()">중지</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div class="out" id="out" style="display:none"></div>
+    <div class="stats" id="stats"></div>
+
+    <!-- 제목 선택 버튼 (STOP1) -->
+    <div class="titlepick" id="titlepick" style="display:none">
+      <button onclick="pickTitle(1)">1번</button>
+      <button onclick="pickTitle(2)">2번</button>
+      <button onclick="pickTitle(3)">3번</button>
+    </div>
+
+    <!-- STOP 승인 바 -->
+    <div class="stopbar" id="stopbar" style="display:none">
+      <span id="stoptext"></span>
+    </div>
+    <div class="row" id="stopactions" style="display:none">
+      <button class="btn btn-primary" id="approveBtn"></button>
+    </div>
+
+    <!-- 수정 요청 (모든 STOP에서 사용 가능) -->
+    <div id="reviseArea" style="display:none; margin-top:14px">
+      <textarea id="reviseText" style="min-height:56px"></textarea>
+      <div class="row">
+        <button class="btn btn-ghost" onclick="requestRevise()">수정 요청</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 브라우저 탭마다 고유 키 → 서버가 Claude 세션을 이어가는 데 사용
+  const browserKey = "bk_" + Math.random().toString(36).slice(2);
+  let entry = null;        // 'A' | 'B'
+  let uploaded = false;
+
+  const $ = (id) => document.getElementById(id);
+
+  function chooseEntry(k) {
+    entry = k;
+    $("cardA").classList.toggle("active", k === "A");
+    $("cardB").classList.toggle("active", k === "B");
+    $("panelA").classList.toggle("hidden", k !== "A");
+    $("panelB").classList.toggle("hidden", k !== "B");
+  }
+
+  // ── 업로드 처리 ──────────────────────────────
+  const drop = $("drop"), fileInput = $("fileInput");
+  drop.onclick = () => fileInput.click();
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+  drop.ondragleave = () => drop.classList.remove("over");
+  drop.ondrop = (e) => {
+    e.preventDefault(); drop.classList.remove("over");
+    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+  };
+  fileInput.onchange = () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); };
+
+  async function uploadFile(file) {
+    const fd = new FormData();
+    fd.append("draft", file);
+    $("fileline").textContent = "업로드 중… " + file.name;
+    $("fileline").classList.add("show");
+    try {
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "업로드 실패");
+      $("fileline").textContent = "올림: " + j.filename;
+      uploaded = true;
+      $("startAbtn").disabled = false;
+    } catch (e) {
+      $("fileline").textContent = "실패: " + e.message;
+    }
+  }
+
+  // ── 단계 실행 공통 ───────────────────────────
+  let stopRequested = false;
+  let loadingTimer = null;
+
+  // 실행 중 화면에 보여줄 단계별 설명 (작업 중임을 분명히 인지시키기 위함)
+  const STEP_LABELS = {
+    start_from_docx: "워드 초안을 읽고 제목을 추천하는 중",
+    start_from_topic: "주제를 확장하고 제목을 추천하는 중",
+    pick_title: "SEO 키워드 배치안을 만드는 중",
+    approve_keywords: "본문과 이미지 프롬프트를 작성하는 중",
+    approve_images: "최종 검증을 실행하는 중",
+    revise: "수정 요청을 반영하는 중",
+  };
+
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    return s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초";
+  }
+
+  async function runStep(payload) {
+    $("work").classList.remove("hidden");
+    $("loadingText").textContent =
+      (STEP_LABELS[payload.step] || "Claude Code 하네스 실행 중") + "…";
+    $("loadingSub").textContent = "경과 0초 · 단계에 따라 수 분 걸릴 수 있습니다.";
+    $("stopBtn").disabled = false;
+    $("loading").classList.add("show");
+    $("err").textContent = "";
+    $("titlepick").style.display = "none";
+    $("stopbar").style.display = "none";
+    $("stopactions").style.display = "none";
+    $("reviseArea").style.display = "none";
+    $("startAbtn").disabled = true;
+    $("startBbtn").disabled = true;
+    stopRequested = false;
+
+    // 1초마다 경과 시간을 올려서 "돌고 있다"는 걸 보여준다
+    const t0 = Date.now();
+    clearInterval(loadingTimer);
+    loadingTimer = setInterval(() => {
+      $("loadingSub").textContent =
+        "경과 " + fmtElapsed(Date.now() - t0) + " · 단계에 따라 수 분 걸릴 수 있습니다.";
+    }, 1000);
+
+    function endLoading() {
+      clearInterval(loadingTimer);
+      $("loading").classList.remove("show");
+      $("startAbtn").disabled = !uploaded;
+      $("startBbtn").disabled = false;
+    }
+
+    try {
+      const r = await fetch("/api/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ browserKey, ...payload }),
+      });
+      const j = await r.json();
+      endLoading();
+      if (!j.ok) throw new Error(j.error || "실행 실패");
+      $("out").style.display = "block";
+      $("out").textContent = j.text;
+      renderStats(j.meta);
+      return j.text;
+    } catch (e) {
+      endLoading();
+      $("err").textContent = stopRequested ? "중지되었습니다." : "오류: " + e.message;
+      throw e;
+    }
+  }
+
+  // ── 중지 버튼: 지금 돌고 있는 claude 프로세스를 서버에 종료 요청 ─────
+  async function stopRun() {
+    stopRequested = true;
+    $("loadingText").textContent = "중지 중…";
+    $("stopBtn").disabled = true;
+    try {
+      await fetch("/api/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ browserKey }),
+      });
+    } catch (e) {
+      // 중지 요청 자체가 실패해도 화면은 위 catch(e) 에서 이미 처리된다.
+    }
+  }
+
+  // ── 토큰 사용량·소요시간 표시 ─────────────────
+  // 단계별 수치 + 이 작업 전체 누적을 결과 아래에 보여준다.
+  const totals = { ms: 0, inTok: 0, outTok: 0, cost: 0 };
+
+  function fmtSec(ms) {
+    return ms >= 60000
+      ? Math.floor(ms / 60000) + "분 " + Math.round((ms % 60000) / 1000) + "초"
+      : (ms / 1000).toFixed(1) + "초";
+  }
+
+  function renderStats(m) {
+    if (!m) { $("stats").classList.remove("show"); return; }
+    const inTok = m.usage
+      ? (m.usage.input_tokens || 0) +
+        (m.usage.cache_read_input_tokens || 0) +
+        (m.usage.cache_creation_input_tokens || 0)
+      : 0;
+    const outTok = m.usage ? m.usage.output_tokens || 0 : 0;
+    totals.ms += m.durationMs || 0;
+    totals.inTok += inTok;
+    totals.outTok += outTok;
+    totals.cost += m.costUsd || 0;
+
+    const parts = [];
+    parts.push("이번 단계: <b>" + fmtSec(m.durationMs || 0) + "</b>");
+    if (m.usage)
+      parts.push("토큰 입력 <b>" + inTok.toLocaleString() + "</b> · 출력 <b>" + outTok.toLocaleString() + "</b>");
+    if (m.costUsd != null) parts.push("비용 <b>$" + m.costUsd.toFixed(4) + "</b>");
+    if (m.numTurns != null) parts.push(m.numTurns + "턴");
+    parts.push(
+      "누적: <b>" + fmtSec(totals.ms) + "</b> · 토큰 <b>" +
+      (totals.inTok + totals.outTok).toLocaleString() + "</b> · <b>$" +
+      totals.cost.toFixed(4) + "</b>"
+    );
+    $("stats").innerHTML = parts.map((p) => "<span>" + p + "</span>").join("");
+    $("stats").classList.add("show");
+  }
+
+  function markStep(kEl, cls) {
+    document.querySelectorAll(".steps .s").forEach((s) => {
+      if (s.dataset.k === kEl) { s.className = "s " + cls; }
+    });
+  }
+
+  // ── 입구 A 시작 ─────────────────────────────
+  async function startFromDocx() {
+    if (!uploaded) return;
+    markStep("title", "now");
+    await runStep({ step: "start_from_docx" });
+    showTitlePick();
+  }
+
+  // ── 입구 B 시작 ─────────────────────────────
+  async function startFromTopic() {
+    const topic = $("topic").value.trim();
+    if (!topic) { $("topic").focus(); return; }
+    markStep("title", "now");
+    await runStep({ step: "start_from_topic", topic });
+    showTitlePick();
+  }
+
+  // 지금 어느 STOP에 서 있는지 → 수정 요청 후 같은 STOP 화면을 다시 띄우는 데 사용
+  let currentStage = null; // 'title' | 'keyword' | 'body'
+
+  function showRevise(placeholder) {
+    $("reviseArea").style.display = "block";
+    $("reviseText").placeholder = placeholder;
+  }
+
+  function showTitlePick() {
+    currentStage = "title";
+    $("titlepick").style.display = "flex";
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르거나, 아래에 수정을 요청하세요.";
+    showRevise("예) 제목을 더 짧게, 질문형으로 다시 뽑아줘");
+  }
+
+  function showKeywordStop() {
+    currentStage = "keyword";
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하거나, 수정을 요청하세요.";
+    $("stopactions").style.display = "flex";
+    $("approveBtn").textContent = "키워드 승인하고 본문 작성";
+    $("approveBtn").onclick = approveKeywords;
+    showRevise("예) '전자계약' 키워드는 빼고 다시 제안해줘");
+  }
+
+  function showImageStop() {
+    currentStage = "body";
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하거나, 수정을 요청하세요.";
+    $("stopactions").style.display = "flex";
+    $("approveBtn").textContent = "이미지 승인하고 최종 검증";
+    $("approveBtn").onclick = approveImages;
+    showRevise("예) 도입부를 더 간결하게 고치고 이미지 텍스트도 맞춰줘");
+  }
+
+  // ── 수정 요청: 현재 단계 결과물만 고쳐서 같은 STOP 으로 복귀 ──────
+  async function requestRevise() {
+    const feedback = $("reviseText").value.trim();
+    if (!feedback) { $("reviseText").focus(); return; }
+    const stage = currentStage;
+    try {
+      await runStep({ step: "revise", feedback });
+      $("reviseText").value = "";
+    } finally {
+      // 성공·실패 어느 쪽이든 같은 STOP 화면으로 되돌려 계속 진행/재시도할 수 있게 한다
+      if (stage === "title") showTitlePick();
+      else if (stage === "keyword") showKeywordStop();
+      else if (stage === "body") showImageStop();
+    }
+  }
+
+  // ── STOP1: 제목 선택 → 키워드 ────────────────
+  async function pickTitle(n) {
+    markStep("title", "done");
+    markStep("keyword", "now");
+    await runStep({ step: "pick_title", choice: n });
+    showKeywordStop();
+  }
+
+  // ── STOP2: 키워드 승인 → 본문+이미지 ─────────
+  async function approveKeywords() {
+    markStep("keyword", "done");
+    markStep("body", "now");
+    await runStep({ step: "approve_keywords" });
+    showImageStop();
+  }
+
+  // ── STOP3: 이미지 승인 → 검증 ───────────────
+  async function approveImages() {
+    markStep("body", "done");
+    markStep("verify", "now");
+    await runStep({ step: "approve_images" });
+    currentStage = null;
+    markStep("verify", "done");
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "검증 완료. 발행은 네이버에서 직접 하세요 (자동 발행 안 함).";
+    $("stopactions").style.display = "none";
+  }
+</script>
+</body>
+</html>

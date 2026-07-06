@@ -1,0 +1,14 @@
+{
+  "name": "sepoa-blog-web-console",
+  "version": "1.0.0",
+  "description": "화면에서 워드 업로드/주제 입력으로 기존 sepoa-blog-harness(Claude Code)를 구동하는 얇은 콘솔",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  }
+}
