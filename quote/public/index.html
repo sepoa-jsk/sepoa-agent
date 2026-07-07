@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>세포아 견적 시스템</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+  <!-- 로그인 게이트 -->
+  <div id="login-gate" class="login-gate hidden">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="login-logo">SQ</div>
+        <h1>세포아 견적 시스템</h1>
+        <p>SingleSuite 견적서 자동생성</p>
+      </div>
+      <div id="login-google" class="hidden">
+        <div id="google-btn"></div>
+        <p class="login-hint">회사 Google 계정으로 로그인하세요.</p>
+      </div>
+      <form id="login-dev" class="login-dev hidden">
+        <label>개발용 로그인 (AUTH_MODE=dev)</label>
+        <input type="email" id="dev-email" placeholder="you@sepoa.co.kr" required />
+        <button type="submit" class="btn btn-primary btn-block">로그인</button>
+        <p class="login-hint">개발 모드입니다. 이메일만으로 로그인됩니다.</p>
+      </form>
+      <div id="login-error" class="login-error hidden"></div>
+    </div>
+  </div>
+
+  <!-- 앱 셸 -->
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">SQ</div>
+        <div class="sidebar-title">견적 시스템</div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#/quotes" data-nav="quotes"><span class="nav-ico">▤</span> 견적 목록</a>
+        <a href="#/quotes/new" data-nav="new"><span class="nav-ico">＋</span> 새 견적</a>
+        <a href="#/pricing" data-nav="pricing" data-admin><span class="nav-ico">₩</span> 가격정책 관리</a>
+        <a href="#/settings" data-nav="settings" data-admin><span class="nav-ico">⚙</span> 설정</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="user-box">
+          <div class="user-avatar" id="user-avatar"></div>
+          <div class="user-meta">
+            <div class="user-name" id="user-name"></div>
+            <div class="user-role" id="user-role"></div>
+          </div>
+        </div>
+        <button id="logout-btn" class="btn btn-ghost btn-sm btn-block">로그아웃</button>
+      </div>
+    </aside>
+    <main class="content">
+      <div id="view" class="view"></div>
+    </main>
+  </div>
+
+  <div id="toast-root" class="toast-root"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

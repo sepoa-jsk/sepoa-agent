@@ -1,0 +1,26 @@
+{
+  "name": "sepoa-quote",
+  "version": "0.1.0",
+  "private": true,
+  "description": "세포아소프트 SingleSuite 견적서 자동생성 시스템",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node sql/migrate.js",
+    "seed": "node seed/seed.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0",
+    "express-mysql-session": "^3.0.3",
+    "express-session": "^1.18.1",
+    "google-auth-library": "^9.14.0",
+    "mysql2": "^3.11.0"
+  }
+}
