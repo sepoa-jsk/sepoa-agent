@@ -109,33 +109,44 @@
     background: #FEF3C7; color: var(--stop); font-size: 13px; font-weight: 600;
     display: flex; align-items: center; gap: 8px;
   }
-  .stats {
-    margin-top: 8px; font-size: 12px; color: var(--muted);
-    display: none; flex-wrap: wrap; gap: 6px 14px;
-  }
-  .stats.show { display: flex; }
-  .stats b { color: var(--ink); font-weight: 600; }
-  .loading {
-    display: none; margin-top: 16px; padding: 16px 18px;
+  /* 작업중 배너 */
+  .working {
+    display: none; align-items: center; gap: 14px;
+    margin-top: 16px; padding: 16px 18px; border-radius: 10px;
     background: var(--primary-weak); border: 1px solid var(--primary);
-    border-radius: 10px; align-items: center; gap: 14px;
+    animation: workpulse 2s ease-in-out infinite;
   }
-  .loading.show { display: flex; }
-  .spinner {
-    width: 24px; height: 24px; border-radius: 50%; flex: none;
+  .working.show { display: flex; }
+  .working .spinner {
+    width: 22px; height: 22px; flex: none;
     border: 3px solid rgba(7,71,166,.2); border-top-color: var(--primary);
-    animation: spin .8s linear infinite;
+    border-radius: 50%; animation: spin .8s linear infinite;
   }
+  .working .wtext { flex: 1; }
+  .working .wtext strong { color: var(--primary); font-size: 14px; display: block; }
+  .working .wtext small { color: var(--muted); font-size: 12px; }
+  .working .elapsed {
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 15px;
+    color: var(--primary); min-width: 56px; text-align: right;
+  }
+  .btn-stop { background: #fff; color: #B91C1C; border: 1px solid #FCA5A5; padding: 8px 14px; }
+  .btn-stop:hover { background: #FEF2F2; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading .ltext { flex: 1; min-width: 0; }
-  .loading .ltitle { font-size: 14px; font-weight: 700; color: var(--primary); }
-  .loading .lsub { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .btn-stop {
-    appearance: none; border: 1px solid var(--stop); background: #fff;
-    color: var(--stop); border-radius: 8px; padding: 8px 16px;
-    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; flex: none;
+  @keyframes workpulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(7,71,166,.18); }
+    50% { box-shadow: 0 0 0 6px rgba(7,71,166,.06); }
   }
-  .btn-stop:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* 사용량 표시 */
+  .meta {
+    display: none; margin-top: 10px; padding: 12px 16px; border-radius: 8px;
+    background: #F1F5F9; border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted); line-height: 1.8;
+  }
+  .meta.show { display: block; }
+  .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .meta .mrow { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .meta .mlabel { color: var(--primary); font-weight: 700; margin-right: 2px; }
   .err { color: #B91C1C; font-size: 13px; margin-top: 12px; }
 
   .titlepick { display: flex; gap: 8px; margin-top: 14px; }
@@ -182,7 +193,7 @@
   <div class="panel hidden" id="panelB">
     <textarea id="topic" placeholder="예) 전자계약 도입 효과를 리스크 관리 관점에서 써줘"></textarea>
     <div class="row">
-      <button class="btn btn-primary" id="startBbtn" onclick="startFromTopic()">주제로 시작하기</button>
+      <button class="btn btn-primary" onclick="startFromTopic()">주제로 시작하기</button>
     </div>
   </div>
 
@@ -195,17 +206,18 @@
       <div class="s" data-k="verify">검증</div>
     </div>
 
-    <div class="loading" id="loading">
+    <div class="working" id="working">
       <div class="spinner"></div>
-      <div class="ltext">
-        <div class="ltitle" id="loadingText">Claude Code 하네스 실행 중…</div>
-        <div class="lsub" id="loadingSub">경과 0초</div>
+      <div class="wtext">
+        <strong>작업 중입니다…</strong>
+        <small>Claude Code 하네스가 실행되고 있습니다. 단계에 따라 수 분이 걸릴 수 있습니다.</small>
       </div>
-      <button class="btn-stop" id="stopBtn" onclick="stopRun()">중지</button>
+      <div class="elapsed" id="elapsed">0초</div>
+      <button class="btn btn-stop" onclick="stopRun()">중지</button>
     </div>
     <div class="err" id="err"></div>
     <div class="out" id="out" style="display:none"></div>
-    <div class="stats" id="stats"></div>
+    <div class="meta" id="meta"></div>
 
     <!-- 제목 선택 버튼 (STOP1) -->
     <div class="titlepick" id="titlepick" style="display:none">
@@ -220,14 +232,6 @@
     </div>
     <div class="row" id="stopactions" style="display:none">
       <button class="btn btn-primary" id="approveBtn"></button>
-    </div>
-
-    <!-- 수정 요청 (모든 STOP에서 사용 가능) -->
-    <div id="reviseArea" style="display:none; margin-top:14px">
-      <textarea id="reviseText" style="min-height:56px"></textarea>
-      <div class="row">
-        <button class="btn btn-ghost" onclick="requestRevise()">수정 요청</button>
-      </div>
     </div>
   </div>
 </div>
@@ -276,56 +280,93 @@
     }
   }
 
-  // ── 단계 실행 공통 ───────────────────────────
-  let stopRequested = false;
-  let loadingTimer = null;
+  // ── 작업중 표시 (경과 시간 카운트) ────────────
+  let running = false;
+  let elapsedTimer = null;
 
-  // 실행 중 화면에 보여줄 단계별 설명 (작업 중임을 분명히 인지시키기 위함)
-  const STEP_LABELS = {
-    start_from_docx: "워드 초안을 읽고 제목을 추천하는 중",
-    start_from_topic: "주제를 확장하고 제목을 추천하는 중",
-    pick_title: "SEO 키워드 배치안을 만드는 중",
-    approve_keywords: "본문과 이미지 프롬프트를 작성하는 중",
-    approve_images: "최종 검증을 실행하는 중",
-    revise: "수정 요청을 반영하는 중",
-  };
-
-  function fmtElapsed(ms) {
-    const s = Math.floor(ms / 1000);
-    return s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초";
+  function showWorking() {
+    running = true;
+    const startedAt = Date.now();
+    $("elapsed").textContent = "0초";
+    $("working").classList.add("show");
+    document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = true));
+    elapsedTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - startedAt) / 1000);
+      $("elapsed").textContent =
+        s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초";
+    }, 1000);
   }
 
+  function hideWorking() {
+    running = false;
+    clearInterval(elapsedTimer);
+    $("working").classList.remove("show");
+    document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = false));
+    $("startAbtn").disabled = !uploaded; // 업로드 전이면 다시 잠금
+  }
+
+  async function stopRun() {
+    try {
+      await fetch("/api/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ browserKey }),
+      });
+    } catch {}
+  }
+
+  // ── 사용량 표시 (결과 도출 이후) ──────────────
+  const totals = { costUsd: 0, inTok: 0, outTok: 0, cacheTok: 0, ms: 0 };
+
+  const fmtNum = (n) => (n == null ? "-" : Number(n).toLocaleString("ko-KR"));
+  const fmtDur = (ms) => {
+    if (ms == null) return "-";
+    const s = Math.round(ms / 1000);
+    return s < 60 ? s + "초" : Math.floor(s / 60) + "분 " + (s % 60) + "초";
+  };
+  const fmtUsd = (c) => (c == null ? "-" : "$" + Number(c).toFixed(4));
+
+  function renderMeta(meta) {
+    if (!meta) { $("meta").classList.remove("show"); return; }
+    const u = meta.usage || {};
+    const inTok = u.input_tokens ?? null;
+    const outTok = u.output_tokens ?? null;
+    const cacheTok =
+      (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+
+    totals.ms += meta.durationMs ?? 0;
+    totals.costUsd += meta.costUsd ?? 0;
+    totals.inTok += inTok ?? 0;
+    totals.outTok += outTok ?? 0;
+    totals.cacheTok += cacheTok;
+
+    $("meta").innerHTML =
+      '<div class="mrow"><span class="mlabel">이번 단계</span>' +
+      "<span>소요 <b>" + fmtDur(meta.durationMs) + "</b></span>" +
+      "<span>턴 <b>" + fmtNum(meta.numTurns) + "</b></span>" +
+      "<span>입력 <b>" + fmtNum(inTok) + "</b> 토큰</span>" +
+      "<span>출력 <b>" + fmtNum(outTok) + "</b> 토큰</span>" +
+      "<span>캐시 <b>" + fmtNum(cacheTok) + "</b> 토큰</span>" +
+      "<span>비용 <b>" + fmtUsd(meta.costUsd) + "</b></span></div>" +
+      '<div class="mrow"><span class="mlabel">세션 누적</span>' +
+      "<span>소요 <b>" + fmtDur(totals.ms) + "</b></span>" +
+      "<span>입력 <b>" + fmtNum(totals.inTok) + "</b> 토큰</span>" +
+      "<span>출력 <b>" + fmtNum(totals.outTok) + "</b> 토큰</span>" +
+      "<span>캐시 <b>" + fmtNum(totals.cacheTok) + "</b> 토큰</span>" +
+      "<span>비용 <b>" + fmtUsd(totals.costUsd) + "</b></span></div>";
+    $("meta").classList.add("show");
+  }
+
+  // ── 단계 실행 공통 ───────────────────────────
   async function runStep(payload) {
+    if (running) return;
     $("work").classList.remove("hidden");
-    $("loadingText").textContent =
-      (STEP_LABELS[payload.step] || "Claude Code 하네스 실행 중") + "…";
-    $("loadingSub").textContent = "경과 0초 · 단계에 따라 수 분 걸릴 수 있습니다.";
-    $("stopBtn").disabled = false;
-    $("loading").classList.add("show");
+    showWorking();
     $("err").textContent = "";
+    $("meta").classList.remove("show");
     $("titlepick").style.display = "none";
     $("stopbar").style.display = "none";
     $("stopactions").style.display = "none";
-    $("reviseArea").style.display = "none";
-    $("startAbtn").disabled = true;
-    $("startBbtn").disabled = true;
-    stopRequested = false;
-
-    // 1초마다 경과 시간을 올려서 "돌고 있다"는 걸 보여준다
-    const t0 = Date.now();
-    clearInterval(loadingTimer);
-    loadingTimer = setInterval(() => {
-      $("loadingSub").textContent =
-        "경과 " + fmtElapsed(Date.now() - t0) + " · 단계에 따라 수 분 걸릴 수 있습니다.";
-    }, 1000);
-
-    function endLoading() {
-      clearInterval(loadingTimer);
-      $("loading").classList.remove("show");
-      $("startAbtn").disabled = !uploaded;
-      $("startBbtn").disabled = false;
-    }
-
     try {
       const r = await fetch("/api/step", {
         method: "POST",
@@ -333,71 +374,17 @@
         body: JSON.stringify({ browserKey, ...payload }),
       });
       const j = await r.json();
-      endLoading();
+      hideWorking();
       if (!j.ok) throw new Error(j.error || "실행 실패");
       $("out").style.display = "block";
       $("out").textContent = j.text;
-      renderStats(j.meta);
+      renderMeta(j.meta);
       return j.text;
     } catch (e) {
-      endLoading();
-      $("err").textContent = stopRequested ? "중지되었습니다." : "오류: " + e.message;
+      hideWorking();
+      $("err").textContent = "오류: " + e.message;
       throw e;
     }
-  }
-
-  // ── 중지 버튼: 지금 돌고 있는 claude 프로세스를 서버에 종료 요청 ─────
-  async function stopRun() {
-    stopRequested = true;
-    $("loadingText").textContent = "중지 중…";
-    $("stopBtn").disabled = true;
-    try {
-      await fetch("/api/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ browserKey }),
-      });
-    } catch (e) {
-      // 중지 요청 자체가 실패해도 화면은 위 catch(e) 에서 이미 처리된다.
-    }
-  }
-
-  // ── 토큰 사용량·소요시간 표시 ─────────────────
-  // 단계별 수치 + 이 작업 전체 누적을 결과 아래에 보여준다.
-  const totals = { ms: 0, inTok: 0, outTok: 0, cost: 0 };
-
-  function fmtSec(ms) {
-    return ms >= 60000
-      ? Math.floor(ms / 60000) + "분 " + Math.round((ms % 60000) / 1000) + "초"
-      : (ms / 1000).toFixed(1) + "초";
-  }
-
-  function renderStats(m) {
-    if (!m) { $("stats").classList.remove("show"); return; }
-    const inTok = m.usage
-      ? (m.usage.input_tokens || 0) +
-        (m.usage.cache_read_input_tokens || 0) +
-        (m.usage.cache_creation_input_tokens || 0)
-      : 0;
-    const outTok = m.usage ? m.usage.output_tokens || 0 : 0;
-    totals.ms += m.durationMs || 0;
-    totals.inTok += inTok;
-    totals.outTok += outTok;
-    totals.cost += m.costUsd || 0;
-
-    const parts = [];
-    parts.push("이번 단계: <b>" + fmtSec(m.durationMs || 0) + "</b>");
-    if (m.usage)
-      parts.push("토큰 입력 <b>" + inTok.toLocaleString() + "</b> · 출력 <b>" + outTok.toLocaleString() + "</b>");
-    if (m.costUsd != null) parts.push("비용 <b>$" + m.costUsd.toFixed(4) + "</b>");
-    if (m.numTurns != null) parts.push(m.numTurns + "턴");
-    parts.push(
-      "누적: <b>" + fmtSec(totals.ms) + "</b> · 토큰 <b>" +
-      (totals.inTok + totals.outTok).toLocaleString() + "</b> · <b>$" +
-      totals.cost.toFixed(4) + "</b>"
-    );
-    $("stats").innerHTML = parts.map((p) => "<span>" + p + "</span>").join("");
-    $("stats").classList.add("show");
   }
 
   function markStep(kEl, cls) {
@@ -423,56 +410,10 @@
     showTitlePick();
   }
 
-  // 지금 어느 STOP에 서 있는지 → 수정 요청 후 같은 STOP 화면을 다시 띄우는 데 사용
-  let currentStage = null; // 'title' | 'keyword' | 'body'
-
-  function showRevise(placeholder) {
-    $("reviseArea").style.display = "block";
-    $("reviseText").placeholder = placeholder;
-  }
-
   function showTitlePick() {
-    currentStage = "title";
     $("titlepick").style.display = "flex";
     $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르거나, 아래에 수정을 요청하세요.";
-    showRevise("예) 제목을 더 짧게, 질문형으로 다시 뽑아줘");
-  }
-
-  function showKeywordStop() {
-    currentStage = "keyword";
-    $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하거나, 수정을 요청하세요.";
-    $("stopactions").style.display = "flex";
-    $("approveBtn").textContent = "키워드 승인하고 본문 작성";
-    $("approveBtn").onclick = approveKeywords;
-    showRevise("예) '전자계약' 키워드는 빼고 다시 제안해줘");
-  }
-
-  function showImageStop() {
-    currentStage = "body";
-    $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하거나, 수정을 요청하세요.";
-    $("stopactions").style.display = "flex";
-    $("approveBtn").textContent = "이미지 승인하고 최종 검증";
-    $("approveBtn").onclick = approveImages;
-    showRevise("예) 도입부를 더 간결하게 고치고 이미지 텍스트도 맞춰줘");
-  }
-
-  // ── 수정 요청: 현재 단계 결과물만 고쳐서 같은 STOP 으로 복귀 ──────
-  async function requestRevise() {
-    const feedback = $("reviseText").value.trim();
-    if (!feedback) { $("reviseText").focus(); return; }
-    const stage = currentStage;
-    try {
-      await runStep({ step: "revise", feedback });
-      $("reviseText").value = "";
-    } finally {
-      // 성공·실패 어느 쪽이든 같은 STOP 화면으로 되돌려 계속 진행/재시도할 수 있게 한다
-      if (stage === "title") showTitlePick();
-      else if (stage === "keyword") showKeywordStop();
-      else if (stage === "body") showImageStop();
-    }
+    $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르세요.";
   }
 
   // ── STOP1: 제목 선택 → 키워드 ────────────────
@@ -480,7 +421,12 @@
     markStep("title", "done");
     markStep("keyword", "now");
     await runStep({ step: "pick_title", choice: n });
-    showKeywordStop();
+    // 키워드 승인 STOP
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하세요.";
+    $("stopactions").style.display = "flex";
+    $("approveBtn").textContent = "키워드 승인하고 본문 작성";
+    $("approveBtn").onclick = approveKeywords;
   }
 
   // ── STOP2: 키워드 승인 → 본문+이미지 ─────────
@@ -488,7 +434,11 @@
     markStep("keyword", "done");
     markStep("body", "now");
     await runStep({ step: "approve_keywords" });
-    showImageStop();
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하세요.";
+    $("stopactions").style.display = "flex";
+    $("approveBtn").textContent = "이미지 승인하고 최종 검증";
+    $("approveBtn").onclick = approveImages;
   }
 
   // ── STOP3: 이미지 승인 → 검증 ───────────────
@@ -496,7 +446,6 @@
     markStep("body", "done");
     markStep("verify", "now");
     await runStep({ step: "approve_images" });
-    currentStage = null;
     markStep("verify", "done");
     $("stopbar").style.display = "flex";
     $("stoptext").textContent = "검증 완료. 발행은 네이버에서 직접 하세요 (자동 발행 안 함).";
