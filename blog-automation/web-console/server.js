@@ -50,6 +50,21 @@ const ALLOWED_TOOLS =
   "Read,Edit,Write,Glob,Grep,Bash(pandoc *),Bash(soffice *)";
 const MAX_UPLOAD_MB = parseInt(process.env.MAX_UPLOAD_MB || "20", 10);
 
+// DEFAULT_MODEL: 화면에서 모델을 안 고르거나 잘못된 값을 보냈을 때 쓸 기본값.
+// 비어있으면 --model 을 아예 안 붙여 claude 자체 기본 모델을 쓴다.
+const DEFAULT_MODEL = (process.env.DEFAULT_MODEL || "").trim();
+
+// 화면에서 고를 수 있는 모델 별칭. 이 목록 밖의 값은 전부 무시한다(안전장치).
+const ALLOWED_MODELS = new Set(["opus", "sonnet", "haiku", "fable"]);
+
+// 요청된 모델 별칭을 검증한다. 허용 목록에 없으면 DEFAULT_MODEL로,
+// DEFAULT_MODEL 도 허용 목록 밖이면 null(= --model 안 붙임)로 대체한다.
+function resolveModel(requested) {
+  if (ALLOWED_MODELS.has(requested)) return requested;
+  if (ALLOWED_MODELS.has(DEFAULT_MODEL)) return DEFAULT_MODEL;
+  return null;
+}
+
 const INBOX_DIR = path.join(BACKEND_DIR, "inbox");
 
 // ── 시작 시 설정 검증 (문제를 일찍, 명확히 드러낸다) ────────────────
@@ -82,7 +97,8 @@ const upload = multer({
 
 // ── 세션 저장소 (STOP 지점 사이에 대화를 이어가기 위함) ──────────────
 // 브라우저 탭 1개 = 작업 1건. sessionId 로 Claude Code 세션을 resume 한다.
-const sessions = {}; // { [browserKey]: { claudeSessionId } }
+// model 은 첫 단계에서 정해지면 이후 단계까지 그대로 재사용한다(중간에 안 바꿈).
+const sessions = {}; // { [browserKey]: { claudeSessionId, model } }
 
 // ── 실행 중인 프로세스 저장소 (화면의 "중지" 버튼용) ────────────────
 const runningProcs = {}; // { [browserKey]: { child, stopped } }
@@ -111,9 +127,10 @@ function killProcessTree(child) {
  * @param {string} prompt        Claude 에게 줄 지시(스킬 호출 포함)
  * @param {string|null} resumeId 이전 Claude 세션 id (이어가기)
  * @param {string} browserKey    실행 중인 프로세스를 등록할 키 ("중지" 버튼용)
+ * @param {string|null} model    화면에서 고른 모델 별칭 (opus/sonnet/haiku/fable). 없으면 기본 모델.
  * @returns {Promise<{text:string, sessionId:string, meta:object}>}
  */
-function runClaude(prompt, resumeId, browserKey) {
+function runClaude(prompt, resumeId, browserKey, model) {
   return new Promise((resolve, reject) => {
     // 이 워크플로에서 백엔드가 필요로 하는 도구만 허용한다.
     // 프롬프트는 stdin 이 아니라 인자로 직접 넘긴다(stdin 방식은 종료코드 1로 실패).
@@ -129,6 +146,9 @@ function runClaude(prompt, resumeId, browserKey) {
       "--max-turns",
       MAX_TURNS,
     ];
+    if (model) {
+      args.push("--model", model);
+    }
     if (resumeId) {
       args.push("--resume", resumeId);
     }
@@ -248,11 +268,12 @@ app.post("/api/upload", upload.single("draft"), (req, res) => {
 
 // ── 라우트: 단계 실행 ────────────────────────────────────────────
 app.post("/api/step", async (req, res) => {
-  const { browserKey, step, topic, choice, feedback } = req.body;
+  const { browserKey, step, topic, choice, feedback, model } = req.body;
   if (!browserKey || !step)
     return res.status(400).json({ error: "browserKey/step 필요" });
 
   const prev = sessions[browserKey]?.claudeSessionId || null;
+  const prevModel = sessions[browserKey]?.model || null;
 
   let prompt;
   switch (step) {
@@ -285,13 +306,17 @@ app.post("/api/step", async (req, res) => {
 
   try {
     const isStart = step.startsWith("start_");
+    // 모델은 첫 단계에서만 화면 선택값을 검증해 확정하고, 이후 단계는
+    // 세션에 저장된 값을 그대로 재사용한다(중간에 모델이 바뀌지 않게).
+    const chosenModel = isStart ? resolveModel(model) : prevModel;
     const { text, sessionId, meta } = await runClaude(
       prompt,
       isStart ? null : prev,
-      browserKey
+      browserKey,
+      chosenModel
     );
     if (sessionId) {
-      sessions[browserKey] = { claudeSessionId: sessionId };
+      sessions[browserKey] = { claudeSessionId: sessionId, model: chosenModel };
     }
     res.json({ ok: true, text, meta });
   } catch (e) {

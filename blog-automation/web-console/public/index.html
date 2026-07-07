@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>세포아 블로그 콘솔</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   :root {
     --primary: #0747A6;
@@ -97,12 +98,54 @@
   .steps .s.done { background: #DCFCE7; color: var(--ok); }
   .steps .s.now { background: var(--primary); color: #fff; }
 
-  /* 결과 출력 */
+  /* 결과 출력 — 마크다운 렌더링 카드 (가독성 우선, 밝은 배경) */
   .out {
-    margin-top: 16px; background: #0B1220; color: #E2E8F0;
-    border-radius: 10px; padding: 18px; font-size: 13.5px;
-    white-space: pre-wrap; word-break: break-word; line-height: 1.7;
-    max-height: 420px; overflow: auto;
+    margin-top: 16px; background: #fff; color: var(--ink);
+    border: 1px solid var(--line); border-left: 4px solid var(--primary);
+    border-radius: 10px; padding: 20px 24px; font-size: 14.5px;
+    word-break: break-word; line-height: 1.75;
+    max-height: 560px; overflow: auto;
+  }
+  .out > :first-child { margin-top: 0; }
+  .out > :last-child { margin-bottom: 0; }
+  .out h1, .out h2, .out h3, .out h4 {
+    color: var(--dark); font-weight: 700; line-height: 1.35; margin: 22px 0 10px;
+  }
+  .out h1 { font-size: 21px; border-bottom: 2px solid var(--primary-weak); padding-bottom: 7px; }
+  .out h2 { font-size: 17.5px; }
+  .out h3 { font-size: 15.5px; }
+  .out h4 { font-size: 14.5px; color: var(--primary); }
+  .out p { margin: 10px 0; }
+  .out strong { font-weight: 700; color: var(--dark); }
+  .out em { font-style: italic; color: var(--muted); }
+  .out ul, .out ol { margin: 10px 0; padding-left: 22px; }
+  .out li { margin: 5px 0; }
+  .out li::marker { color: var(--primary); font-weight: 700; }
+  .out blockquote {
+    margin: 12px 0; padding: 12px 16px;
+    background: var(--primary-weak); border-left: 4px solid var(--primary);
+    border-radius: 0 8px 8px 0; color: var(--dark);
+  }
+  .out blockquote p { margin: 5px 0; }
+  .out hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+  .out code {
+    background: #F1F5F9; color: #B91C1C; padding: 1px 6px;
+    border-radius: 4px; font-size: .9em;
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+  .out pre {
+    background: var(--dark); color: #E2E8F0; padding: 14px 16px;
+    border-radius: 8px; overflow: auto;
+  }
+  .out pre code { background: none; color: inherit; padding: 0; }
+  .out a { color: var(--primary); }
+  .out table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 13.5px; }
+  .out th, .out td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
+  .out th { background: var(--primary-weak); color: var(--dark); }
+  /* [STOP] 문구·제목 번호 강조 */
+  .out .hl {
+    background: #FEF3C7; color: var(--stop); font-weight: 700;
+    padding: 0 5px; border-radius: 4px;
   }
   .stopbar {
     margin-top: 14px; padding: 12px 16px; border-radius: 8px;
@@ -155,6 +198,39 @@
     border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600;
   }
   .titlepick button:hover { border-color: var(--primary); color: var(--primary); }
+
+  /* 모델 선택 */
+  .modelpick { margin-top: 14px; }
+  .modelpick-label {
+    font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 8px;
+  }
+  .modelpick-locked { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .modelpick-options {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  @media (max-width: 620px) {
+    .modelpick-options { grid-template-columns: repeat(2, 1fr); }
+  }
+  .modelopt {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    text-align: left; background: #fff; border: 1.5px solid var(--line);
+    border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit;
+    transition: border-color .15s, background .15s;
+  }
+  .modelopt:hover:not(:disabled) { border-color: var(--primary); }
+  .modelopt.active { border-color: var(--primary); background: var(--primary-weak); }
+  .modelopt.active .mopt-name { color: var(--primary); }
+  .modelopt:disabled { opacity: .55; cursor: not-allowed; }
+  .mopt-name { font-weight: 700; font-size: 13.5px; color: var(--ink); }
+  .mopt-desc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .mopt-warn { font-size: 10.5px; color: var(--stop); font-weight: 600; }
+
+  /* Fable 실패 안내 */
+  .errhint {
+    margin-top: 8px; padding: 10px 14px; border-radius: 8px;
+    background: #FEF3C7; color: var(--stop); font-size: 12.5px; font-weight: 600;
+    display: none;
+  }
 </style>
 </head>
 <body>
@@ -174,6 +250,33 @@
     <div class="card" id="cardB" onclick="chooseEntry('B')">
       <h3>주제만 입력하기</h3>
       <p>"OO 주제로 써줘" 한 줄이면 시작합니다.</p>
+    </div>
+  </div>
+
+  <!-- 모델 선택 -->
+  <div class="modelpick" id="modelpick">
+    <div class="modelpick-label">
+      Claude 모델 선택
+      <span class="modelpick-locked" id="modelLockedInfo" style="display:none"></span>
+    </div>
+    <div class="modelpick-options">
+      <button type="button" class="modelopt active" data-model="sonnet" onclick="selectModel('sonnet')">
+        <span class="mopt-name">Sonnet</span>
+        <span class="mopt-desc">균형 (기본 추천)</span>
+      </button>
+      <button type="button" class="modelopt" data-model="opus" onclick="selectModel('opus')">
+        <span class="mopt-name">Opus</span>
+        <span class="mopt-desc">고품질, 느림</span>
+      </button>
+      <button type="button" class="modelopt" data-model="haiku" onclick="selectModel('haiku')">
+        <span class="mopt-name">Haiku</span>
+        <span class="mopt-desc">빠르고 저렴, 간단한 작업</span>
+      </button>
+      <button type="button" class="modelopt" data-model="fable" onclick="selectModel('fable')">
+        <span class="mopt-name">Fable</span>
+        <span class="mopt-desc">최고 성능, 크레딧 필요할 수 있음 (중요한 글에)</span>
+        <span class="mopt-warn">⚠ 크레딧/플랜에 따라 사용 불가할 수 있음</span>
+      </button>
     </div>
   </div>
 
@@ -216,6 +319,7 @@
       <button class="btn btn-stop" onclick="stopRun()">중지</button>
     </div>
     <div class="err" id="err"></div>
+    <div class="errhint" id="errHint"></div>
     <div class="out" id="out" style="display:none"></div>
     <div class="meta" id="meta"></div>
 
@@ -232,6 +336,16 @@
     </div>
     <div class="row" id="stopactions" style="display:none">
       <button class="btn btn-primary" id="approveBtn"></button>
+      <button class="btn btn-ghost" id="reviseBtn" onclick="toggleRevise()">다시 만들기</button>
+    </div>
+
+    <!-- 수정 요청 입력 (다시 만들기) -->
+    <div id="reviseBox" style="display:none; margin-top:12px">
+      <textarea id="reviseText" placeholder="어떻게 고칠지 적어주세요. 예) 제목을 더 짧고 질문형으로"></textarea>
+      <div class="row">
+        <button class="btn btn-primary" onclick="sendRevise()">수정 요청 보내기</button>
+        <button class="btn btn-ghost" onclick="hideReviseBox()">취소</button>
+      </div>
     </div>
   </div>
 </div>
@@ -243,6 +357,98 @@
   let uploaded = false;
 
   const $ = (id) => document.getElementById(id);
+
+  // ── 모델 선택 (시작 전에만 변경 가능) ────────────
+  const MODEL_LABELS = { sonnet: "Sonnet", opus: "Opus", haiku: "Haiku", fable: "Fable" };
+  let selectedModel = "sonnet"; // 기본값
+  let modelLocked = false;
+
+  function selectModel(m) {
+    if (modelLocked) return;
+    selectedModel = m;
+    document.querySelectorAll(".modelopt").forEach((b) => {
+      b.classList.toggle("active", b.dataset.model === m);
+    });
+  }
+
+  // 작업이 실제로 시작된 뒤에는 모델을 바꿀 수 없게 잠그고, 고른 모델만 표시한다.
+  function lockModelSelection(model) {
+    modelLocked = true;
+    document.querySelectorAll(".modelopt").forEach((b) => (b.disabled = true));
+    const info = $("modelLockedInfo");
+    info.textContent = "— 현재 모델: " + (MODEL_LABELS[model] || model) + " (변경 불가)";
+    info.style.display = "inline";
+  }
+
+  // marked 옵션: 단일 줄바꿈도 <br>로, GitHub 스타일 마크다운 사용.
+  // mangle/headerIds 끔 — 이메일 난독화·헤더 자동 id 생성 불필요.
+  if (window.marked) {
+    marked.setOptions({ breaks: true, gfm: true, mangle: false, headerIds: false });
+  }
+
+  // 결과 텍스트를 마크다운으로 렌더링해 결과 카드에 표시
+  function renderResult(text) {
+    const out = $("out");
+    out.style.display = "block";
+    if (window.marked) {
+      out.innerHTML = marked.parse(text || "");
+      sanitize(out);          // 혹시 섞여 온 스크립트/이벤트 핸들러 제거
+      highlightKeywords(out);
+    } else {
+      // marked 로드 실패 시 원본 텍스트로 폴백
+      out.style.whiteSpace = "pre-wrap";
+      out.textContent = text || "";
+    }
+  }
+
+  // 결과는 신뢰된 자체 백엔드에서만 오므로 기본 설정으로 렌더링하되,
+  // 혹시 스크립트 태그·이벤트 핸들러 같은 게 섞여 오면 무시되게 최소 정리.
+  function sanitize(root) {
+    // 실행·삽입 위험이 있는 요소 제거
+    root.querySelectorAll("script, style, iframe, object, embed, link, meta, base")
+      .forEach((el) => el.remove());
+    // on* 이벤트 핸들러 속성, javascript: URL 제거 (예: <img onerror=...>)
+    root.querySelectorAll("*").forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const val = (attr.value || "").replace(/\s+/g, "").toLowerCase();
+        if (name.startsWith("on") || val.startsWith("javascript:")) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+  }
+
+  // [STOP] 문구와 제목 번호(1안/2번 등)를 눈에 띄게 강조
+  function highlightKeywords(root) {
+    const rx = /(\[STOP[^\]]*\]|STOP ?\d*|제?\d+ ?(?:안|번))/g;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const targets = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      const p = node.parentNode;
+      if (p && p.classList && p.classList.contains("hl")) continue;
+      rx.lastIndex = 0;
+      if (rx.test(node.nodeValue)) targets.push(node);
+    }
+    targets.forEach((textNode) => {
+      const s = textNode.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      rx.lastIndex = 0;
+      let m;
+      while ((m = rx.exec(s)) !== null) {
+        if (m.index > last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+        const mark = document.createElement("span");
+        mark.className = "hl";
+        mark.textContent = m[0];
+        frag.appendChild(mark);
+        last = m.index + m[0].length;
+      }
+      if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
+      textNode.parentNode.replaceChild(frag, textNode);
+    });
+  }
 
   function chooseEntry(k) {
     entry = k;
@@ -289,7 +495,7 @@
     const startedAt = Date.now();
     $("elapsed").textContent = "0초";
     $("working").classList.add("show");
-    document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = true));
+    document.querySelectorAll(".btn-primary, .titlepick button, .modelopt").forEach((b) => (b.disabled = true));
     elapsedTimer = setInterval(() => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       $("elapsed").textContent =
@@ -302,6 +508,7 @@
     clearInterval(elapsedTimer);
     $("working").classList.remove("show");
     document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = false));
+    document.querySelectorAll(".modelopt").forEach((b) => (b.disabled = modelLocked));
     $("startAbtn").disabled = !uploaded; // 업로드 전이면 다시 잠금
   }
 
@@ -363,10 +570,12 @@
     $("work").classList.remove("hidden");
     showWorking();
     $("err").textContent = "";
+    $("errHint").style.display = "none";
     $("meta").classList.remove("show");
     $("titlepick").style.display = "none";
     $("stopbar").style.display = "none";
     $("stopactions").style.display = "none";
+    $("reviseBox").style.display = "none";
     try {
       const r = await fetch("/api/step", {
         method: "POST",
@@ -376,8 +585,7 @@
       const j = await r.json();
       hideWorking();
       if (!j.ok) throw new Error(j.error || "실행 실패");
-      $("out").style.display = "block";
-      $("out").textContent = j.text;
+      renderResult(j.text);
       renderMeta(j.meta);
       return j.text;
     } catch (e) {
@@ -393,27 +601,96 @@
     });
   }
 
+  // ── STOP 화면 공통 표시 ──────────────────────
+  // currentStop: 'title' | 'keyword' | 'images' | null
+  // 다시 만들기(revise) 후 같은 STOP 화면을 복원하는 데 사용한다.
+  let currentStop = null;
+
+  function showStop(stage) {
+    currentStop = stage;
+    hideReviseBox();
+    $("stopbar").style.display = "flex";
+    $("stopactions").style.display = "flex";
+    $("titlepick").style.display = stage === "title" ? "flex" : "none";
+    if (stage === "title") {
+      $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르세요.";
+      $("approveBtn").style.display = "none";
+    } else if (stage === "keyword") {
+      $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하세요.";
+      $("approveBtn").style.display = "";
+      $("approveBtn").textContent = "키워드 승인하고 본문 작성";
+      $("approveBtn").onclick = approveKeywords;
+    } else {
+      $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하세요.";
+      $("approveBtn").style.display = "";
+      $("approveBtn").textContent = "이미지 승인하고 최종 검증";
+      $("approveBtn").onclick = approveImages;
+    }
+  }
+
+  // ── 다시 만들기 (revise) ─────────────────────
+  function toggleRevise() {
+    const box = $("reviseBox");
+    const opening = box.style.display === "none";
+    box.style.display = opening ? "block" : "none";
+    if (opening) $("reviseText").focus();
+  }
+
+  function hideReviseBox() {
+    $("reviseBox").style.display = "none";
+  }
+
+  async function sendRevise() {
+    const feedback = $("reviseText").value.trim();
+    if (!feedback) { $("reviseText").focus(); return; }
+    const stage = currentStop;
+    try {
+      await runStep({ step: "revise", feedback });
+      $("reviseText").value = "";
+    } finally {
+      // 성공이든 실패든 같은 STOP 화면을 복원한다 (실패 시 오류 문구는 유지됨)
+      showStop(stage);
+    }
+  }
+
   // ── 입구 A 시작 ─────────────────────────────
   async function startFromDocx() {
     if (!uploaded) return;
+    const usedModel = selectedModel;
     markStep("title", "now");
-    await runStep({ step: "start_from_docx" });
-    showTitlePick();
+    try {
+      await runStep({ step: "start_from_docx", model: usedModel });
+      lockModelSelection(usedModel);
+      showStop("title");
+    } catch (e) {
+      markStep("title", "");
+      showModelFailureHint(usedModel);
+    }
   }
 
   // ── 입구 B 시작 ─────────────────────────────
   async function startFromTopic() {
     const topic = $("topic").value.trim();
     if (!topic) { $("topic").focus(); return; }
+    const usedModel = selectedModel;
     markStep("title", "now");
-    await runStep({ step: "start_from_topic", topic });
-    showTitlePick();
+    try {
+      await runStep({ step: "start_from_topic", topic, model: usedModel });
+      lockModelSelection(usedModel);
+      showStop("title");
+    } catch (e) {
+      markStep("title", "");
+      showModelFailureHint(usedModel);
+    }
   }
 
-  function showTitlePick() {
-    $("titlepick").style.display = "flex";
-    $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르세요.";
+  // 시작 단계가 실패했을 때, 특히 Fable 사용 시 크레딧/플랜 문제일 수 있음을 안내.
+  // 모델 선택은 아직 잠기지 않았으므로(성공해야 잠김) 바로 다른 모델로 재시도할 수 있다.
+  function showModelFailureHint(usedModel) {
+    if (usedModel !== "fable") return;
+    const hint = $("errHint");
+    hint.textContent = "Fable 사용 불가 — 다른 모델을 선택하세요.";
+    hint.style.display = "block";
   }
 
   // ── STOP1: 제목 선택 → 키워드 ────────────────
@@ -421,12 +698,7 @@
     markStep("title", "done");
     markStep("keyword", "now");
     await runStep({ step: "pick_title", choice: n });
-    // 키워드 승인 STOP
-    $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하세요.";
-    $("stopactions").style.display = "flex";
-    $("approveBtn").textContent = "키워드 승인하고 본문 작성";
-    $("approveBtn").onclick = approveKeywords;
+    showStop("keyword");
   }
 
   // ── STOP2: 키워드 승인 → 본문+이미지 ─────────
@@ -434,11 +706,7 @@
     markStep("keyword", "done");
     markStep("body", "now");
     await runStep({ step: "approve_keywords" });
-    $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하세요.";
-    $("stopactions").style.display = "flex";
-    $("approveBtn").textContent = "이미지 승인하고 최종 검증";
-    $("approveBtn").onclick = approveImages;
+    showStop("images");
   }
 
   // ── STOP3: 이미지 승인 → 검증 ───────────────
@@ -447,6 +715,7 @@
     markStep("verify", "now");
     await runStep({ step: "approve_images" });
     markStep("verify", "done");
+    currentStop = null;
     $("stopbar").style.display = "flex";
     $("stoptext").textContent = "검증 완료. 발행은 네이버에서 직접 하세요 (자동 발행 안 함).";
     $("stopactions").style.display = "none";
