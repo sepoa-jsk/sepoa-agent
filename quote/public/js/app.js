@@ -1,3 +1,5 @@
+const API_BASE = '/quote/api';
+
 import { api } from './api.js';
 import { toast, clear } from './ui.js';
 import { renderList } from './views/list.js';
