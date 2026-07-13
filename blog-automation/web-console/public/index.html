@@ -17,6 +17,7 @@
     --bg: #F8FAFC;
     --ok: #15803D;
     --stop: #B45309;
+    --readable: 820px;   /* 카드 안 텍스트(글줄) 최대 폭 — 카드는 넓게, 글줄은 짧게 */
   }
   * { box-sizing: border-box; }
   body {
@@ -25,6 +26,7 @@
     background: var(--bg);
     color: var(--ink);
     line-height: 1.6;
+    font-size: 16px;
   }
   header {
     background: var(--dark);
@@ -41,8 +43,46 @@
   }
   header h1 { font-size: 16px; font-weight: 700; margin: 0; letter-spacing: -.2px; }
   header span { font-size: 12px; color: #94A3B8; margin-left: auto; }
+  /* 헤더 우측 초기화 버튼 — 다크 헤더에 맞는 테두리형 */
+  .btn-reset {
+    border: 1px solid rgba(255,255,255,.35); background: transparent; color: #E2E8F0;
+    border-radius: 8px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .btn-reset:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.6); color: #fff; }
 
-  .wrap { max-width: 860px; margin: 0 auto; padding: 28px 20px 80px; }
+  /* ── 커스텀 확인 모달 ─────────────────────────────── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(15, 23, 42, .55); padding: 20px;
+    opacity: 0; transition: opacity .18s ease;
+  }
+  .modal-overlay.show { display: flex; opacity: 1; }
+  .modal-card {
+    background: #fff; border-radius: 16px; width: 100%; max-width: 440px;
+    padding: 26px 28px 22px; box-shadow: 0 24px 60px rgba(15, 23, 42, .28);
+    transform: translateY(8px) scale(.97); transition: transform .18s ease;
+  }
+  .modal-overlay.show .modal-card { transform: translateY(0) scale(1); }
+  .modal-card h2 {
+    margin: 0 0 12px; font-size: 18px; font-weight: 800; color: var(--dark);
+    letter-spacing: -.2px;
+  }
+  .modal-card .modal-msg {
+    margin: 0 0 22px; font-size: 14px; line-height: 1.75; color: var(--ink);
+    white-space: pre-line; /* 본문 줄바꿈(\n) 지원 */
+  }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .modal-actions .btn { padding: 10px 18px; }
+  .btn-danger { background: #DC2626; color: #fff; }
+  .btn-danger:hover { background: #B91C1C; }
+  @media (max-width: 480px) {
+    .modal-actions { flex-direction: column-reverse; }
+    .modal-actions .btn { width: 100%; }
+  }
+
+  .wrap { max-width: 1360px; margin: 0 auto; padding: 28px 24px 80px; }
 
   /* 진입 선택 */
   .entry {
@@ -95,36 +135,56 @@
     flex: 1; text-align: center; padding: 8px 4px; border-radius: 6px;
     background: #F1F5F9; color: var(--muted);
   }
-  .steps .s.done { background: #DCFCE7; color: var(--ok); }
+  .steps .s.done { background: #DCFCE7; color: var(--ok); cursor: pointer; }
+  .steps .s.done:hover { background: #BBF7D0; }
   .steps .s.now { background: var(--primary); color: #fff; }
+  /* 보기 모드에서 현재 보고 있는 완료 단계 탭 강조 */
+  .steps .s.viewing { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+  /* 이전 단계 보기(읽기 전용) 배너 */
+  .viewbar {
+    margin-top: 14px; padding: 12px 16px; border-radius: 8px;
+    background: var(--primary-weak); border: 1px solid var(--primary);
+    color: var(--primary); font-size: 13.5px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap;
+  }
+  .viewbar-actions { display: flex; gap: 8px; }
+  .viewbar .btn { padding: 8px 14px; font-size: 13px; }
 
   /* 결과 출력 — 마크다운 렌더링 카드 (가독성 우선, 밝은 배경) */
   .out {
     margin-top: 16px; background: #fff; color: var(--ink);
     border: 1px solid var(--line); border-left: 4px solid var(--primary);
-    border-radius: 10px; padding: 20px 24px; font-size: 14.5px;
+    border-radius: 10px; padding: 26px 32px; font-size: 15.5px;
     word-break: break-word; line-height: 1.75;
     max-height: 560px; overflow: auto;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .06), 0 4px 12px rgba(15, 23, 42, .05);
   }
+  /* 카드는 컨테이너 전체 폭을 쓰되, 안의 마크다운 글줄만 읽기 좋은 폭으로
+     제한해 가운데 정렬한다 → 넓은 화면에서도 한 줄이 너무 길어지지 않는다. */
+  .out > * { max-width: var(--readable); margin-left: auto; margin-right: auto; }
   .out > :first-child { margin-top: 0; }
   .out > :last-child { margin-bottom: 0; }
   .out h1, .out h2, .out h3, .out h4 {
-    color: var(--dark); font-weight: 700; line-height: 1.35; margin: 22px 0 10px;
+    color: var(--primary); font-weight: 700; line-height: 1.35; margin: 22px 0 10px;
   }
   .out h1 { font-size: 21px; border-bottom: 2px solid var(--primary-weak); padding-bottom: 7px; }
   .out h2 { font-size: 17.5px; }
   .out h3 { font-size: 15.5px; }
   .out h4 { font-size: 14.5px; color: var(--primary); }
   .out p { margin: 10px 0; }
-  .out strong { font-weight: 700; color: var(--dark); }
+  .out strong { font-weight: 700; color: var(--primary); }
   .out em { font-style: italic; color: var(--muted); }
   .out ul, .out ol { margin: 10px 0; padding-left: 22px; }
   .out li { margin: 5px 0; }
   .out li::marker { color: var(--primary); font-weight: 700; }
   .out blockquote {
-    margin: 12px 0; padding: 12px 16px;
+    margin: 12px 0; padding: 14px 20px;
     background: var(--primary-weak); border-left: 4px solid var(--primary);
     border-radius: 0 8px 8px 0; color: var(--dark);
+    /* 안쪽 박스는 읽기 폭 제한(.out > * 820px)을 벗어나 부모 카드 폭을 채운다 */
+    max-width: none; width: 100%;
   }
   .out blockquote p { margin: 5px 0; }
   .out hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
@@ -134,10 +194,17 @@
     font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
   }
   .out pre {
-    background: var(--dark); color: #E2E8F0; padding: 14px 16px;
-    border-radius: 8px; overflow: auto;
+    background: #F8FAFC; color: var(--ink); padding: 16px 20px;
+    border: 1px solid var(--line); border-radius: 8px;
+    /* 회색 코드/키워드 박스는 읽기 폭 제한을 벗어나 부모 카드 폭을 꽉 채운다 */
+    max-width: none; width: 100%;
+    /* 가로 스크롤 대신 자연스러운 줄바꿈으로 폭을 쓰게 한다 */
+    white-space: pre-wrap; word-break: break-word; overflow-x: auto;
   }
-  .out pre code { background: none; color: inherit; padding: 0; }
+  .out pre code {
+    background: none; color: inherit; padding: 0;
+    white-space: pre-wrap; word-break: break-word;
+  }
   .out a { color: var(--primary); }
   .out table { border-collapse: collapse; margin: 12px 0; width: 100%; font-size: 13.5px; }
   .out th, .out td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; }
@@ -152,6 +219,8 @@
     background: #FEF3C7; color: var(--stop); font-size: 13px; font-weight: 600;
     display: flex; align-items: center; gap: 8px;
   }
+  /* 검증 PASS(발행 준비 완료) — 성공 초록 바로 구분 */
+  .stopbar.ok { background: #DCFCE7; color: var(--ok); }
   /* 작업중 배너 */
   .working {
     display: none; align-items: center; gap: 14px;
@@ -198,38 +267,144 @@
     border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600;
   }
   .titlepick button:hover { border-color: var(--primary); color: var(--primary); }
+  /* 4번째 '직접 입력' 버튼만 점선으로 구분 */
+  .titlepick button.customopen { flex: 0 0 auto; border-style: dashed; color: var(--dark); }
 
-  /* 모델 선택 */
-  .modelpick { margin-top: 14px; }
-  .modelpick-label {
-    font-size: 13px; font-weight: 700; color: var(--dark); margin-bottom: 8px;
+  /* 제목 직접 입력 박스 (1/2/3 선택과 상호 배타) */
+  .customtitle { margin-top: 14px; }
+  .customtitle input {
+    width: 100%; box-sizing: border-box; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 8px; font: inherit;
+    font-size: 15px; color: var(--ink); background: #fff;
   }
-  .modelpick-locked { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--muted); }
-  .modelpick-options {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  .customtitle input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .customtitle-meta {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 10px; margin-top: 6px; font-size: 12px; color: var(--muted);
   }
-  @media (max-width: 620px) {
-    .modelpick-options { grid-template-columns: repeat(2, 1fr); }
+  .customtitle-count { font-weight: 600; white-space: nowrap; }
+  .customtitle-count.over { color: var(--stop); }
+  .customtitle .row { margin-top: 10px; }
+
+  /* 모델 선택 — 작은 드롭다운 */
+  .modelpick {
+    margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  .modelopt {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-    text-align: left; background: #fff; border: 1.5px solid var(--line);
-    border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit;
-    transition: border-color .15s, background .15s;
+  .modelpick-label { font-size: 13px; font-weight: 700; color: var(--dark); }
+  .modelpick select {
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+    font: inherit; font-size: 13.5px; color: var(--ink); background: #fff;
+    cursor: pointer;
   }
-  .modelopt:hover:not(:disabled) { border-color: var(--primary); }
-  .modelopt.active { border-color: var(--primary); background: var(--primary-weak); }
-  .modelopt.active .mopt-name { color: var(--primary); }
-  .modelopt:disabled { opacity: .55; cursor: not-allowed; }
-  .mopt-name { font-weight: 700; font-size: 13.5px; color: var(--ink); }
-  .mopt-desc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
-  .mopt-warn { font-size: 10.5px; color: var(--stop); font-weight: 600; }
+  .modelpick select:disabled { opacity: .6; cursor: not-allowed; }
+  .modelpick select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .modelpick-desc { font-size: 12px; color: var(--muted); }
+  .modelpick-desc.warn { color: var(--stop); font-weight: 600; }
+  .modelpick-locked { font-size: 12px; font-weight: 500; color: var(--muted); }
+
+  /* 본문/이미지 프롬프트/업로드 도구 (STOP3 이후) */
+  .toolsectitle { font-size: 13px; font-weight: 700; color: var(--dark); margin: 18px 0 8px; }
+  .copy-hint { font-size: 12px; color: var(--ok); }
+  .thumbgrid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 10px; margin-top: 12px;
+  }
+  .thumb {
+    display: flex; flex-direction: column; gap: 4px; text-decoration: none;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px;
+    background: #fff; overflow: hidden;
+  }
+  .thumb img { width: 100%; height: 90px; object-fit: cover; border-radius: 6px; display: block; }
+  .thumb span {
+    font-size: 10.5px; color: var(--muted); white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .thumb-empty { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+
+  /* 입구 B 참고 자료 첨부 썸네일 (이미지 미리보기 / 문서 아이콘 + 삭제 버튼) */
+  .thumb.rthumb { position: relative; }
+  .rthumb .doc-ico {
+    width: 100%; height: 90px; display: flex; align-items: center;
+    justify-content: center; font-size: 32px; background: var(--primary-weak);
+    border-radius: 6px;
+  }
+  .rthumb .rm {
+    position: absolute; top: 4px; right: 4px; width: 22px; height: 22px;
+    padding: 0; border: none; border-radius: 50%; cursor: pointer;
+    background: rgba(15, 23, 42, .72); color: #fff; font-size: 15px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .rthumb .rm:hover { background: #DC2626; }
+  .drop-sub { font-size: 11.5px; color: var(--muted); }
 
   /* Fable 실패 안내 */
   .errhint {
     margin-top: 8px; padding: 10px 14px; border-radius: 8px;
     background: #FEF3C7; color: var(--stop); font-size: 12.5px; font-weight: 600;
     display: none;
+  }
+
+  /* ── 세로 흐름 + 접힘 + sticky 하단 바 ─────────────────── */
+
+  /* 시작 후 접힌 요약 바 */
+  .setup-summary {
+    display: none; align-items: center; gap: 12px;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px; margin-bottom: 8px;
+  }
+  .setup-summary .sum-text {
+    flex: 1; font-size: 14px; font-weight: 600; color: var(--ink);
+    cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .setup-summary .sum-text:hover { color: var(--primary); }
+  .setup-summary .sum-caret { color: var(--muted); font-size: 12px; }
+
+  /* 단계별 콘텐츠 카드 — 흰 카드 배경은 컨테이너 전체 폭을 채운다.
+     내부 텍스트 폭 제한은 위 .out > * 규칙이 담당한다. */
+  .stagecard {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 26px 32px; margin-top: 18px;
+  }
+  .stagecard .out { max-height: 72vh; }
+  /* 카드 안 제목(작성된 본문 / 이미지 프롬프트 라벨)도 글줄 폭에 맞춰 정렬 */
+  .stagecard > .toolsectitle { max-width: var(--readable); margin-left: auto; margin-right: auto; }
+
+  /* 사용량(meta)은 결과 카드 아래에서 같은 읽기 폭으로 가운데 정렬 */
+  #work > .meta { max-width: var(--readable); margin-left: auto; margin-right: auto; }
+
+  /* sticky 하단 액션 바 (승인/다시 만들기) */
+  .stickybar {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: rgba(255, 255, 255, .97); border-top: 1px solid var(--line);
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, .07);
+    padding: 12px 20px;
+  }
+  .stickybar-inner { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+  .stickybar .titlepick, .stickybar .row { margin-top: 0; }
+  /* 하단 바가 콘텐츠를 가리지 않도록 여유 확보 */
+  body.has-stickybar .wrap { padding-bottom: 140px; }
+
+  /* 태블릿(≤768): 세로 흐름 유지, 단계 바 가로 스크롤, 카드 여백 축소 */
+  @media (max-width: 768px) {
+    .wrap { padding: 24px 16px 72px; }
+    .out { padding: 20px 22px; }
+    .stagecard { padding: 18px 16px; }
+    .steps { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+    .steps .s { flex: 0 0 auto; min-width: 96px; }
+    body.has-stickybar .wrap { padding-bottom: 150px; }
+  }
+
+  /* 모바일(≤480): 터치 친화 크기, 단계 바 현재 단계 강조 */
+  @media (max-width: 480px) {
+    body { font-size: 15px; }
+    .wrap { padding: 18px 14px 64px; }
+    .entry { grid-template-columns: 1fr; }        /* 진입 카드 세로 */
+    .btn { padding: 13px 18px; }                  /* 터치 타깃 확대 */
+    .out { padding: 16px; font-size: 15px; }
+    .stagecard { padding: 16px 12px; }
+    .steps .s { font-size: 10px; padding: 6px; min-width: 74px; color: var(--muted); }
+    .steps .s.now { font-size: 12.5px; font-weight: 800; min-width: 108px; } /* 현재 단계만 크게 */
+    body.has-stickybar .wrap { padding-bottom: 160px; }
   }
 </style>
 </head>
@@ -238,75 +413,84 @@
   <div class="dot"></div>
   <h1>세포아 블로그 콘솔</h1>
   <span>blog.naver.com/sepoa0127</span>
+  <button class="btn-reset" onclick="resetAll()" title="작업을 정리하고 처음부터 새로 시작합니다">초기화</button>
 </header>
 
 <div class="wrap">
-  <!-- 진입 방식 선택 -->
-  <div class="entry">
-    <div class="card" id="cardA" onclick="chooseEntry('A')">
-      <h3>워드 초안 올리기</h3>
-      <p>작성해 둔 .docx를 올리면 읽고 제목을 추천합니다.</p>
+  <!-- ① 시작 설정 영역 (진입·모델·입력) — 시작 후 접힘 -->
+  <div id="setupArea">
+    <!-- 진입 방식 선택 -->
+    <div class="entry">
+      <div class="card" id="cardA" onclick="chooseEntry('A')">
+        <h3>워드 초안 올리기</h3>
+        <p>작성해 둔 .docx를 올리면 읽고 제목을 추천합니다.</p>
+      </div>
+      <div class="card" id="cardB" onclick="chooseEntry('B')">
+        <h3>주제만 입력하기</h3>
+        <p>"OO 주제로 써줘" 한 줄이면 시작합니다.</p>
+      </div>
     </div>
-    <div class="card" id="cardB" onclick="chooseEntry('B')">
-      <h3>주제만 입력하기</h3>
-      <p>"OO 주제로 써줘" 한 줄이면 시작합니다.</p>
-    </div>
-  </div>
 
-  <!-- 모델 선택 -->
-  <div class="modelpick" id="modelpick">
-    <div class="modelpick-label">
-      Claude 모델 선택
+    <!-- 모델 선택 -->
+    <div class="modelpick" id="modelpick">
+      <label class="modelpick-label" for="modelSelect">Claude 모델</label>
+      <select id="modelSelect" onchange="selectModel(this.value)">
+        <option value="sonnet">Sonnet</option>
+        <option value="opus">Opus</option>
+        <option value="haiku">Haiku</option>
+        <option value="fable">Fable</option>
+      </select>
+      <span class="modelpick-desc" id="modelDesc"></span>
       <span class="modelpick-locked" id="modelLockedInfo" style="display:none"></span>
     </div>
-    <div class="modelpick-options">
-      <button type="button" class="modelopt active" data-model="sonnet" onclick="selectModel('sonnet')">
-        <span class="mopt-name">Sonnet</span>
-        <span class="mopt-desc">균형 (기본 추천)</span>
-      </button>
-      <button type="button" class="modelopt" data-model="opus" onclick="selectModel('opus')">
-        <span class="mopt-name">Opus</span>
-        <span class="mopt-desc">고품질, 느림</span>
-      </button>
-      <button type="button" class="modelopt" data-model="haiku" onclick="selectModel('haiku')">
-        <span class="mopt-name">Haiku</span>
-        <span class="mopt-desc">빠르고 저렴, 간단한 작업</span>
-      </button>
-      <button type="button" class="modelopt" data-model="fable" onclick="selectModel('fable')">
-        <span class="mopt-name">Fable</span>
-        <span class="mopt-desc">최고 성능, 크레딧 필요할 수 있음 (중요한 글에)</span>
-        <span class="mopt-warn">⚠ 크레딧/플랜에 따라 사용 불가할 수 있음</span>
-      </button>
+
+    <!-- 입구 A: 업로드 -->
+    <div class="panel hidden" id="panelA">
+      <div class="drop" id="drop">
+        <p><strong>클릭</strong> 또는 파일을 여기로 끌어다 놓기 (.docx)</p>
+        <div class="fileline" id="fileline"></div>
+      </div>
+      <input type="file" id="fileInput" accept=".docx,.doc" hidden />
+      <div class="row">
+        <button class="btn btn-primary" id="startAbtn" disabled onclick="startFromDocx()">읽고 제목 추천받기</button>
+      </div>
+    </div>
+
+    <!-- 입구 B: 주제 입력 -->
+    <div class="panel hidden" id="panelB">
+      <textarea id="topic" placeholder="예) 전자계약 도입 효과를 리스크 관리 관점에서 써줘"></textarea>
+
+      <!-- 참고 자료 첨부(선택): 이미지·문서 여러 개 + 붙여넣기 지원 -->
+      <div class="toolsectitle">참고 자료 첨부 <span style="font-weight:400;color:var(--muted)">(선택)</span></div>
+      <div class="drop" id="refDrop">
+        <p><strong>클릭</strong> 또는 이미지·문서를 여기로 끌어다 놓기<br>
+          <span class="drop-sub">png·jpg·jpeg·webp·pdf·docx·txt·md · 스크린샷은 Ctrl+V 로 붙여넣기</span>
+        </p>
+      </div>
+      <input type="file" id="refInput" multiple hidden
+             accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt,.md" />
+      <div class="thumbgrid" id="refThumbs"></div>
+
+      <div class="row">
+        <button class="btn btn-primary" onclick="startFromTopic()">주제로 시작하기</button>
+      </div>
     </div>
   </div>
 
-  <!-- 입구 A: 업로드 -->
-  <div class="panel hidden" id="panelA">
-    <div class="drop" id="drop">
-      <p><strong>클릭</strong> 또는 파일을 여기로 끌어다 놓기 (.docx)</p>
-      <div class="fileline" id="fileline"></div>
-    </div>
-    <input type="file" id="fileInput" accept=".docx,.doc" hidden />
-    <div class="row">
-      <button class="btn btn-primary" id="startAbtn" disabled onclick="startFromDocx()">읽고 제목 추천받기</button>
-    </div>
+  <!-- 시작 후 접힌 요약 바 -->
+  <div class="setup-summary" id="setupSummary" onclick="toggleSetupPeek()" title="클릭하면 시작 설정을 펼쳤다/접었다 합니다" style="cursor:pointer">
+    <span class="sum-text" id="setupSummaryText"></span>
+    <span class="sum-caret" id="setupCaret">▾ 펼치기</span>
   </div>
 
-  <!-- 입구 B: 주제 입력 -->
-  <div class="panel hidden" id="panelB">
-    <textarea id="topic" placeholder="예) 전자계약 도입 효과를 리스크 관리 관점에서 써줘"></textarea>
-    <div class="row">
-      <button class="btn btn-primary" onclick="startFromTopic()">주제로 시작하기</button>
-    </div>
-  </div>
-
-  <!-- 진행/결과 영역 -->
+  <!-- ② 진행 단계 바 + ③ 콘텐츠 영역 -->
   <div class="panel hidden" id="work">
     <div class="steps" id="stepbar">
-      <div class="s" data-k="title">제목 선택</div>
-      <div class="s" data-k="keyword">키워드 승인</div>
-      <div class="s" data-k="body">본문·이미지</div>
-      <div class="s" data-k="verify">검증</div>
+      <div class="s" data-k="title" onclick="onStepClick('title')">① 제목 선택</div>
+      <div class="s" data-k="keyword" onclick="onStepClick('keyword')">② 키워드 승인</div>
+      <div class="s" data-k="body" onclick="onStepClick('body')">③ 본문 작성</div>
+      <div class="s" data-k="images" onclick="onStepClick('images')">④ 이미지 프롬프트</div>
+      <div class="s" data-k="verify" onclick="onStepClick('verify')">⑤ 검증</div>
     </div>
 
     <div class="working" id="working">
@@ -320,32 +504,106 @@
     </div>
     <div class="err" id="err"></div>
     <div class="errhint" id="errHint"></div>
+
+    <!-- STOP 안내 (결과 위에 표시) -->
+    <div class="stopbar" id="stopbar" style="display:none">
+      <span id="stoptext"></span>
+    </div>
+
+    <!-- 이전 단계 보기(읽기 전용) 배너 + 돌아가기 / 다시하기 -->
+    <div class="viewbar" id="viewbar" style="display:none">
+      <span id="viewBannerText"></span>
+      <div class="viewbar-actions">
+        <button class="btn btn-ghost" onclick="exitViewMode()">현재 단계로 돌아가기</button>
+        <button class="btn btn-danger" onclick="redoFromViewingStage()">이 단계부터 다시 하기</button>
+      </div>
+    </div>
+
+    <!-- 결과 안내 + 사용량 -->
     <div class="out" id="out" style="display:none"></div>
     <div class="meta" id="meta"></div>
+
+    <!-- ③ 본문 작성 단계: 작성된 본문 전체를 렌더링 -->
+    <div class="stagecard" id="bodyStageTools" style="display:none">
+      <div class="toolsectitle">작성된 본문</div>
+      <div class="out" id="draftContent"></div>
+    </div>
+
+    <!-- ④ 이미지 단계: 프롬프트 보기·복사 + 업로드 -->
+    <div class="stagecard" id="imageStageTools" style="display:none">
+      <div class="row" style="margin-top:0">
+        <button class="btn btn-ghost" onclick="toggleImagePromptView()">이미지 프롬프트 보기</button>
+        <button class="btn btn-primary" onclick="copyImagePrompt()">프롬프트 복사</button>
+        <span class="copy-hint" id="copyHint"></span>
+      </div>
+      <div id="imagePromptBox" style="display:none">
+        <div class="out" id="imagePromptContent"></div>
+      </div>
+
+      <div id="imgUploadArea">
+        <div class="toolsectitle">대표 이미지 업로드</div>
+        <div class="drop" id="imgDrop">
+          <p><strong>클릭</strong> 또는 이미지를 여러 장 끌어다 놓기 (png/jpg/jpeg/webp)</p>
+          <div class="fileline" id="imgUploadStatus"></div>
+        </div>
+        <input type="file" id="imgInput" accept=".png,.jpg,.jpeg,.webp" multiple hidden />
+      </div>
+      <div class="thumbgrid" id="thumbGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ sticky 하단 액션 바: 제목 선택 / 승인 / 다시 만들기 -->
+<div class="stickybar" id="stickybar">
+  <div class="stickybar-inner">
+    <!-- 수정 요청 입력 (다시 만들기) -->
+    <div id="reviseBox" style="display:none">
+      <textarea id="reviseText" placeholder="어떻게 고칠지 적어주세요. 예) 제목을 더 짧고 질문형으로"></textarea>
+      <div class="row">
+        <button class="btn btn-primary" onclick="sendRevise()">수정 요청 보내기</button>
+        <button class="btn btn-ghost" onclick="hideReviseBox()">취소</button>
+      </div>
+    </div>
 
     <!-- 제목 선택 버튼 (STOP1) -->
     <div class="titlepick" id="titlepick" style="display:none">
       <button onclick="pickTitle(1)">1번</button>
       <button onclick="pickTitle(2)">2번</button>
       <button onclick="pickTitle(3)">3번</button>
+      <button class="customopen" onclick="openCustomTitle()">✏️ 직접 입력</button>
     </div>
 
-    <!-- STOP 승인 바 -->
-    <div class="stopbar" id="stopbar" style="display:none">
-      <span id="stoptext"></span>
+    <!-- 제목 직접 입력 (1/2/3 과 상호 배타) -->
+    <div class="customtitle" id="customTitleBox" style="display:none">
+      <input id="customTitleInput" type="text" maxlength="120"
+             placeholder="사용할 제목을 직접 입력하세요"
+             oninput="updateTitleCount()" />
+      <div class="customtitle-meta">
+        <span>네이버 검색 노출은 60자 이내를 권장합니다.</span>
+        <span class="customtitle-count" id="customTitleCount">0자</span>
+      </div>
+      <div class="row">
+        <button class="btn btn-primary" onclick="confirmCustomTitle()">이 제목으로 확정</button>
+        <button class="btn btn-ghost" onclick="cancelCustomTitle()">취소</button>
+      </div>
     </div>
+
+    <!-- 승인 / 다시 만들기 -->
     <div class="row" id="stopactions" style="display:none">
       <button class="btn btn-primary" id="approveBtn"></button>
       <button class="btn btn-ghost" id="reviseBtn" onclick="toggleRevise()">다시 만들기</button>
     </div>
+  </div>
+</div>
 
-    <!-- 수정 요청 입력 (다시 만들기) -->
-    <div id="reviseBox" style="display:none; margin-top:12px">
-      <textarea id="reviseText" placeholder="어떻게 고칠지 적어주세요. 예) 제목을 더 짧고 질문형으로"></textarea>
-      <div class="row">
-        <button class="btn btn-primary" onclick="sendRevise()">수정 요청 보내기</button>
-        <button class="btn btn-ghost" onclick="hideReviseBox()">취소</button>
-      </div>
+<!-- 커스텀 확인 모달 (재사용) -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h2 id="modalTitle"></h2>
+    <p class="modal-msg" id="modalMsg"></p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modalCancel"></button>
+      <button class="btn btn-primary" id="modalConfirm"></button>
     </div>
   </div>
 </div>
@@ -355,28 +613,137 @@
   const browserKey = "bk_" + Math.random().toString(36).slice(2);
   let entry = null;        // 'A' | 'B'
   let uploaded = false;
+  let uploadedName = "";   // 업로드한 워드 파일명 (요약 바 표시용)
 
   const $ = (id) => document.getElementById(id);
 
-  // ── 모델 선택 (시작 전에만 변경 가능) ────────────
-  const MODEL_LABELS = { sonnet: "Sonnet", opus: "Opus", haiku: "Haiku", fable: "Fable" };
+  // ── 커스텀 확인 모달 (Promise 기반) ───────────
+  // await showConfirm({title, message, confirmText, cancelText, danger})
+  //   → 확인 true / 취소 false. 기존 confirm() 자리를 그대로 대체한다.
+  let modalResolve = null;
+
+  function showConfirm(opts = {}) {
+    const {
+      title = "확인",
+      message = "",
+      confirmText = "확인",
+      cancelText = "취소",
+      danger = false,
+    } = opts;
+    $("modalTitle").textContent = title;
+    $("modalMsg").textContent = message; // white-space: pre-line 으로 \n 줄바꿈 표시
+    $("modalConfirm").textContent = confirmText;
+    $("modalCancel").textContent = cancelText;
+    // 위험한 동작이면 확인 버튼을 경고색으로
+    $("modalConfirm").className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    $("modalOverlay").classList.add("show");
+    $("modalConfirm").focus();
+    return new Promise((resolve) => { modalResolve = resolve; });
+  }
+
+  function closeModal(result) {
+    if (modalResolve == null) return;
+    $("modalOverlay").classList.remove("show");
+    const r = modalResolve;
+    modalResolve = null;
+    r(result);
+  }
+
+  // 버튼 / 오버레이 클릭 / ESC 로 닫기
+  document.addEventListener("DOMContentLoaded", () => {
+    $("modalConfirm").addEventListener("click", () => closeModal(true));
+    $("modalCancel").addEventListener("click", () => closeModal(false));
+    $("modalOverlay").addEventListener("click", (e) => {
+      if (e.target === $("modalOverlay")) closeModal(false); // 오버레이 바깥 클릭만
+    });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (modalResolve == null) return;
+    if (e.key === "Escape") closeModal(false);
+    else if (e.key === "Enter") closeModal(true);
+  });
+
+  // ── 시작 설정 접힘/펼침 ──────────────────────
+  let setupPeek = false;
+
+  // 작업 시작 후: 시작 설정을 한 줄 요약 바로 접는다.
+  function collapseSetup(summaryText) {
+    $("setupSummaryText").textContent = summaryText;
+    $("setupArea").style.display = "none";
+    $("setupSummary").style.display = "flex";
+    setupPeek = false;
+    $("setupCaret").textContent = "▾ 펼치기";
+  }
+
+  // 요약 바 클릭: 시작 설정을 펼쳐 보기(peek) / 다시 접기.
+  function toggleSetupPeek() {
+    setupPeek = !setupPeek;
+    $("setupArea").style.display = setupPeek ? "block" : "none";
+    $("setupCaret").textContent = setupPeek ? "▴ 접기" : "▾ 펼치기";
+  }
+
+  // "초기화": 확인 후 서버까지 정리(spec 골격화 + inbox 비움)하고 화면을
+  // 처음 상태로 되돌린다. 헤더에 항상 표시되는 탈출구.
+  async function resetAll() {
+    const runningNow = running; // 실행 중이면 중지 안내를 덧붙이고 먼저 멈춘다
+    const message =
+      "진행 중인 글 작업을 처음부터 다시 시작합니다.\n\n" +
+      "지워지는 것: 진행 상태(선택한 제목·키워드), 업로드한 워드\n" +
+      "남는 것: 작성된 본문, 이미지 파일" +
+      (runningNow ? "\n\n실행 중인 작업이 중지되고 초기화됩니다." : "");
+    const ok = await showConfirm({
+      title: "새로 시작하기",
+      message,
+      confirmText: "새로 시작",
+      cancelText: "취소",
+      danger: true,
+    });
+    if (!ok) return;
+
+    // 실행 중이면 먼저 /api/stop 으로 중지한 뒤 초기화한다.
+    if (runningNow) {
+      try { await stopRun(); } catch {}
+    }
+    try {
+      await fetch("api/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ browserKey }),
+      });
+    } catch {
+      // 네트워크 실패 시에도 화면은 초기화한다(리로드로 새 세션 발급).
+    }
+    // 리로드하면: 단계바·결과·본문·프롬프트·썸네일 비움, 시작 설정 펼침,
+    // 모델 선택 재활성화, browserKey 새로 발급 — 요구 상태가 한 번에 만족된다.
+    location.reload();
+  }
+
+  // ── 모델 선택 (드롭다운, 시작 전에만 변경 가능) ──
+  const MODEL_INFO = {
+    sonnet: { label: "Sonnet", desc: "균형 잡힌 성능과 속도 (기본 추천)" },
+    opus:   { label: "Opus",   desc: "고품질, 다소 느림" },
+    haiku:  { label: "Haiku",  desc: "빠르고 저렴, 간단한 작업에 적합" },
+    fable:  { label: "Fable",  desc: "최고 성능 — 크레딧/플랜에 따라 사용 불가할 수 있음" },
+  };
   let selectedModel = "sonnet"; // 기본값
   let modelLocked = false;
 
   function selectModel(m) {
     if (modelLocked) return;
     selectedModel = m;
-    document.querySelectorAll(".modelopt").forEach((b) => {
-      b.classList.toggle("active", b.dataset.model === m);
-    });
+    const info = MODEL_INFO[m] || {};
+    const desc = $("modelDesc");
+    desc.textContent = info.desc || "";
+    desc.classList.toggle("warn", m === "fable");
   }
+  selectModel(selectedModel); // 초기 설명 문구 표시
 
   // 작업이 실제로 시작된 뒤에는 모델을 바꿀 수 없게 잠그고, 고른 모델만 표시한다.
   function lockModelSelection(model) {
     modelLocked = true;
-    document.querySelectorAll(".modelopt").forEach((b) => (b.disabled = true));
+    $("modelSelect").disabled = true;
     const info = $("modelLockedInfo");
-    info.textContent = "— 현재 모델: " + (MODEL_LABELS[model] || model) + " (변경 불가)";
+    info.textContent = "— 현재 모델: " + (MODEL_INFO[model]?.label || model) + " (변경 불가)";
     info.style.display = "inline";
   }
 
@@ -386,19 +753,24 @@
     marked.setOptions({ breaks: true, gfm: true, mangle: false, headerIds: false });
   }
 
-  // 결과 텍스트를 마크다운으로 렌더링해 결과 카드에 표시
-  function renderResult(text) {
-    const out = $("out");
-    out.style.display = "block";
+  // 마크다운 텍스트를 주어진 요소에 렌더링한다 (결과 카드/본문 보기/이미지
+  // 프롬프트 보기가 모두 이 로직을 공유한다).
+  function renderMarkdownInto(el, text) {
+    el.style.display = "block";
     if (window.marked) {
-      out.innerHTML = marked.parse(text || "");
-      sanitize(out);          // 혹시 섞여 온 스크립트/이벤트 핸들러 제거
-      highlightKeywords(out);
+      el.innerHTML = marked.parse(text || "");
+      sanitize(el);          // 혹시 섞여 온 스크립트/이벤트 핸들러 제거
+      highlightKeywords(el);
     } else {
       // marked 로드 실패 시 원본 텍스트로 폴백
-      out.style.whiteSpace = "pre-wrap";
-      out.textContent = text || "";
+      el.style.whiteSpace = "pre-wrap";
+      el.textContent = text || "";
     }
+  }
+
+  // 결과 텍스트를 마크다운으로 렌더링해 결과 카드에 표시
+  function renderResult(text) {
+    renderMarkdownInto($("out"), text);
   }
 
   // 결과는 신뢰된 자체 백엔드에서만 오므로 기본 설정으로 렌더링하되,
@@ -465,9 +837,78 @@
   drop.ondragleave = () => drop.classList.remove("over");
   drop.ondrop = (e) => {
     e.preventDefault(); drop.classList.remove("over");
-    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files[0]) handleWordUpload(e.dataTransfer.files[0]);
   };
-  fileInput.onchange = () => { if (fileInput.files[0]) uploadFile(fileInput.files[0]); };
+  fileInput.onchange = () => {
+    if (fileInput.files[0]) handleWordUpload(fileInput.files[0]);
+    fileInput.value = ""; // 같은 파일 다시 선택 가능하게
+  };
+
+  // 새 워드 업로드 진입점: 진행 상태면 확인 후 초기화, 아니면 조용히 교체.
+  //  진행 상태 판단 = 첫 시작(STOP1)에 성공해 모델이 잠긴 상태(=세션 생성됨).
+  async function handleWordUpload(file) {
+    if (modelLocked) {
+      const label = uploadedName || "현재 글";
+      const ok = await showConfirm({
+        title: "작업 중인 글이 있습니다",
+        message:
+          "지금 '" + label + "' 작업을 진행 중입니다.\n\n" +
+          "새 파일로 바꾸면 진행 상태(선택한 제목·키워드)가 초기화됩니다.\n" +
+          "작성된 본문·이미지는 보존됩니다.\n\n" +
+          "새 파일로 바꿀까요?",
+        confirmText: "새 파일로 시작",
+        cancelText: "취소",
+        danger: true,
+      });
+      if (!ok) return; // 취소 → 업로드하지 않고 기존 작업 유지
+
+      // 진행 상태 초기화: 실행 중이면 중지 후 서버 세션/spec/inbox 정리.
+      if (running) { try { await stopRun(); } catch {} }
+      try {
+        await fetch("api/reset", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ browserKey }),
+        });
+      } catch {}
+      resetClientUI(); // 화면을 시작 전 상태로 (리로드 없이, browserKey 유지)
+    }
+    // 진행 상태 없음이거나 초기화 완료 → 새 워드로 교체 업로드
+    uploadFile(file);
+  }
+
+  // 화면을 "시작 전" 상태로 되돌린다 (리로드 없이 — 업로드할 파일을 유지하기 위함).
+  function resetClientUI() {
+    // 단계 바 초기화
+    document.querySelectorAll(".steps .s").forEach((s) => (s.className = "s"));
+    currentStop = null;
+    // 진행/결과/STOP 영역 숨김·비움
+    $("work").classList.add("hidden");
+    $("out").style.display = "none"; $("out").innerHTML = "";
+    $("meta").classList.remove("show"); $("meta").innerHTML = "";
+    $("err").textContent = ""; $("errHint").style.display = "none";
+    $("stopbar").style.display = "none";
+    $("titlepick").style.display = "none";
+    $("stopactions").style.display = "none";
+    hideReviseBox();
+    $("stickybar").style.display = "none";
+    document.body.classList.remove("has-stickybar");
+    resetStageTools();
+    // 세션 누적 사용량 초기화
+    totals.costUsd = 0; totals.inTok = 0; totals.outTok = 0; totals.cacheTok = 0; totals.ms = 0;
+    // 시작 설정 다시 펼치고 요약 바 숨김
+    $("setupArea").style.display = "block";
+    $("setupSummary").style.display = "none";
+    setupPeek = false;
+    // 모델 선택 재활성화
+    modelLocked = false;
+    $("modelSelect").disabled = false;
+    $("modelLockedInfo").style.display = "none";
+    // 작업중 배너 정리
+    running = false;
+    clearInterval(elapsedTimer);
+    $("working").classList.remove("show");
+  }
 
   async function uploadFile(file) {
     const fd = new FormData();
@@ -475,11 +916,12 @@
     $("fileline").textContent = "업로드 중… " + file.name;
     $("fileline").classList.add("show");
     try {
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const r = await fetch("api/upload", { method: "POST", body: fd });
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || "업로드 실패");
       $("fileline").textContent = "올림: " + j.filename;
       uploaded = true;
+      uploadedName = j.filename;
       $("startAbtn").disabled = false;
     } catch (e) {
       $("fileline").textContent = "실패: " + e.message;
@@ -495,7 +937,8 @@
     const startedAt = Date.now();
     $("elapsed").textContent = "0초";
     $("working").classList.add("show");
-    document.querySelectorAll(".btn-primary, .titlepick button, .modelopt").forEach((b) => (b.disabled = true));
+    document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = true));
+    $("modelSelect").disabled = true;
     elapsedTimer = setInterval(() => {
       const s = Math.floor((Date.now() - startedAt) / 1000);
       $("elapsed").textContent =
@@ -508,13 +951,13 @@
     clearInterval(elapsedTimer);
     $("working").classList.remove("show");
     document.querySelectorAll(".btn-primary, .titlepick button").forEach((b) => (b.disabled = false));
-    document.querySelectorAll(".modelopt").forEach((b) => (b.disabled = modelLocked));
+    $("modelSelect").disabled = modelLocked;
     $("startAbtn").disabled = !uploaded; // 업로드 전이면 다시 잠금
   }
 
   async function stopRun() {
     try {
-      await fetch("/api/stop", {
+      await fetch("api/stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ browserKey }),
@@ -577,7 +1020,7 @@
     $("stopactions").style.display = "none";
     $("reviseBox").style.display = "none";
     try {
-      const r = await fetch("/api/step", {
+      const r = await fetch("api/step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ browserKey, ...payload }),
@@ -602,30 +1045,232 @@
   }
 
   // ── STOP 화면 공통 표시 ──────────────────────
-  // currentStop: 'title' | 'keyword' | 'images' | null
+  // currentStop: 'title' | 'keyword' | 'body' | 'images' | null
   // 다시 만들기(revise) 후 같은 STOP 화면을 복원하는 데 사용한다.
   let currentStop = null;
+
+  // ── 완료 단계 다시 보기 / 되돌리기 상태 ────────
+  // viewingStop: 보기 모드로 열람 중인 완료 단계('title'|'keyword'|'body'|
+  //   'images') 또는 null(정상 진행). 실제 진행 상태는 currentStop 이며,
+  //   보기 모드에서는 currentStop 을 절대 건드리지 않는다.
+  let viewingStop = null;
+  // finished: ⑤ 검증까지 끝나(PASS) 진행 버튼이 없는 완료 상태인지.
+  let finished = false;
+  // verifyState: 검증 단계 세부 상태 —
+  //   null(검증 전) | 'fail'(지적 있음, 수정 가능) | 'fixed'(본문 수정됨, 재검증 가능) | 'pass'(통과 완료)
+  let verifyState = null;
+  // 각 단계에서 화면(#out)에 표시했던 결과 텍스트를 캐시 → 보기 모드에서 재렌더링.
+  let stageResults = { title: "", keyword: "", body: "", images: "", verify: "" };
+  // ② 키워드 단계를 다시 만들 때 필요한 제목 선택 번호.
+  let lastTitleChoice = null;
+  // ②' 직접 입력으로 확정한 경우의 제목(키워드 되돌리기 재실행에 사용).
+  let lastCustomTitle = null;
+
+  const STAGE_ORDER = ["title", "keyword", "body", "images", "verify"];
+  const STAGE_LABELS = {
+    title: "① 제목 선택", keyword: "② 키워드 승인", body: "③ 본문 작성",
+    images: "④ 이미지 프롬프트", verify: "⑤ 검증",
+  };
+
+  // 지금 실제로 진행 중인(또는 완료된) 단계 키.
+  function currentStageKey() {
+    return currentStop || (finished ? "verify" : "title");
+  }
 
   function showStop(stage) {
     currentStop = stage;
     hideReviseBox();
+    // sticky 하단 액션 바를 띄운다 (스크롤해도 버튼이 항상 보이게).
+    $("stickybar").style.display = "block";
+    document.body.classList.add("has-stickybar");
     $("stopbar").style.display = "flex";
+    $("stopbar").classList.remove("ok");   // 검증 PASS 초록 바 색 초기화
+    $("reviseBtn").style.display = "";      // 검증 루프에서 숨겼던 '다시 만들기' 복원
     $("stopactions").style.display = "flex";
     $("titlepick").style.display = stage === "title" ? "flex" : "none";
+    // 직접 입력 박스는 매번 접어서 1/2/3 선택 상태로 돌아온다.
+    $("customTitleBox").style.display = "none";
     if (stage === "title") {
-      $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르세요.";
+      $("stoptext").textContent = "STOP 1 — 제목 3안 중 하나를 고르거나 직접 입력하세요.";
       $("approveBtn").style.display = "none";
     } else if (stage === "keyword") {
       $("stoptext").textContent = "STOP 2 — 키워드 배치안을 확인하고 승인하세요.";
       $("approveBtn").style.display = "";
-      $("approveBtn").textContent = "키워드 승인하고 본문 작성";
+      $("approveBtn").textContent = "키워드 승인, 본문 작성으로";
       $("approveBtn").onclick = approveKeywords;
-    } else {
-      $("stoptext").textContent = "STOP 3 — 이미지 내 텍스트를 확인하고 승인하세요.";
+    } else if (stage === "body") {
+      $("stoptext").textContent = "STOP 3 — 작성된 본문을 확인하고 승인하세요.";
       $("approveBtn").style.display = "";
-      $("approveBtn").textContent = "이미지 승인하고 최종 검증";
+      $("approveBtn").textContent = "본문 승인, 이미지 프롬프트로";
+      $("approveBtn").onclick = approveBody;
+    } else {
+      $("stoptext").textContent = "STOP 4 — 이미지 프롬프트를 확인·복사해 이미지를 만들어 업로드하세요.";
+      $("approveBtn").style.display = "";
+      $("approveBtn").textContent = "프롬프트 확인 완료, 검증으로";
       $("approveBtn").onclick = approveImages;
     }
+
+    // 단계별로 필요한 도구만 보이게 한다.
+    //  - 본문 작성(body): 작성된 본문 렌더링. 이미지 UI 없음.
+    //  - 이미지(images): 이미지 프롬프트 보기·복사 + 업로드.
+    const showBodyTools = stage === "body";
+    const showImageTools = stage === "images";
+    $("bodyStageTools").style.display = showBodyTools ? "block" : "none";
+    $("imageStageTools").style.display = showImageTools ? "block" : "none";
+    if (showBodyTools) loadDraftIntoView();
+    if (showImageTools) initImageTools();
+  }
+
+  // ── 완료 단계 다시 보기 / 되돌리기 ────────────
+
+  // 단계 탭 클릭 진입점. 완료된(done) 과거 단계만 열람 가능하고,
+  // 아직 도달 안 한 미래 단계는 무시한다.
+  function onStepClick(stage) {
+    if (running) return;
+    // 현재 진행 단계 탭을 누르면: 보기 모드였다면 원위치, 아니면 무시.
+    if (stage === currentStageKey()) {
+      if (viewingStop) exitViewMode();
+      return;
+    }
+    const el = document.querySelector('.steps .s[data-k="' + stage + '"]');
+    if (!el || !el.classList.contains("done")) return; // 미래/미완 단계 클릭 불가
+    renderViewMode(stage);
+  }
+
+  // 완료 단계를 읽기 전용으로 표시한다. 실제 진행 상태(currentStop)는 유지.
+  function renderViewMode(stage) {
+    viewingStop = stage;
+    // 정상 진행용 컨트롤은 모두 숨긴다.
+    $("titlepick").style.display = "none";
+    $("customTitleBox").style.display = "none";
+    $("stopactions").style.display = "none";
+    $("stopbar").style.display = "none";
+    hideReviseBox();
+    $("stickybar").style.display = "none";
+    document.body.classList.remove("has-stickybar");
+    // 보기 배너 + 두 버튼 표시.
+    $("viewBannerText").textContent =
+      "🔍 이전 단계 보기 (현재 진행 단계: " + STAGE_LABELS[currentStageKey()] + ")";
+    $("viewbar").style.display = "flex";
+    // 보고 있는 탭 강조.
+    document.querySelectorAll(".steps .s").forEach((s) => s.classList.remove("viewing"));
+    const tabEl = document.querySelector('.steps .s[data-k="' + stage + '"]');
+    if (tabEl) tabEl.classList.add("viewing");
+
+    // 단계별 도구: 본문은 /api/draft, 이미지는 프롬프트+업로드 이미지.
+    // 업로드 영역은 읽기 전용이므로 숨긴다(썸네일은 유지).
+    const showBodyTools = stage === "body";
+    const showImageTools = stage === "images";
+    $("bodyStageTools").style.display = showBodyTools ? "block" : "none";
+    $("imageStageTools").style.display = showImageTools ? "block" : "none";
+    $("imgUploadArea").style.display = "none";
+
+    // 그 단계 결과 텍스트(캐시)를 #out 에 렌더링. 없으면 안내.
+    const cached = stageResults[stage];
+    if (cached) {
+      renderResult(cached);
+    } else if (!showBodyTools && !showImageTools) {
+      $("out").style.display = "block";
+      $("out").textContent = "저장된 내용이 없습니다.";
+    } else {
+      $("out").style.display = "none";
+    }
+    if (showBodyTools) loadDraftIntoView();
+    if (showImageTools) initImageTools();
+    window.scrollTo(0, 0);
+  }
+
+  // "현재 단계로 돌아가기": 보기 모드를 끝내고 원래 진행 화면으로 복귀.
+  // 진행 상태를 전혀 바꾸지 않는다.
+  function exitViewMode() {
+    viewingStop = null;
+    document.querySelectorAll(".steps .s").forEach((s) => s.classList.remove("viewing"));
+    $("viewbar").style.display = "none";
+    $("imgUploadArea").style.display = ""; // 업로드 영역 복원
+    if (currentStageKey() === "verify") {
+      // 검증 단계는 세부 상태(FAIL/수정됨/PASS)까지 스스로 #out 을 복원한다.
+      restoreVerifyScreen();
+    } else if (currentStop) {
+      showStop(currentStop);
+      // showStop 은 #out 을 다시 그리지 않으므로 현재 단계 결과로 복원한다.
+      if (stageResults[currentStop]) renderResult(stageResults[currentStop]);
+    }
+  }
+
+  function redoFromViewingStage() {
+    if (viewingStop) redoFromStage(viewingStop);
+  }
+
+  // "이 단계부터 다시 하기": 확인 후 그 단계를 다시 실행한다.
+  async function redoFromStage(stage) {
+    const ok = await showConfirm({
+      title: "이 단계부터 다시 진행",
+      message:
+        "여기서 다시 시작하면 이후 단계에서 만든 내용(예: 본문·이미지 " +
+        "프롬프트)은 다시 만들어야 합니다. 계속할까요?",
+      confirmText: "이 단계부터 다시 하기",
+      cancelText: "취소",
+      danger: true,
+    });
+    if (!ok) return; // 취소: 보기 모드 유지
+
+    // 보기 UI 정리(배너/강조/업로드 영역). 진행 상태는 아래 재실행에서만 바뀐다.
+    viewingStop = null;
+    finished = false;
+    verifyState = null;
+    $("stopbar").classList.remove("ok");
+    $("reviseBtn").style.display = "";
+    document.querySelectorAll(".steps .s").forEach((s) => s.classList.remove("viewing"));
+    $("viewbar").style.display = "none";
+    $("imgUploadArea").style.display = "";
+
+    // 되돌린 단계 이후의 진행 표시·캐시를 초기화한다.
+    clearStagesAfter(stage);
+    clearStageResultsFrom(stage);
+
+    // 그 단계의 내용을 만들어 낸 step 을 다시 실행한다(서버 세션은 유지).
+    //  - keyword: pick_title(선택 번호)  - body: approve_keywords
+    //  - images:  approve_body           - title: 처음부터 다시 시작
+    try {
+      if (stage === "title") {
+        restartFromStart();
+      } else if (stage === "keyword") {
+        if (lastCustomTitle != null) await confirmCustomTitleWith(lastCustomTitle);
+        else if (lastTitleChoice != null) await pickTitle(lastTitleChoice);
+        else { await ensureCurrentScreen(); return; }
+      } else if (stage === "body") {
+        await approveKeywords();
+      } else if (stage === "images") {
+        await approveBody();
+      }
+    } catch (e) {
+      // 재실행 실패 시 오류 문구는 runStep 이 이미 표시한다.
+    }
+  }
+
+  // 진행 표시(단계바)에서 stage 이후 단계들을 미완(빈 클래스)으로 되돌린다.
+  function clearStagesAfter(stage) {
+    const i = STAGE_ORDER.indexOf(stage);
+    STAGE_ORDER.slice(i + 1).forEach((k) => markStep(k, ""));
+  }
+
+  // stage 및 그 이후 단계의 캐시된 결과를 비운다(재생성 대상).
+  function clearStageResultsFrom(stage) {
+    const i = STAGE_ORDER.indexOf(stage);
+    STAGE_ORDER.slice(i).forEach((k) => {
+      if (k in stageResults) stageResults[k] = "";
+    });
+  }
+
+  // 제목(①)부터 다시 시작: 최초 진입 방식(entry)에 맞는 시작 함수를 다시 부른다.
+  function restartFromStart() {
+    if (entry === "A") startFromDocx();
+    else if (entry === "B") startFromTopic();
+  }
+
+  // 되돌리기에 필요한 값이 없을 때(예: 새로고침으로 캐시 소실) 안전 복귀.
+  function ensureCurrentScreen() {
+    if (currentStop) showStop(currentStop);
   }
 
   // ── 다시 만들기 (revise) ─────────────────────
@@ -645,7 +1290,10 @@
     if (!feedback) { $("reviseText").focus(); return; }
     const stage = currentStop;
     try {
-      await runStep({ step: "revise", feedback });
+      // 현재 STOP 단계를 함께 보낸다 → 서버가 본문 단계 revise 시 본문을
+      // 화면에 중복 출력하지 않도록 분기한다.
+      const text = await runStep({ step: "revise", feedback, stage });
+      if (stage in stageResults) stageResults[stage] = text; // 보기 모드 캐시 갱신
       $("reviseText").value = "";
     } finally {
       // 성공이든 실패든 같은 STOP 화면을 복원한다 (실패 시 오류 문구는 유지됨)
@@ -653,14 +1301,194 @@
     }
   }
 
+  // ── 본문/이미지 단계 도구 (STOP3·STOP4) ──────
+  // 서버가 slug 를 직접 알려주지 않으므로, 처음엔 slug 없이 /api/draft 를
+  // 불러 "가장 최근 파일"을 받고, 그 응답의 filename 에서 실제 slug 를
+  // 역산해 재사용한다.
+  let currentSlug = null;
+  let lastImagePromptText = "";
+
+  async function ensureSlug() {
+    if (currentSlug) return currentSlug;
+    try {
+      const r = await fetch("api/draft");
+      const j = await r.json();
+      if (j.ok && j.filename) {
+        currentSlug = j.filename.replace(/\.md$/i, "");
+      }
+    } catch {}
+    return currentSlug;
+  }
+
+  // 새 글을 시작할 때 이전 글의 슬러그·본문·이미지 상태가 남지 않게 초기화.
+  function resetStageTools() {
+    currentSlug = null;
+    lastImagePromptText = "";
+    $("imagePromptBox").style.display = "none";
+    $("draftContent").innerHTML = "";
+    $("imagePromptContent").innerHTML = "";
+    $("thumbGrid").innerHTML = "";
+    $("copyHint").textContent = "";
+    $("imgUploadStatus").textContent = "";
+    // 완료 단계 보기/되돌리기 상태도 함께 초기화한다.
+    viewingStop = null;
+    finished = false;
+    verifyState = null;
+    lastTitleChoice = null;
+    lastCustomTitle = null;
+    $("stopbar").classList.remove("ok");
+    $("reviseBtn").style.display = "";
+    stageResults = { title: "", keyword: "", body: "", images: "", verify: "" };
+    $("viewbar").style.display = "none";
+    $("imgUploadArea").style.display = "";
+    document.querySelectorAll(".steps .s").forEach((s) => s.classList.remove("viewing"));
+  }
+
+  // ③ 본문 작성 단계: 진입하면 작성된 본문을 바로 렌더링해 보여준다.
+  async function loadDraftIntoView() {
+    const content = $("draftContent");
+    content.style.display = "block";
+    content.textContent = "본문 불러오는 중…";
+    try {
+      const slug = await ensureSlug();
+      const qs = slug ? "?slug=" + encodeURIComponent(slug) : "";
+      const r = await fetch("api/draft" + qs);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "본문을 불러오지 못했습니다.");
+      renderMarkdownInto(content, j.content);
+    } catch (e) {
+      content.textContent = "오류: " + e.message;
+    }
+  }
+
+  // ④ 이미지 단계: 진입하면 slug 확인 후 이미 올린 이미지 목록을 불러온다.
+  //   (이미지 프롬프트는 사용자가 "보기"를 눌렀을 때 로드한다.)
+  async function initImageTools() {
+    await ensureSlug();
+    $("imagePromptBox").style.display = "none"; // 재진입 시 접힌 상태로
+    loadUploadedImages();
+  }
+
+  // "- 프롬프트: ..." 한 줄만 뽑아 복사 버튼용으로 쓴다 (파일의 메인 텍스트/
+  // 강조 단어 등 메타 정보는 빼고, Gemini/GPT에 바로 붙여넣을 문단만 남긴다).
+  function extractPromptText(mdContent) {
+    const m = mdContent.match(/^-\s*프롬프트\s*[:：]\s*(.+)$/m);
+    return m ? m[1].trim() : mdContent.trim();
+  }
+
+  async function toggleImagePromptView() {
+    const box = $("imagePromptBox");
+    const opening = box.style.display === "none";
+    box.style.display = opening ? "block" : "none";
+    if (!opening) return;
+    const content = $("imagePromptContent");
+    content.style.display = "block";
+    content.textContent = "불러오는 중…";
+    $("copyHint").textContent = "";
+    try {
+      const slug = await ensureSlug();
+      const qs = slug ? "?slug=" + encodeURIComponent(slug) : "";
+      const r = await fetch("api/image-prompt" + qs);
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "이미지 프롬프트를 불러오지 못했습니다.");
+      lastImagePromptText = extractPromptText(j.content);
+      renderMarkdownInto(content, j.content);
+    } catch (e) {
+      lastImagePromptText = "";
+      content.textContent = "오류: " + e.message;
+    }
+  }
+
+  async function copyImagePrompt() {
+    if (!lastImagePromptText) return;
+    try {
+      await navigator.clipboard.writeText(lastImagePromptText);
+      $("copyHint").textContent = "복사됨!";
+    } catch {
+      $("copyHint").textContent = "복사 실패 — 직접 선택해 복사하세요.";
+    }
+    setTimeout(() => { $("copyHint").textContent = ""; }, 2000);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
+
+  function renderThumbs(files) {
+    const grid = $("thumbGrid");
+    if (!files || files.length === 0) {
+      grid.innerHTML = '<p class="thumb-empty">아직 업로드된 이미지가 없습니다.</p>';
+      return;
+    }
+    grid.innerHTML = files.map((f) =>
+      `<a class="thumb" href="${f.url}" target="_blank" rel="noopener">` +
+      `<img src="${f.url}" alt="${escapeHtml(f.filename)}" loading="lazy" />` +
+      `<span>${escapeHtml(f.filename)}</span></a>`
+    ).join("");
+  }
+
+  async function loadUploadedImages() {
+    const slug = await ensureSlug();
+    if (!slug) { renderThumbs([]); return; }
+    try {
+      const r = await fetch("api/uploaded-images?slug=" + encodeURIComponent(slug));
+      const j = await r.json();
+      if (j.ok) renderThumbs(j.files);
+    } catch {}
+  }
+
+  function setUploadStatus(msg) {
+    const el = $("imgUploadStatus");
+    el.textContent = msg;
+    el.classList.add("show");
+  }
+
+  const imgDrop = $("imgDrop"), imgInput = $("imgInput");
+  imgDrop.onclick = () => imgInput.click();
+  imgDrop.ondragover = (e) => { e.preventDefault(); imgDrop.classList.add("over"); };
+  imgDrop.ondragleave = () => imgDrop.classList.remove("over");
+  imgDrop.ondrop = (e) => {
+    e.preventDefault(); imgDrop.classList.remove("over");
+    if (e.dataTransfer.files.length) uploadImages(e.dataTransfer.files);
+  };
+  imgInput.onchange = () => {
+    if (imgInput.files.length) uploadImages(imgInput.files);
+  };
+
+  async function uploadImages(fileList) {
+    const slug = await ensureSlug();
+    if (!slug) {
+      setUploadStatus("본문이 아직 없어 slug를 확인할 수 없습니다. 먼저 본문을 작성한 뒤 시도하세요.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("slug", slug);
+    Array.from(fileList).forEach((f) => fd.append("image", f));
+    setUploadStatus("업로드 중…");
+    try {
+      const r = await fetch("api/upload-image", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!j.ok) throw new Error(j.error || "업로드 실패");
+      setUploadStatus(`${j.saved.length}장 업로드 완료`);
+      renderThumbs(j.files.map((name) => ({ filename: name, url: "uploaded-images/" + name })));
+    } catch (e) {
+      setUploadStatus("오류: " + e.message);
+    }
+    imgInput.value = ""; // 같은 파일을 다시 선택할 수 있게 초기화
+  }
+
   // ── 입구 A 시작 ─────────────────────────────
   async function startFromDocx() {
     if (!uploaded) return;
+    resetStageTools();
     const usedModel = selectedModel;
     markStep("title", "now");
     try {
-      await runStep({ step: "start_from_docx", model: usedModel });
+      stageResults.title = await runStep({ step: "start_from_docx", model: usedModel });
       lockModelSelection(usedModel);
+      collapseSetup("📄 " + (uploadedName || "워드 초안") + " · " + (MODEL_INFO[usedModel]?.label || usedModel));
       showStop("title");
     } catch (e) {
       markStep("title", "");
@@ -668,18 +1496,125 @@
     }
   }
 
+  // ── 입구 B: 참고 자료 첨부 (이미지·문서, 선택) ──
+  // 시작 버튼을 누르기 전까지 브라우저 메모리에만 담아 두고, 시작 시
+  // /api/upload-reference 로 한 번에 올린다.
+  const REF_ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp", "pdf", "docx", "txt", "md"]);
+  let refFiles = [];      // [{ file, url|null, isImage, key }]
+  let refPasteSeq = 0;    // 붙여넣기 캡처 파일명 순번
+
+  function extOf(name) {
+    const i = name.lastIndexOf(".");
+    return i >= 0 ? name.slice(i + 1).toLowerCase() : "";
+  }
+
+  // 파일 목록을 첨부에 추가한다(허용 확장자만, 중복 이름+크기는 건너뜀).
+  function addRefFiles(fileList) {
+    for (const file of fileList) {
+      const ext = extOf(file.name);
+      if (!REF_ALLOWED_EXTS.has(ext)) continue;
+      if (refFiles.some((r) => r.file.name === file.name && r.file.size === file.size)) continue;
+      const isImage = ["png", "jpg", "jpeg", "webp"].includes(ext);
+      refFiles.push({
+        file,
+        url: isImage ? URL.createObjectURL(file) : null,
+        isImage,
+        key: "rf_" + refPasteSeq + "_" + file.name + file.size,
+      });
+      refPasteSeq += 1;
+    }
+    renderRefThumbs();
+  }
+
+  function removeRef(key) {
+    const i = refFiles.findIndex((r) => r.key === key);
+    if (i < 0) return;
+    if (refFiles[i].url) URL.revokeObjectURL(refFiles[i].url);
+    refFiles.splice(i, 1);
+    renderRefThumbs();
+  }
+
+  function renderRefThumbs() {
+    const grid = $("refThumbs");
+    grid.innerHTML = refFiles.map((r) => {
+      const inner = r.isImage
+        ? `<img src="${r.url}" alt="${escapeHtml(r.file.name)}" />`
+        : `<div class="doc-ico">📄</div>`;
+      return (
+        `<div class="thumb rthumb">` +
+        `<button class="rm" title="삭제" onclick="removeRef('${r.key}')">×</button>` +
+        inner +
+        `<span>${escapeHtml(r.file.name)}</span></div>`
+      );
+    }).join("");
+  }
+
+  // 첨부한 파일들을 서버 references/ 로 업로드한다(시작 시 1회).
+  async function uploadReferences() {
+    const fd = new FormData();
+    fd.append("browserKey", browserKey);
+    refFiles.forEach((r) => fd.append("reference", r.file, r.file.name));
+    const r = await fetch("api/upload-reference", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "참고 자료 업로드 실패");
+    // 업로드 완료 → 로컬 미리보기 URL 정리(서버에 저장됨).
+    refFiles.forEach((f) => { if (f.url) URL.revokeObjectURL(f.url); });
+    refFiles = [];
+    renderRefThumbs();
+  }
+
+  // 드래그&드롭 + 클릭 선택 배선
+  const refDrop = $("refDrop"), refInput = $("refInput");
+  refDrop.onclick = () => refInput.click();
+  refDrop.ondragover = (e) => { e.preventDefault(); refDrop.classList.add("over"); };
+  refDrop.ondragleave = () => refDrop.classList.remove("over");
+  refDrop.ondrop = (e) => {
+    e.preventDefault(); refDrop.classList.remove("over");
+    if (e.dataTransfer.files.length) addRefFiles(e.dataTransfer.files);
+  };
+  refInput.onchange = () => {
+    if (refInput.files.length) addRefFiles(refInput.files);
+    refInput.value = ""; // 같은 파일 다시 선택 가능하게 초기화
+  };
+
+  // 붙여넣기(Ctrl+V): 입구 B 화면에서 클립보드 이미지를 첨부로 받는다.
+  document.addEventListener("paste", (e) => {
+    // 입구 B 화면이 실제로 보일 때만(시작 후 접힌 상태에서는 무시).
+    if (entry !== "B" || !$("panelB").offsetParent) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const imgs = [];
+    for (const it of items) {
+      if (it.kind === "file" && it.type.startsWith("image/")) {
+        const blob = it.getAsFile();
+        if (!blob) continue;
+        const ext = (it.type.split("/")[1] || "png").replace("jpeg", "jpg");
+        imgs.push(new File([blob], `screenshot-${refPasteSeq + 1}.${ext}`, { type: it.type }));
+      }
+    }
+    if (imgs.length) { e.preventDefault(); addRefFiles(imgs); }
+  });
+
   // ── 입구 B 시작 ─────────────────────────────
   async function startFromTopic() {
     const topic = $("topic").value.trim();
     if (!topic) { $("topic").focus(); return; }
+    resetStageTools();
     const usedModel = selectedModel;
+    const refCount = refFiles.length;
     markStep("title", "now");
     try {
-      await runStep({ step: "start_from_topic", topic, model: usedModel });
+      // 첨부가 있으면 먼저 업로드한 뒤 주제 단계를 실행한다.
+      if (refCount) await uploadReferences();
+      stageResults.title = await runStep({ step: "start_from_topic", topic, model: usedModel });
       lockModelSelection(usedModel);
+      const snip = topic.length > 24 ? topic.slice(0, 24) + "…" : topic;
+      const refTag = refCount ? " · 📎" + refCount : "";
+      collapseSetup("📝 " + snip + " · " + (MODEL_INFO[usedModel]?.label || usedModel) + refTag);
       showStop("title");
     } catch (e) {
       markStep("title", "");
+      $("err").textContent = "오류: " + e.message;
       showModelFailureHint(usedModel);
     }
   }
@@ -695,30 +1630,213 @@
 
   // ── STOP1: 제목 선택 → 키워드 ────────────────
   async function pickTitle(n) {
+    lastTitleChoice = n; // ② 키워드 되돌리기(재실행) 시 재사용
+    lastCustomTitle = null; // 3안 선택 → 직접 입력 기록은 무효화
     markStep("title", "done");
     markStep("keyword", "now");
-    await runStep({ step: "pick_title", choice: n });
+    stageResults.keyword = await runStep({ step: "pick_title", choice: n });
     showStop("keyword");
   }
 
-  // ── STOP2: 키워드 승인 → 본문+이미지 ─────────
+  // AI가 제시한 제목 3안 중 마지막 것을 뽑아 직접 입력창 기본값으로 쓴다.
+  //  (자유형 텍스트라 추출은 best-effort — 못 찾으면 빈 값으로 둔다.)
+  function extractLastSuggestedTitle() {
+    const text = stageResults.title || "";
+    const rx = /제?\s*[123]\s*(?:안|번)\s*[:：.)\-]?\s*(.+)/g;
+    // 앞뒤 따옴표·별표·대괄호·공백 제거(‘[제목 3안]’ 같은 머리말이 ']'만 남기지 않게)
+    const strip = (s) => s.replace(/^[\s"'“”‘’*\[\]]+|[\s"'“”‘’*\[\]]+$/g, "");
+    let m, last = "";
+    while ((m = rx.exec(text)) !== null) {
+      const t = strip(m[1]);
+      if (t.length >= 2) last = t; // 알맹이 없는(예: ']') 매치는 건너뛴다
+    }
+    return last.slice(0, 120);
+  }
+
+  // '직접 입력' 열기: 1/2/3 버튼을 숨기고 입력창에 집중시킨다(상호 배타).
+  function openCustomTitle() {
+    $("titlepick").style.display = "none";
+    $("customTitleBox").style.display = "block";
+    const input = $("customTitleInput");
+    input.value = extractLastSuggestedTitle(); // 없으면 빈 값
+    updateTitleCount();
+    input.focus();
+    input.select();
+  }
+
+  // 취소: 다시 1/2/3 선택 상태로 되돌린다.
+  function cancelCustomTitle() {
+    $("customTitleBox").style.display = "none";
+    $("titlepick").style.display = "flex";
+  }
+
+  // 글자 수 카운터(60자 초과 시 색으로 경고).
+  function updateTitleCount() {
+    const len = $("customTitleInput").value.trim().length;
+    const el = $("customTitleCount");
+    el.textContent = len + "자";
+    el.classList.toggle("over", len > 60);
+  }
+
+  // 직접 입력 제목 확정 → custom_title step 으로 키워드 단계 진행.
+  async function confirmCustomTitle() {
+    const title = $("customTitleInput").value.trim();
+    if (!title) { $("customTitleInput").focus(); return; }
+    await confirmCustomTitleWith(title);
+  }
+
+  // 확정 로직(되돌리기 재실행에서도 같은 제목으로 재사용).
+  async function confirmCustomTitleWith(title) {
+    lastTitleChoice = null;   // 되돌리기 시 pick_title 번호가 아님을 표시
+    lastCustomTitle = title;  // ②' 키워드 되돌리기 재실행에 사용
+    markStep("title", "done");
+    markStep("keyword", "now");
+    stageResults.keyword = await runStep({ step: "custom_title", title });
+    showStop("keyword");
+  }
+
+  // ── STOP2: 키워드 승인 → 본문 작성 ───────────
   async function approveKeywords() {
     markStep("keyword", "done");
     markStep("body", "now");
-    await runStep({ step: "approve_keywords" });
+    stageResults.body = await runStep({ step: "approve_keywords" });
+    showStop("body");
+  }
+
+  // ── STOP3: 본문 승인 → 이미지 프롬프트 ───────
+  async function approveBody() {
+    markStep("body", "done");
+    markStep("images", "now");
+    stageResults.images = await runStep({ step: "approve_body" });
     showStop("images");
   }
 
-  // ── STOP3: 이미지 승인 → 검증 ───────────────
+  // ── STOP4: 이미지 승인 → 검증 ───────────────
   async function approveImages() {
-    markStep("body", "done");
+    markStep("images", "done");
     markStep("verify", "now");
-    await runStep({ step: "approve_images" });
-    markStep("verify", "done");
-    currentStop = null;
+    try {
+      const text = await runStep({ step: "approve_images" });
+      renderVerifyResult(text);
+    } catch (e) {
+      markStep("verify", ""); // 실패 시 이미지 STOP 으로 되돌려 재시도 가능하게
+      showStop("images");
+    }
+  }
+
+  // ── STOP5 검증 루프: 결과 판정 → (FAIL) 수정 → 재검증 → … ──
+
+  // 검증 결과 텍스트에서 PASS/FAIL 판정을 감지한다.
+  //  - 판정 대상을 응답 전체가 아니라 "최종 판정:" 줄로 한정한다(없으면 첫 200자).
+  //    → 본문 속 부정문("…발행 준비 완료로 표시할 수 없습니다")에 오판하지 않게.
+  //  - FAIL 신호를 PASS 보다 먼저 검사한다. 애매하면 안전하게 FAIL.
+  function classifyVerdict(t) {
+    t = t || "";
+    const verdictLine =
+      (t.match(/최종\s*판정\s*[:：].*/) || [])[0] || t.slice(0, 200);
+    if (/\bFAIL\b/i.test(verdictLine) || /불합격|미흡|수정\s*필요/.test(verdictLine)) return "fail";
+    if (/발행\s*준비\s*완료/.test(verdictLine)) return "pass";
+    if (/\bPASS\b/i.test(verdictLine) || /합격|통과/.test(verdictLine)) return "pass";
+    return "fail";
+  }
+
+  // 검증 결과(approve_images·revalidate 공통)를 화면에 반영한다.
+  function renderVerifyResult(text) {
+    const verdict = classifyVerdict(text);
+    currentStop = "verify";
+    viewingStop = null;
+    verifyState = verdict;
+    finished = verdict === "pass";
+    stageResults.verify = text;
+
+    // 결과 리포트를 밝은 결과 카드(#out)에 렌더링.
+    renderResult(text);
+    // 검증 단계에선 본문/이미지 도구를 숨긴다(수정 화면에서만 본문을 띄운다).
+    $("bodyStageTools").style.display = "none";
+    $("imageStageTools").style.display = "none";
+    $("viewbar").style.display = "none";
     $("stopbar").style.display = "flex";
-    $("stoptext").textContent = "검증 완료. 발행은 네이버에서 직접 하세요 (자동 발행 안 함).";
-    $("stopactions").style.display = "none";
+    hideReviseBox();
+
+    if (verdict === "pass") {
+      markStep("verify", "done");
+      $("stopbar").classList.add("ok");
+      $("stoptext").textContent =
+        "✅ 검증 통과 — 발행 준비 완료. 발행은 네이버에서 직접 하세요 (자동 발행 안 함).";
+      // 진행 버튼 없음 → sticky 하단 바 내림.
+      $("stopactions").style.display = "none";
+      $("titlepick").style.display = "none";
+      $("stickybar").style.display = "none";
+      document.body.classList.remove("has-stickybar");
+    } else {
+      markStep("verify", "now");
+      $("stopbar").classList.remove("ok");
+      $("stoptext").textContent =
+        "⚠️ 검증 결과 수정할 점이 있습니다. 위 지적을 확인하고 본문을 다시 만들 수 있습니다.";
+      showVerifyAction("지적 반영해 본문 다시 만들기", fixFromReview);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // 검증 루프 전용 하단 고정 버튼 구성(단일 primary 버튼, '다시 만들기' 숨김).
+  function showVerifyAction(label, handler) {
+    $("stickybar").style.display = "block";
+    document.body.classList.add("has-stickybar");
+    $("stopactions").style.display = "flex";
+    $("titlepick").style.display = "none";
+    $("approveBtn").style.display = "";
+    $("approveBtn").textContent = label;
+    $("approveBtn").onclick = handler;
+    $("reviseBtn").style.display = "none";
+  }
+
+  // FAIL → 지적사항 반영해 본문 수정(재검증은 아직 안 함).
+  async function fixFromReview() {
+    try {
+      const text = await runStep({ step: "fix_from_review" });
+      renderBodyFixed(text);
+    } catch (e) {
+      restoreVerifyScreen(); // 실패 시 직전 FAIL 화면(버튼 포함) 복원
+    }
+  }
+
+  // 본문이 수정된 상태: 수정된 본문을 자동 표시 + '다시 검증' 버튼.
+  function renderBodyFixed(text) {
+    currentStop = "verify";
+    viewingStop = null;
+    finished = false;
+    verifyState = "fixed";
+    stageResults.verify = text;
+
+    renderResult(text); // 수정 완료 안내를 #out 에
+    $("stopbar").classList.remove("ok");
+    $("stopbar").style.display = "flex";
+    $("stoptext").textContent =
+      "✏️ 지적사항을 반영해 본문을 수정했습니다. 아래 [작성된 본문]을 확인하고 다시 검증하세요.";
+    // 수정된 본문을 자동으로 불러와 표시(/api/draft).
+    $("bodyStageTools").style.display = "block";
+    $("imageStageTools").style.display = "none";
+    $("viewbar").style.display = "none";
+    loadDraftIntoView();
+    hideReviseBox();
+    showVerifyAction("다시 검증", revalidate);
+    window.scrollTo(0, 0);
+  }
+
+  // 수정된 본문을 다시 검증한다 → 결과 판정 루프로 복귀.
+  async function revalidate() {
+    try {
+      const text = await runStep({ step: "revalidate" });
+      renderVerifyResult(text);
+    } catch (e) {
+      restoreVerifyScreen(); // 실패 시 직전 '수정됨' 화면(다시 검증 버튼) 복원
+    }
+  }
+
+  // 보기 모드에서 검증 단계로 복귀할 때, 마지막 검증 세부 상태를 그대로 복원.
+  function restoreVerifyScreen() {
+    if (verifyState === "fixed") renderBodyFixed(stageResults.verify);
+    else renderVerifyResult(stageResults.verify); // 'fail' | 'pass'
   }
 </script>
 </body>
