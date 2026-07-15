@@ -1,7 +1,7 @@
 'use strict';
 // 인증/인가 — Google SSO(ID token 검증) + DB 세션 + 역할(ADMIN/USER)
 // AUTH_MODE=dev 이면 Google 없이 개발용 로그인 허용.
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const { OAuth2Client } = require('google-auth-library');

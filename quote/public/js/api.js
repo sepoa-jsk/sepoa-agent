@@ -72,4 +72,12 @@ export const api = {
   // 설정
   getSettings: () => req('GET', '/api/settings'),
   putSettings: (settings) => req('PUT', '/api/settings', { settings }),
+
+  // 마스터 (신규 CRUD)
+  masterAll: () => req('GET', '/api/master'),
+  masterList: (type, solution) =>
+    req('GET', `/api/master/${type}${solution ? '?solution=' + encodeURIComponent(solution) : ''}`),
+  masterCreate: (type, row) => req('POST', `/api/master/${type}`, row),
+  masterUpdate: (type, id, row) => req('PUT', `/api/master/${type}/${id}`, row),
+  masterDelete: (type, id) => req('DELETE', `/api/master/${type}/${id}`),
 };

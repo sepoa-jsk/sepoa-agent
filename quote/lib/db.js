@@ -1,6 +1,6 @@
 'use strict';
 // MariaDB 연결 풀 — mysql2/promise (Prisma 금지, 직접 사용)
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const mysql = require('mysql2/promise');
 
 const pool = mysql.createPool({

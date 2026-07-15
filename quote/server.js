@@ -30,7 +30,9 @@ app.get('/api/health', async (req, res) => {
 
 // 라우트
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/master', require('./routes/master'));
 app.use('/api', require('./routes/pricing'));
+
 app.use('/api/quotes', require('./routes/quotes'));
 app.use('/api/settings', require('./routes/settings'));
 

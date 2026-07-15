@@ -106,6 +106,10 @@ table.grid th { background: #f7f9fc; color: var(--text-sub); font-weight: 600; t
 table.grid td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 table.grid tbody tr:hover { background: #f7f9fc; }
 table.grid tr.clickable { cursor: pointer; }
+
+/* 마스터 관리 전용: 세로 구분선으로 열을 명확히 나눈다 (다른 화면엔 영향 없음). */
+table.master-grid th, table.master-grid td { border-right: 0.5px solid var(--line); padding: 8px 12px; }
+table.master-grid th:last-child, table.master-grid td:last-child { border-right: none; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .center { text-align: center; }
 .nowrap { white-space: nowrap; }

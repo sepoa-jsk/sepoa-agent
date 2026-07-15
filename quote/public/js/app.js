@@ -7,16 +7,29 @@ import { renderEditor } from './views/editor.js';
 import { renderDetail } from './views/detail.js';
 import { renderPricing } from './views/pricing.js';
 import { renderSettings } from './views/settings.js';
+import { renderMaster } from './views/master.js';
 
 export const store = {
   user: null,
-  master: null, // { solutions, deployments, companyClasses }
+  // 새 라우트: { solutions, deployments, company_classes, service_types,
+  //   modules, labor_roles, labor_rates, thirdparty }. 예전 pricing.js 라우트는
+  //   companyClasses(캐멀)을 줬으므로, 기존 화면 호환을 위해 별칭을 채운다.
+  master: null,
   async getMaster() {
-    if (!this.master) this.master = await api.master();
+    if (!this.master) {
+      const data = await api.master();
+      // 하위호환: 새 API 는 company_classes(스네이크)만 준다. 기존 화면이
+      // master.companyClasses(캐멀)을 참조해도 깨지지 않게 별칭을 채운다.
+      if (data && data.company_classes && !data.companyClasses) {
+        data.companyClasses = data.company_classes;
+      }
+      this.master = data;
+    }
     return this.master;
   },
   companyClasses(solution, deployment) {
-    return (this.master?.companyClasses || []).filter(
+    const list = this.master?.company_classes || this.master?.companyClasses || [];
+    return list.filter(
       (c) => c.solution === solution && c.deployment === deployment
     );
   },
@@ -31,6 +44,7 @@ const routes = [
   { re: /^#\/quotes\/(\d+)\/edit$/, view: (m) => renderEditor(viewEl(), { mode: 'edit', id: Number(m[1]) }) },
   { re: /^#\/quotes\/(\d+)$/, view: (m) => renderDetail(viewEl(), Number(m[1])) },
   { re: /^#\/quotes$/, view: () => renderList(viewEl()) },
+  { re: /^#\/master$/, admin: true, view: () => renderMaster(viewEl()) },
   { re: /^#\/pricing$/, admin: true, view: () => renderPricing(viewEl()) },
   { re: /^#\/settings$/, admin: true, view: () => renderSettings(viewEl()) },
 ];
@@ -39,6 +53,7 @@ async function router() {
   const hash = location.hash || '#/quotes';
   const nav = hash.startsWith('#/quotes/new') ? 'new'
     : hash.startsWith('#/quotes') ? 'quotes'
+    : hash.startsWith('#/master') ? 'master'
     : hash.startsWith('#/pricing') ? 'pricing'
     : hash.startsWith('#/settings') ? 'settings' : 'quotes';
   document.querySelectorAll('.sidebar-nav a').forEach((a) => {
