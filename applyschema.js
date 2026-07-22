@@ -10,6 +10,7 @@ const mysql = require('mysql2/promise');
     host: process.env.DB_HOST, port: Number(process.env.DB_PORT)||3306,
     user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
     multipleStatements: true,
+    charset: 'utf8mb4',         // 한글 시드/코멘트가 깨지지 않게 클라이언트 인코딩 고정
   });
 
   // DELIMITER 블록 처리: // 로 구분된 프로시저를 분리 실행

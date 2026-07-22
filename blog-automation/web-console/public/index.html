@@ -417,6 +417,21 @@
 </header>
 
 <div class="wrap">
+  <!-- 이전 작업 이어가기 배너 (로드 시 잔재가 있으면 표시) -->
+  <div id="leftoverBanner"
+       style="display:none; margin-bottom:16px; padding:14px 16px; border:1px solid #cdd8ea;
+              border-left:4px solid var(--primary); border-radius:12px; background:#f4f8ff;
+              align-items:center; gap:14px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:220px;">
+      <div style="font-weight:800; color:#1e3a63; margin-bottom:3px;">이전 작업이 남아 있습니다</div>
+      <div id="leftoverText" style="font-size:13px; color:#456;"></div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-primary" id="leftoverResumeBtn">이어서 하기</button>
+      <button class="btn btn-ghost" id="leftoverNewBtn">새로 시작</button>
+    </div>
+  </div>
+
   <!-- ① 시작 설정 영역 (진입·모델·입력) — 시작 후 접힘 -->
   <div id="setupArea">
     <!-- 진입 방식 선택 -->
@@ -603,6 +618,7 @@
     <p class="modal-msg" id="modalMsg"></p>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="modalCancel"></button>
+      <button class="btn btn-primary" id="modalAlt" style="display:none"></button>
       <button class="btn btn-primary" id="modalConfirm"></button>
     </div>
   </div>
@@ -621,6 +637,9 @@
   // await showConfirm({title, message, confirmText, cancelText, danger})
   //   → 확인 true / 취소 false. 기존 confirm() 자리를 그대로 대체한다.
   let modalResolve = null;
+  // altText 를 준 3버튼 모달인지. true 면 resolve 값이 "confirm"|"alt"|"cancel",
+  // false(기본 2버튼)면 기존처럼 true/false 를 반환한다(하위호환).
+  let modalHasAlt = false;
 
   function showConfirm(opts = {}) {
     const {
@@ -628,6 +647,7 @@
       message = "",
       confirmText = "확인",
       cancelText = "취소",
+      altText = null, // 주면 가운데 3번째 버튼이 생긴다
       danger = false,
     } = opts;
     $("modalTitle").textContent = title;
@@ -636,6 +656,10 @@
     $("modalCancel").textContent = cancelText;
     // 위험한 동작이면 확인 버튼을 경고색으로
     $("modalConfirm").className = "btn " + (danger ? "btn-danger" : "btn-primary");
+    modalHasAlt = !!altText;
+    const altBtn = $("modalAlt");
+    if (modalHasAlt) { altBtn.textContent = altText; altBtn.style.display = ""; }
+    else { altBtn.style.display = "none"; }
     $("modalOverlay").classList.add("show");
     $("modalConfirm").focus();
     return new Promise((resolve) => { modalResolve = resolve; });
@@ -650,17 +674,20 @@
   }
 
   // 버튼 / 오버레이 클릭 / ESC 로 닫기
-  document.addEventListener("DOMContentLoaded", () => {
-    $("modalConfirm").addEventListener("click", () => closeModal(true));
-    $("modalCancel").addEventListener("click", () => closeModal(false));
-    $("modalOverlay").addEventListener("click", (e) => {
-      if (e.target === $("modalOverlay")) closeModal(false); // 오버레이 바깥 클릭만
-    });
+  // 모달 마크업(#modalOverlay …)은 이 <script> 앞에 이미 존재하므로 즉시 바인딩한다.
+  // (DOMContentLoaded 로 감싸면 그 이벤트가 이미 지난 경우 리스너가 영영 붙지 않아
+  //  확인/취소 버튼이 죽는다 — 실제 발생했던 버그.)
+  // 3버튼 모달이면 문자열("confirm"|"alt"|"cancel"), 아니면 true/false 로 닫는다.
+  $("modalConfirm").addEventListener("click", () => closeModal(modalHasAlt ? "confirm" : true));
+  $("modalCancel").addEventListener("click", () => closeModal(modalHasAlt ? "cancel" : false));
+  $("modalAlt").addEventListener("click", () => closeModal("alt"));
+  $("modalOverlay").addEventListener("click", (e) => {
+    if (e.target === $("modalOverlay")) closeModal(modalHasAlt ? "cancel" : false); // 오버레이 바깥 클릭만
   });
   document.addEventListener("keydown", (e) => {
     if (modalResolve == null) return;
-    if (e.key === "Escape") closeModal(false);
-    else if (e.key === "Enter") closeModal(true);
+    if (e.key === "Escape") closeModal(modalHasAlt ? "cancel" : false);
+    else if (e.key === "Enter") closeModal(modalHasAlt ? "confirm" : true);
   });
 
   // ── 시작 설정 접힘/펼침 ──────────────────────
@@ -668,6 +695,7 @@
 
   // 작업 시작 후: 시작 설정을 한 줄 요약 바로 접는다.
   function collapseSetup(summaryText) {
+    hideLeftoverBanner(); // 작업이 시작/재개되면 이어가기 배너는 감춘다
     $("setupSummaryText").textContent = summaryText;
     $("setupArea").style.display = "none";
     $("setupSummary").style.display = "flex";
@@ -844,25 +872,50 @@
     fileInput.value = ""; // 같은 파일 다시 선택 가능하게
   };
 
-  // 새 워드 업로드 진입점: 진행 상태면 확인 후 초기화, 아니면 조용히 교체.
-  //  진행 상태 판단 = 첫 시작(STOP1)에 성공해 모델이 잠긴 상태(=세션 생성됨).
+  // 새 워드 업로드 진입점: 서버에 이전 작업의 잔재가 남았는지 물어보고,
+  // 남아 있으면 확인 후 초기화한 뒤 교체한다. 없으면 조용히 업로드한다.
+  //  ※ 잔재 판단을 서버(/api/has-leftover)로 옮겨, 페이지를 새로고침해
+  //    browserKey 가 새로 발급된 경우(=modelLocked=false)에도 이전 inbox·spec
+  //    이 남아 있으면 확인을 띄운다. (이전엔 이 경우 조용히 덮어썼음)
   async function handleWordUpload(file) {
-    if (modelLocked) {
-      const label = uploadedName || "현재 글";
-      const ok = await showConfirm({
-        title: "작업 중인 글이 있습니다",
+    let info = { hasLeftover: false };
+    try {
+      const r = await fetch("api/has-leftover?browserKey=" + encodeURIComponent(browserKey));
+      if (r.ok) info = await r.json();
+    } catch {
+      // 잔재 확인 실패 시엔 안전하게 그냥 업로드(기존 동작 유지)
+    }
+
+    if (info.hasLeftover) {
+      // 남아 있는 정보로 안내 문구를 구성한다(파일명/단계가 없을 수도 있음).
+      const parts = [];
+      if (info.prevFile) parts.push("'" + info.prevFile + "'");
+      if (info.stage) parts.push(info.stage + " 단계");
+      const desc = parts.length
+        ? "이전 작업(" + parts.join(" / ") + ")의 내용이"
+        : "이전 작업 내용이";
+      // 복원 가능한 단계면(이어서 하기) 3번째 버튼을 제공한다.
+      const resumable = isResumableStage(info.stageKey);
+      const choice = await showConfirm({
+        title: "이전 작업이 남아 있습니다",
         message:
-          "지금 '" + label + "' 작업을 진행 중입니다.\n\n" +
-          "새 파일로 바꾸면 진행 상태(선택한 제목·키워드)가 초기화됩니다.\n" +
-          "작성된 본문·이미지는 보존됩니다.\n\n" +
-          "새 파일로 바꿀까요?",
-        confirmText: "새 파일로 시작",
+          desc + " 남아 있습니다.\n" +
+          (resumable
+            ? "이 작업을 이어서 하거나, 새 워드로 새로 시작할 수 있습니다.\n\n"
+            : "새 워드로 시작하면 이전 진행 상태가 초기화됩니다.\n\n") +
+          "새로 시작 시 지워지는 것: 진행 상태(선택한 제목·키워드), 이전 워드\n" +
+          "남는 것: 작성된 본문, 이미지 파일",
+        confirmText: "새로 시작",
+        altText: resumable ? "이어서 하기" : null,
         cancelText: "취소",
         danger: true,
       });
-      if (!ok) return; // 취소 → 업로드하지 않고 기존 작업 유지
+      // 이어서 하기 → 새 워드는 올리지 않고 이전 작업 단계로 복원.
+      if (choice === "alt") { await resumeLeftover(info); return; }
+      // 취소/오버레이/ESC → 업로드하지 않고 기존 작업 유지(파일 선택도 취소)
+      if (choice !== "confirm" && choice !== true) return;
 
-      // 진행 상태 초기화: 실행 중이면 중지 후 서버 세션/spec/inbox 정리.
+      // 새로 시작 → 실행 중이면 먼저 중지하고, /api/reset 으로 서버 세션·spec·inbox 정리.
       if (running) { try { await stopRun(); } catch {} }
       try {
         await fetch("api/reset", {
@@ -871,11 +924,86 @@
           body: JSON.stringify({ browserKey }),
         });
       } catch {}
-      resetClientUI(); // 화면을 시작 전 상태로 (리로드 없이, browserKey 유지)
+      resetClientUI(); // 화면을 시작 전(제목 선택 전) 상태로 (리로드 없이 — 업로드할 파일 유지)
     }
-    // 진행 상태 없음이거나 초기화 완료 → 새 워드로 교체 업로드
+    // 잔재 없음이거나 초기화 완료 → 새 워드로 교체 업로드(처음 단계에서 대기)
     uploadFile(file);
   }
+
+  // 복원 가능한(이어서 하기) 단계인지. 서버 stageKey 기준.
+  function isResumableStage(key) {
+    return key === "title" || key === "keyword" || key === "body" || key === "images";
+  }
+
+  // 이전 작업을 그 단계 화면으로 복원해 "이어서" 진행할 수 있게 한다.
+  // 서버에 남은 spec.md·drafts·image-prompts 를 근거로 단계바·STOP 화면·본문/
+  // 이미지 도구를 재구성한다. (새 워드 업로드는 하지 않는다.)
+  async function resumeLeftover(info) {
+    const key = info && info.stageKey;
+    if (!isResumableStage(key)) return; // 복원 대상 아님 — 조용히 무시(배너에서 애초에 안 뜸)
+    hideLeftoverBanner();
+    resetStageTools(); // slug·캐시·보기상태 등 깨끗한 기반에서 재구성
+
+    // 입구 추정: inbox 에 워드가 있으면 A(워드), 아니면 B(주제).
+    entry = info.detail && info.detail.hasInbox ? "A" : "B";
+    chooseEntry(entry);
+
+    // 시작 이후 상태로 맞춘다: 업로드됨 처리 + 모델 잠금 + 셋업 접기.
+    uploaded = true;
+    uploadedName = info.prevFile || "이전 작업";
+    modelLocked = true;
+    $("modelSelect").disabled = true;
+    collapseSetup("↩ 이어서: " + uploadedName + (info.stage ? " · " + info.stage + " 단계" : ""));
+
+    // 진행 영역 표시 + 단계바 재구성(target 이전은 완료, target 은 현재).
+    $("work").classList.remove("hidden");
+    const idx = STAGE_ORDER.indexOf(key);
+    STAGE_ORDER.forEach((k, i) => markStep(k, i < idx ? "done" : (i === idx ? "now" : "")));
+
+    // slug 확보(서버 최신 draft 기준) 후 해당 STOP 화면을 띄운다.
+    //  - body/images: showStop 내부에서 파일 내용을 불러와 표시한다.
+    //  - title/keyword: 위치만 복원(제안 원문은 파일로 안 남아 결과 박스는 비어 있음).
+    await ensureSlug();
+    showStop(key);
+    if (key === "title" || key === "keyword") {
+      $("out").style.display = "block";
+      $("out").innerHTML =
+        '<div class="hint" style="color:var(--muted)">이전 진행 상태를 불러왔습니다. ' +
+        "이 단계의 제안 원문은 저장돼 있지 않아 화면에 다시 표시되지 않습니다. " +
+        "필요하면 ‘이 단계부터 다시 하기’로 다시 생성하세요.</div>";
+    }
+    window.scrollTo(0, 0);
+  }
+
+  // ── 로드 시: 이전 작업 잔재 확인 → 배너 노출 ──
+  let currentLeftoverInfo = null;
+
+  function hideLeftoverBanner() { $("leftoverBanner").style.display = "none"; }
+
+  async function checkLeftoverOnLoad() {
+    try {
+      const r = await fetch("api/has-leftover?browserKey=" + encodeURIComponent(browserKey));
+      if (!r.ok) return;
+      const info = await r.json();
+      if (!info.hasLeftover) return;
+      currentLeftoverInfo = info;
+      const parts = [];
+      if (info.prevFile) parts.push("'" + info.prevFile + "'");
+      if (info.stage) parts.push(info.stage + " 단계");
+      const resumable = isResumableStage(info.stageKey);
+      $("leftoverText").textContent =
+        (parts.length ? parts.join(" / ") + " — " : "") +
+        (resumable ? "이어서 진행하거나 새로 시작할 수 있습니다."
+                   : "새로 시작할 수 있습니다(이 상태는 이어가기 대상이 아닙니다).");
+      // 이어서 하기 버튼은 복원 가능할 때만.
+      $("leftoverResumeBtn").style.display = resumable ? "" : "none";
+      $("leftoverBanner").style.display = "flex";
+    } catch { /* 확인 실패 시 배너 없이 진행 */ }
+  }
+
+  $("leftoverResumeBtn").onclick = () => { if (currentLeftoverInfo) resumeLeftover(currentLeftoverInfo); };
+  $("leftoverNewBtn").onclick = () => resetAll(); // 기존 초기화(확인 모달 → reset → 리로드) 재사용
+  checkLeftoverOnLoad();
 
   // 화면을 "시작 전" 상태로 되돌린다 (리로드 없이 — 업로드할 파일을 유지하기 위함).
   function resetClientUI() {
@@ -1369,11 +1497,27 @@
     loadUploadedImages();
   }
 
-  // "- 프롬프트: ..." 한 줄만 뽑아 복사 버튼용으로 쓴다 (파일의 메인 텍스트/
-  // 강조 단어 등 메타 정보는 빼고, Gemini/GPT에 바로 붙여넣을 문단만 남긴다).
+  // 복사 버튼용: Gemini/GPT에 바로 붙여넣을 프롬프트 문단만 뽑는다
+  // (파일의 메인 텍스트/강조 단어 등 메타 정보는 제외).
   function extractPromptText(mdContent) {
+    // 1) "## 프롬프트 …" 헤딩 아래 문단(다음 헤딩 전까지)을 우선 사용한다.
+    //    image-prompt 스킬이 붙여넣기용 프롬프트를 이 섹션에 저장한다.
+    const lines = mdContent.split(/\r?\n/);
+    const start = lines.findIndex((l) => /^#{1,6}\s*프롬프트/.test(l));
+    if (start !== -1) {
+      const body = [];
+      for (let i = start + 1; i < lines.length; i++) {
+        if (/^#{1,6}\s/.test(lines[i])) break; // 다음 헤딩에서 종료
+        body.push(lines[i]);
+      }
+      const text = body.join("\n").trim();
+      if (text) return text;
+    }
+    // 2) 구형식 호환: "- 프롬프트: …" 한 줄
     const m = mdContent.match(/^-\s*프롬프트\s*[:：]\s*(.+)$/m);
-    return m ? m[1].trim() : mdContent.trim();
+    if (m) return m[1].trim();
+    // 3) 그 외에는 전체 내용
+    return mdContent.trim();
   }
 
   async function toggleImagePromptView() {

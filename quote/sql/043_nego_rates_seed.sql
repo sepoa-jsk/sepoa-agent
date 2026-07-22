@@ -1,0 +1,18 @@
+-- 043_nego_rates_seed.sql
+-- 네고율 시드 (전 솔루션 공통, solution 없음). 모듈 10 + 인력 10 = 20행.
+-- ON DUPLICATE KEY UPDATE 라 재실행해도 안전.
+
+SET NAMES utf8mb4;
+
+INSERT INTO sq_nego_rates (target,company_key,onsite_key,rate) VALUES
+('MODULE','ENT','REMOTE',0.45),('MODULE','ENT','ONSITE',0.60),
+('MODULE','PUBLIC','REMOTE',0.45),('MODULE','PUBLIC','ONSITE',0.60),
+('MODULE','FINANCE','REMOTE',0.45),('MODULE','FINANCE','ONSITE',0.60),
+('MODULE','MID','REMOTE',0.40),('MODULE','MID','ONSITE',0.45),
+('MODULE','SMALL','REMOTE',0.35),('MODULE','SMALL','ONSITE',0.35),
+('LABOR','ENT','REMOTE',0.65),('LABOR','ENT','ONSITE',0.70),
+('LABOR','PUBLIC','REMOTE',0.65),('LABOR','PUBLIC','ONSITE',0.70),
+('LABOR','FINANCE','REMOTE',0.65),('LABOR','FINANCE','ONSITE',0.70),
+('LABOR','MID','REMOTE',0.60),('LABOR','MID','ONSITE',0.65),
+('LABOR','SMALL','REMOTE',0.55),('LABOR','SMALL','ONSITE',0.55)
+ON DUPLICATE KEY UPDATE rate=VALUES(rate);

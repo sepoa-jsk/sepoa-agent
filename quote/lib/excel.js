@@ -1,235 +1,300 @@
 'use strict';
-// 견적서 Excel 생성 (ExcelJS). 섹션 소계 + 전체 합계, 공급자정보(settings), 인감 오버레이.
+// 세포아 견적서 Excel (ExcelJS) — 실제 전자인장 견적서 양식 재현.
+// 헤더박스 + ▣ 솔루션 견적 + ▣ 시스템 구축 견적(인건비) + 합계 + ▣ 견적조건.
+// 기준단가(base_price)/제안단가(unit_price)를 모두 출력. 공급자정보는 settings 에서.
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 
-const SEAL_PATH = path.join(__dirname, '..', 'assets', 'seal.png');
+const ASSETS = path.join(__dirname, '..', 'assets');
+const SEAL_PATH = path.join(ASSETS, 'seal.png');
+const LOGO_PATH = path.join(ASSETS, 'logo.png');       // sepoasoft 로고
+const BAND_TOP_PATH = path.join(ASSETS, 'band_top.png');    // 상단 대각선 색상 바
+const BAND_BOTTOM_PATH = path.join(ASSETS, 'band_bottom.png'); // 하단 대각선 색상 바
+const SOLUTION_NAMES = { EXPENSE: '경비관리(무전표)', PROCURE: '전자구매', SEAL: '전자인장관리' };
+const DEPLOYMENT_NAMES = { ONPREM: 'On-Premise', SAAS: 'SaaS Cloud', PCLOUD: 'Private Cloud' };
 
-// 코드→표기명 (마스터 미전달 시 폴백)
-const SOLUTION_NAMES = { EXPENSE: '경비관리(무전표)', EPRO: '전자구매', ESEAL: '전자인장관리' };
-const DEPLOYMENT_NAMES = { ONPREM: 'On-Premise', SAAS: 'SaaS Cloud', PCLOUD: 'Private Cloud', SVC: '서비스솔루션' };
-
-const NAVY = 'FF1E2D4E';
-const LIGHT = 'FFEDF0F5';
-const BORDER = { style: 'thin', color: { argb: 'FFBFC6D2' } };
-const ALL_BORDERS = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
+const GRAY = 'FFD9D9D9';   // 라벨셀 배경
+const LIGHT = 'FFF2F2F2';  // 소계/Total 배경
+const ACCENT = 'FF0747A6'; // 최종/총계 강조
+const THIN = { style: 'thin', color: { argb: 'FFAAAAAA' } };
+const ALLB = { top: THIN, left: THIN, bottom: THIN, right: THIN };
+const FN = '맑은 고딕';
 const MONEY = '#,##0';
 
-function fmtDate(d) {
-  return d ? String(d).slice(0, 10) : '';
-}
+const fmtDate = (d) => (d ? String(d).slice(0, 10) : '');
+
+// 컬럼 문자 ↔ 번호
+const colNum = (c) => c.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
+const numCol = (n) => { let s = ''; while (n > 0) { s = String.fromCharCode(65 + (n - 1) % 26) + s; n = Math.floor((n - 1) / 26); } return s; };
 
 async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
   const wb = new ExcelJS.Workbook();
-  wb.creator = settings.supplier_name || '세포아소프트(주)';
+  wb.creator = settings.supplier_name || '㈜세포아소프트';
+  buildCover(wb, quote, settings); // 1번 시트: 가격제안서 표지
   const ws = wb.addWorksheet('견적서', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } },
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 } },
   });
 
-  // 9개 컬럼 (A~I)
-  const widths = [10, 26, 24, 8, 7, 7, 14, 16, 18];
-  widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
-  const LAST_COL = 'I';
+  // A=여백, 내용은 B~H
+  const widths = { A: 1.5, B: 18.5, C: 22, D: 35.4, E: 9.8, F: 15.2, G: 15, H: 15 };
+  Object.entries(widths).forEach(([c, w]) => (ws.getColumn(c).width = w));
 
-  const nameOfSolution = (code) => (masters.solutionNames?.[code]) || SOLUTION_NAMES[code] || code;
-  const nameOfDeployment = (code) => (masters.deploymentNames?.[code]) || DEPLOYMENT_NAMES[code] || code;
+  const nameOfSolution = (c) => (masters.solutionNames && masters.solutionNames[c]) || SOLUTION_NAMES[c] || c;
+  const nameOfDeployment = (c) => (masters.deploymentNames && masters.deploymentNames[c]) || DEPLOYMENT_NAMES[c] || c;
 
-  let row = 1;
-
-  // ── 제목 ──
-  ws.mergeCells(`A${row}:${LAST_COL}${row}`);
-  const title = ws.getCell(`A${row}`);
-  title.value = '견   적   서';
-  title.font = { size: 22, bold: true, color: { argb: NAVY } };
-  title.alignment = { horizontal: 'center', vertical: 'middle' };
-  ws.getRow(row).height = 34;
-  row += 2;
-
-  // ── 견적 메타 (좌: 수신/견적번호, 우: 공급자) ──
-  const metaTop = row;
-  ws.getCell(`A${row}`).value = '견적번호';
-  ws.getCell(`B${row}`).value = quote.quote_no;
-  row += 1;
-  ws.getCell(`A${row}`).value = '견적일자';
-  ws.getCell(`B${row}`).value = fmtDate(quote.quote_date);
-  row += 1;
-  ws.getCell(`A${row}`).value = '유효기간';
-  ws.getCell(`B${row}`).value = quote.valid_until ? fmtDate(quote.valid_until) : '견적일로부터 30일';
-  row += 1;
-  ws.getCell(`A${row}`).value = '수    신';
-  ws.getCell(`B${row}`).value = quote.customer_name ? `${quote.customer_name} 귀중` : '';
-  if (quote.customer_contact) {
-    row += 1;
-    ws.getCell(`A${row}`).value = '담 당 자';
-    ws.getCell(`B${row}`).value = quote.customer_contact;
+  // ── 유틸 ──
+  function eachCell(range, fn) {
+    const [s, e] = range.split(':');
+    const c1 = colNum(s.match(/[A-Z]+/)[0]), r1 = +s.match(/\d+/)[0];
+    const c2 = colNum(e.match(/[A-Z]+/)[0]), r2 = +e.match(/\d+/)[0];
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) fn(ws.getCell(numCol(c) + r));
   }
-  for (let r = metaTop; r <= row; r++) {
-    ws.getCell(`A${r}`).font = { bold: true, size: 11, color: { argb: NAVY } };
-    ws.getCell(`B${r}`).font = { size: 11 };
+  const border = (range) => eachCell(range, (c) => { c.border = ALLB; });
+  function setCell(addr, value, opt = {}) {
+    const c = ws.getCell(addr);
+    c.value = value;
+    c.font = { name: FN, size: opt.size || 10, bold: !!opt.bold, color: { argb: opt.color || 'FF000000' }, underline: opt.underline || false };
+    c.alignment = { horizontal: opt.h || 'left', vertical: 'middle', wrapText: !!opt.wrap };
+    if (opt.fill) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opt.fill } };
+    if (opt.money) c.numFmt = MONEY;
+    return c;
   }
+  const label = (addr, text) => setCell(addr, text, { bold: true, h: 'center', fill: GRAY });
 
-  // 공급자 박스 (F~I, metaTop 기준)
-  const supLabelCol = 'F';
-  const supValStart = 'G';
-  const supplierRows = [
-    ['상    호', settings.supplier_name || '세포아소프트(주)'],
-    ['사업자번호', settings.supplier_biz_no || ''],
-    ['대    표', settings.supplier_ceo || ''],
-    ['주    소', settings.supplier_address || ''],
-  ];
-  supplierRows.forEach((pair, i) => {
-    const r = metaTop + i;
-    ws.getCell(`${supLabelCol}${r}`).value = pair[0];
-    ws.getCell(`${supLabelCol}${r}`).font = { bold: true, size: 10, color: { argb: NAVY } };
-    ws.mergeCells(`${supValStart}${r}:${LAST_COL}${r}`);
-    const vc = ws.getCell(`${supValStart}${r}`);
-    vc.value = pair[1];
-    vc.font = { size: 10 };
-    vc.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-  });
-  // 인감 오버레이 — '대표 이희림' 값 셀 위에 겹쳐 날인 (관행)
+  // memo 파싱 ([태그] 값)
+  const memo = String(quote.memo || '');
+  const tag = (t) => { const m = memo.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
+  const purpose = tag('견적용도');
+  const payTerms = tag('결제조건') || '고객사 결제조건';
+  const vatIncluded = tag('부가세') === '포함';
+  const onsiteText = tag('상주') || '상주';
+
+  // 데이터 분류 (솔루션 / 인건비)
+  const solItems = [], labItems = [];
+  let solutionCode = null;
+  for (const sec of quote.sections || []) {
+    for (const it of sec.items || []) {
+      if (it.category === '시스템구축') labItems.push(it);
+      else { solItems.push(it); if (!solutionCode) solutionCode = sec.solution; }
+    }
+  }
+  const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
+  const solSub = sum(solItems, (i) => i.amount);
+  const labSub = sum(labItems, (i) => i.amount);
+  const mmSum = sum(labItems, (i) => i.qty);
+  const total = Number(quote.supply_amount) || (solSub + labSub);
+  const disc = Number(quote.discount_amount) || 0;
+  const vat = Number(quote.vat_amount) || 0;
+  const grand = Number(quote.total_amount) || 0;
+  const finalAmt = total - disc; // 최종견적금액(특별DC 반영)
+  // 적용네고율(견적조건 문구용) — 인건비 우선, 없으면 솔루션
+  const src = labItems.find((i) => Number(i.base_price)) || solItems.find((i) => Number(i.base_price));
+  const negoPct = src ? Math.round((Number(src.unit_price) / Number(src.base_price)) * 100) : 100;
+
+  // ── 상단 주소/제목 ──
+  ws.mergeCells('B1:H1');
+  setCell('B1', '서울특별시 구로구 디지털로31길 62, 아티스포럼 714~717호   ☎ 02-6242-3094', { size: 8.5, h: 'right', color: 'FF888888' });
+  ws.mergeCells('B3:H3');
+  setCell('B3', 'Quotation', { size: 28, bold: true, h: 'center', underline: true, color: ACCENT });
+  ws.getRow(3).height = 38;
+
+  // ── 헤더 박스 (B4~H8) ──
+  const rcv = quote.customer_name ? quote.customer_name + ' 귀중' : '';
+  label('B4', '수  신'); ws.mergeCells('C4:E4'); setCell('C4', rcv, { bold: true });
+  label('F4', '견 적 번 호'); ws.mergeCells('G4:H4'); setCell('G4', quote.quote_no || '', { h: 'center' });
+  label('B5', '견 적 용 도'); ws.mergeCells('C5:E5'); setCell('C5', purpose);
+  label('F5', '견 적 일 자'); ws.mergeCells('G5:H5'); setCell('G5', fmtDate(quote.quote_date), { h: 'center' });
+  label('B6', '결 제 조 건'); ws.mergeCells('C6:E6'); setCell('C6', payTerms);
+  label('F6', '견적유효일'); ws.mergeCells('G6:H6'); setCell('G6', quote.valid_until ? fmtDate(quote.valid_until) : '견적일로부터 30일', { h: 'center' });
+  label('B7', '총 견 적 가'); setCell('C7', grand, { bold: true, h: 'right', money: true });
+  ws.mergeCells('D7:E7'); setCell('D7', `(단위: 원, 부가세 ${vatIncluded ? '포함' : '별도'})`, { size: 8.5, color: 'FF888888' });
+  label('F7', '상    호'); ws.mergeCells('G7:H7'); setCell('G7', settings.supplier_name || '㈜세포아소프트', { h: 'center', bold: true });
+  label('B8', '설 치 완 료'); ws.mergeCells('C8:E8'); setCell('C8', '협의된 프로젝트 기간');
+  label('F8', '대 표 이 사'); ws.mergeCells('G8:H8'); setCell('G8', (settings.supplier_ceo || '이 희 림') + '  (인)', { h: 'center' });
+  border('B4:H8');
+
+  // 인감 오버레이 (대표 행 G8)
   try {
     if (fs.existsSync(SEAL_PATH)) {
       const imageId = wb.addImage({ buffer: fs.readFileSync(SEAL_PATH), extension: 'png' });
-      // supplierRows 인덱스 2 = '대표' 행. cell row(1-indexed) = metaTop+2 → addImage row(0-indexed) = metaTop+1
-      const ceoRow0 = metaTop + 1;
-      // 값 열 G(0-indexed 6) 기준, 이름('이희림') 끝에 살짝 겹치도록 오른쪽으로 이동
-      ws.getRow(metaTop + 2).height = 30; // 대표 행 높이 확보
-      ws.addImage(imageId, {
-        tl: { col: 6.75, row: ceoRow0 - 0.15 },
-        ext: { width: 56, height: 56 },
-        editAs: 'oneCell',
-      });
+      ws.getRow(8).height = 30;
+      ws.addImage(imageId, { tl: { col: colNum('H') - 1.6, row: 7.05 }, ext: { width: 46, height: 46 }, editAs: 'oneCell' });
     }
   } catch { /* 인감 없으면 생략 */ }
 
-  row = Math.max(row, metaTop + supplierRows.length) + 2;
+  ws.mergeCells('B9:H9');
+  setCell('B9', '하기와 같이 견적하오니 참조 바랍니다.', { size: 9.5 });
 
-  // ── 품목 테이블 헤더 ──
-  const headers = ['구분', '품목', '규격', '수량', '단위', '개월', '단가', '금액', '비고'];
-  const headerRow = ws.getRow(row);
-  headers.forEach((h, i) => {
-    const c = headerRow.getCell(i + 1);
-    c.value = h;
-    c.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' };
-    c.border = ALL_BORDERS;
-  });
-  headerRow.height = 22;
+  let row = 11;
+
+  // ── ▣ 솔루션 견적 ──
+  setCell(`B${row}`, '▣ 솔루션 견적', { bold: true, size: 11, color: ACCENT });
+  setCell(`H${row}`, '(단위 : 원)', { size: 8.5, h: 'right', color: 'FF888888' });
+  row += 1;
+  row = table(row, ['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액'],
+    solItems, nameOfSolution(solutionCode) || '솔루션', '식');
+  row = subtotalRow(row, '솔루션 소계', solSub, null);
   row += 1;
 
-  const sections = quote.sections || [];
-  for (const sec of sections) {
-    // 섹션 헤더
-    ws.mergeCells(`A${row}:${LAST_COL}${row}`);
-    const sh = ws.getCell(`A${row}`);
-    const cls = sec.company_class ? ` · ${sec.company_class}` : '';
-    const months = sec.contract_months && sec.contract_months > 1 ? ` · 계약 ${sec.contract_months}개월` : '';
-    sh.value = `[${nameOfSolution(sec.solution)} - ${nameOfDeployment(sec.deployment)}]${cls}${months}`;
-    sh.font = { bold: true, size: 11, color: { argb: NAVY } };
-    sh.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LIGHT } };
-    sh.alignment = { horizontal: 'left', vertical: 'middle' };
-    sh.border = ALL_BORDERS;
-    row += 1;
+  // ── ▣ 시스템 구축 견적 ──
+  setCell(`B${row}`, '▣ 시스템 구축 견적', { bold: true, size: 11, color: ACCENT });
+  row += 1;
+  row = table(row, ['구분', '역할(등급)', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액'],
+    labItems, '시스템구축\n개발인건비', 'MM');
+  row = subtotalRow(row, '인건비 소계', labSub, mmSum);
 
-    for (const it of sec.items || []) {
-      const r = ws.getRow(row);
-      const vals = [
-        it.category || '',
-        it.name || '',
-        it.spec || '',
-        Number(it.qty) || 0,
-        it.unit || '',
-        Number(it.months) || 1,
-        Number(it.unit_price) || 0,
-        Number(it.amount) || 0,
-        it.note || '',
-      ];
-      vals.forEach((v, i) => {
-        const c = r.getCell(i + 1);
-        c.value = v;
-        c.border = ALL_BORDERS;
-        c.font = { size: 10 };
-        c.alignment = { vertical: 'middle', wrapText: i === 1 || i === 2 || i === 8 };
-      });
-      r.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
-      r.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
-      r.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
-      r.getCell(7).numFmt = MONEY;
-      r.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
-      r.getCell(8).numFmt = MONEY;
-      r.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
-      row += 1;
-    }
-
-    // 섹션 소계
-    ws.mergeCells(`A${row}:G${row}`);
-    const stLabel = ws.getCell(`A${row}`);
-    stLabel.value = '섹션 소계';
-    stLabel.font = { bold: true, size: 10, color: { argb: NAVY } };
-    stLabel.alignment = { horizontal: 'right', vertical: 'middle' };
-    stLabel.border = ALL_BORDERS;
-    const stVal = ws.getCell(`H${row}`);
-    stVal.value = Number(sec.subtotal) || 0;
-    stVal.numFmt = MONEY;
-    stVal.font = { bold: true, size: 10, color: { argb: NAVY } };
-    stVal.alignment = { horizontal: 'right', vertical: 'middle' };
-    stVal.border = ALL_BORDERS;
-    ws.getCell(`I${row}`).border = ALL_BORDERS;
-    row += 1;
+  // ── 합계 ──
+  row = totalRow(row, 'Total (솔루션 + 인건비)', total, false);
+  if (disc > 0) {
+    row = totalRow(row, '특별 DC', -disc, false);
+    row = totalRow(row, '최종견적금액 (특별 DC 적용)', finalAmt, true);
+  } else {
+    row = totalRow(row, '최종견적금액', finalAmt, true);
   }
-
+  if (!vatIncluded) {
+    row = totalRow(row, '부가세 (VAT 10%)', vat, false);
+    row = totalRow(row, '총 견적가', grand, true, true);
+  } else {
+    row = totalRow(row, '총 견적가 (부가세 포함)', grand, true, true);
+  }
   row += 1;
 
-  // ── 합계 블록 (우측) ──
-  const totals = [
-    ['공급가액', Number(quote.supply_amount) || 0, false],
-    ['할인', -(Number(quote.discount_amount) || 0), false],
-    ['부가세 (VAT 10%)', Number(quote.vat_amount) || 0, false],
-    ['합계금액', Number(quote.total_amount) || 0, true],
-  ];
-  for (const [label, val, strong] of totals) {
-    ws.mergeCells(`F${row}:G${row}`);
-    const lc = ws.getCell(`F${row}`);
-    lc.value = label;
-    lc.alignment = { horizontal: 'right', vertical: 'middle' };
-    lc.border = ALL_BORDERS;
-    ws.mergeCells(`H${row}:${LAST_COL}${row}`);
-    const vc = ws.getCell(`H${row}`);
-    vc.value = val;
-    vc.numFmt = MONEY;
-    vc.alignment = { horizontal: 'right', vertical: 'middle' };
-    vc.border = ALL_BORDERS;
-    if (strong) {
-      lc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-      lc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
-      vc.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-      vc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY } };
-      ws.getRow(row).height = 24;
-    } else {
-      lc.font = { bold: true, size: 10, color: { argb: NAVY } };
-      vc.font = { size: 10 };
-    }
+  // ── ▣ 견적조건 ──
+  setCell(`B${row}`, '▣ 견적조건', { bold: true, size: 11, color: ACCENT });
+  row += 1;
+  // 저장된 견적조건 우선, 없으면(구 견적) 기본 문구 폴백.
+  const conds = (Array.isArray(quote.conditions) && quote.conditions.length)
+    ? quote.conditions.map((c) => c.text).filter(Boolean)
+    : [
+      '프로젝트 투입공수 및 일정은 세부 업무요건에 따라 변경될 수 있습니다.',
+      `개발단가는 한국SW산업협회 노임 단가 기준 ${negoPct}%를 적용하였습니다.`,
+      '솔루션 유지보수는 시스템 오픈 후 12개월간 무상유지보수 이후 진행되며, 유상유지보수는 솔루션 공급가의 15%로 제안합니다.',
+      `본 프로젝트는 ${onsiteText}로 진행합니다.`,
+    ];
+  for (const c of conds) {
+    ws.mergeCells(`B${row}:H${row}`);
+    setCell(`B${row}`, '-. ' + c, { size: 9 });
     row += 1;
-  }
-
-  // ── 메모 ──
-  if (quote.memo) {
-    row += 1;
-    ws.getCell(`A${row}`).value = '비고';
-    ws.getCell(`A${row}`).font = { bold: true, size: 10, color: { argb: NAVY } };
-    row += 1;
-    ws.mergeCells(`A${row}:${LAST_COL}${row + 2}`);
-    const mc = ws.getCell(`A${row}`);
-    mc.value = quote.memo;
-    mc.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
-    mc.font = { size: 10 };
-    mc.border = ALL_BORDERS;
   }
 
   return wb;
+
+  // ── 표 렌더 (B~H, 7컬럼) ──
+  function table(startRow, headers, items, gubunLabel, unit) {
+    let r = startRow;
+    // 헤더
+    headers.forEach((hd, i) => {
+      const c = numCol(colNum('B') + i);
+      setCell(c + r, hd, { bold: true, h: 'center', fill: GRAY });
+    });
+    border(`B${r}:H${r}`);
+    r += 1;
+    const dataStart = r;
+    if (items.length === 0) {
+      ws.mergeCells(`B${r}:H${r}`);
+      setCell(`B${r}`, '(항목 없음)', { h: 'center', color: 'FF999999' });
+      border(`B${r}:H${r}`);
+      return r + 1;
+    }
+    items.forEach((it) => {
+      setCell(`B${r}`, '', {});                                   // 구분(병합용, 값은 대표행에)
+      setCell(`C${r}`, it.name || '', { wrap: true });            // 모듈/역할
+      setCell(`D${r}`, it.spec || '', { wrap: true });            // 세부기능/내역
+      setCell(`E${r}`, Number(it.qty) || 0, { h: 'center' });     // 수량/공수
+      setCell(`F${r}`, Number(it.base_price) || 0, { h: 'right', money: true }); // 기준단가
+      setCell(`G${r}`, Number(it.unit_price) || 0, { h: 'right', money: true }); // 제안단가
+      setCell(`H${r}`, Number(it.amount) || 0, { h: 'right', money: true });     // 제안금액
+      border(`B${r}:H${r}`);
+      r += 1;
+    });
+    // 구분 세로병합 + 대표값
+    ws.mergeCells(`B${dataStart}:B${r - 1}`);
+    setCell(`B${dataStart}`, gubunLabel, { bold: true, h: 'center', wrap: true, fill: LIGHT });
+    border(`B${dataStart}:B${r - 1}`);
+    return r;
+  }
+
+  function subtotalRow(r, text, amount, mm) {
+    ws.mergeCells(`B${r}:D${r}`);
+    setCell(`B${r}`, text, { bold: true, h: 'right', fill: LIGHT });
+    if (mm != null) setCell(`E${r}`, Number(mm), { bold: true, h: 'center', fill: LIGHT });
+    else setCell(`E${r}`, '', { fill: LIGHT });
+    setCell(`F${r}`, '', { fill: LIGHT }); setCell(`G${r}`, '', { fill: LIGHT });
+    setCell(`H${r}`, amount, { bold: true, h: 'right', money: true, fill: LIGHT });
+    border(`B${r}:H${r}`);
+    return r + 1;
+  }
+
+  function totalRow(r, text, amount, strong, grandTop) {
+    ws.mergeCells(`B${r}:G${r}`);
+    const fill = grandTop ? ACCENT : (strong ? LIGHT : null);
+    const color = grandTop ? 'FFFFFFFF' : (strong ? ACCENT : 'FF000000');
+    setCell(`B${r}`, text, { bold: strong, h: 'right', fill, color, size: grandTop ? 12 : 10 });
+    setCell(`H${r}`, amount, { bold: strong, h: 'right', money: true, fill, color, size: grandTop ? 12 : 10 });
+    border(`B${r}:H${r}`);
+    if (grandTop) ws.getRow(r).height = 22;
+    return r + 1;
+  }
+}
+
+// ── 표지(가격제안서 커버) ──────────────────────────────────────
+// ⚠️ ExcelJS 로는 PDF 표지의 대각선 색상 바·로고 이미지를 그대로 재현할 수
+//    없어, 상/하단 브랜드 색상 밴드 + 중앙 타이틀 + 고객정보로 근사한다.
+//    로고 이미지(PNG)를 assets 에 넣어주면 전면 삽입으로 교체 가능.
+function buildCover(wb, quote, settings) {
+  const cs = wb.addWorksheet('표지', {
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, margins: { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 } },
+    views: [{ showGridLines: false }],
+  });
+  'ABCDEFGH'.split('').forEach((c) => (cs.getColumn(c).width = 11.5));
+
+  const memo = String(quote.memo || '');
+  const tg = (t) => { const m = memo.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
+  const cust = quote.customer_name || '';
+  const purpose = tg('견적용도');
+  const contact = quote.customer_contact || '';
+  const phone = tg('연락처');
+  const email = tg('이메일');
+  const supplier = (settings.supplier_name) || '㈜세포아소프트';
+
+  const fill = (addr, argb) => { cs.getCell(addr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }; };
+  const put = (addr, val, opt = {}) => {
+    const c = cs.getCell(addr); c.value = val;
+    c.font = { name: FN, size: opt.size || 11, bold: !!opt.bold, color: { argb: opt.color || 'FF333333' } };
+    c.alignment = { horizontal: opt.h || 'center', vertical: 'middle' };
+  };
+  const LIME = 'FFA6CE39', YEL = 'FFF5C400', PINK = 'FFEC008C', DARK = 'FF404040';
+  const img = (file) => (fs.existsSync(file) ? wb.addImage({ buffer: fs.readFileSync(file), extension: 'png' }) : null);
+  const topId = img(BAND_TOP_PATH), botId = img(BAND_BOTTOM_PATH), logoId = img(LOGO_PATH);
+
+  // 상단 브랜드 밴드 — 이미지 있으면 삽입, 없으면 색상 셀로 폴백
+  if (topId != null) { cs.getRow(1).height = 30; cs.addImage(topId, 'A1:H3'); }
+  else { cs.getRow(1).height = 18; fill('A1', LIME); fill('B1', YEL); fill('C1', PINK); ['D1', 'E1', 'F1', 'G1', 'H1'].forEach((a) => fill(a, DARK)); }
+
+  // 중앙 타이틀
+  cs.mergeCells('A14:H15'); put('A14', (cust + ' ' + (purpose || '시스템 구축')).trim(), { size: 26, bold: true });
+  cs.getRow(14).height = 36; cs.getRow(15).height = 36;
+  cs.mergeCells('A17:H18'); put('A17', '가 격 제 안 서', { size: 26, bold: true });
+  cs.getRow(17).height = 36; cs.getRow(18).height = 36;
+
+  // 고객 정보 블록 (우측 하단)
+  let r = 34;
+  [['고객사', cust], ['담당자', contact], ['연락처', phone], ['이메일', email]].forEach(([k, v]) => {
+    cs.mergeCells(`E${r}:H${r}`); put(`E${r}`, `${k} : ${v || ''}`, { size: 10.5, h: 'left', color: 'FF555555' });
+    r += 1;
+  });
+
+  // 로고(우측 하단) — 이미지 있으면 삽입, 없으면 상호 텍스트
+  if (logoId != null) cs.addImage(logoId, { tl: { col: 4.3, row: 39 }, ext: { width: 260, height: 72 }, editAs: 'oneCell' });
+  else { cs.mergeCells('E44:H44'); put('E44', supplier, { size: 13, bold: true, h: 'right', color: 'FF7AA324' }); }
+
+  // 하단 브랜드 밴드 (미러)
+  if (botId != null) { cs.getRow(46).height = 30; cs.addImage(botId, 'A45:H47'); }
+  else { cs.getRow(46).height = 18; ['A46', 'B46', 'C46', 'D46', 'E46'].forEach((a) => fill(a, DARK)); fill('F46', PINK); fill('G46', YEL); fill('H46', LIME); }
+
+  cs.pageSetup.printArea = 'A1:H47';
+  return cs;
 }
 
 module.exports = { buildQuoteWorkbook };

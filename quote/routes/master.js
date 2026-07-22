@@ -36,7 +36,7 @@ const TABLES = {
   },
   labor_roles: {
     table: 'sq_labor_roles', pk: 'id', order: 'solution, sort',
-    cols: ['solution', 'code', 'name', 'base_price', 'std_mm', 'required', 'note', 'active', 'sort'],
+    cols: ['solution', 'code', 'name', 'base_price', 'std_mm', 'required', 'note', 'active', 'sort', 'standard_role_code'],
   },
   labor_rates: {
     table: 'sq_labor_rates', pk: 'id', order: 'solution, sort',
@@ -46,14 +46,18 @@ const TABLES = {
     table: 'sq_thirdparty', pk: 'id', order: 'solution, sort',
     cols: ['solution', 'code', 'name', 'base_price', 'list_price', 'note', 'active', 'sort'],
   },
-  // 가격정책용 네고율 (기업구분 × 상주여부 조합별)
-  module_rates: {
-    table: 'sq_module_rates', pk: 'id', order: 'company_key, onsite_key',
-    cols: ['solution', 'company_key', 'onsite_key', 'rate'],
+  // 가격정책용 네고율 (기업구분 × 상주여부 조합별, target 으로 모듈/인력 구분)
+  nego_rates: {
+    table: 'sq_nego_rates', pk: 'id', order: 'target, company_key, onsite_key',
+    cols: ['target', 'company_key', 'onsite_key', 'rate'], // solution 없음 (전 솔루션 공통)
   },
-  labor_rates_v2: {
-    table: 'sq_labor_rates_v2', pk: 'id', order: 'company_key, onsite_key',
-    cols: ['solution', 'company_key', 'onsite_key', 'rate'],
+  maintenance: {
+    table: 'sq_maintenance_config', pk: 'id', order: 'sort',
+    cols: ['code', 'name', 'calc_type', 'rate', 'md_price', 'md_per_mm', 'tco_years', 'free_months', 'note', 'active', 'sort'],
+  },
+  labor_standards: {
+    table: 'sq_labor_standards', pk: 'id', order: 'year DESC, sort',
+    cols: ['year', 'role_code', 'role_name', 'daily_rate', 'work_days', 'overhead_rate', 'tech_rate', 'sort'],
   },
 };
 

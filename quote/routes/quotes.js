@@ -29,15 +29,16 @@ async function persistQuote(conn, { header, calc, quoteNo, createdBy }) {
     `INSERT INTO sq_quotes
       (quote_no, quote_date, valid_until, customer_name, customer_contact,
        discount_type, discount_value, supply_amount, discount_amount, vat_amount, total_amount,
-       status, memo, created_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       status, memo, conditions, created_by)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
       quoteNo, header.quote_date, header.valid_until ?? null,
       header.customer_name ?? null, header.customer_contact ?? null,
       calc.discount_type, calc.discount_value ?? 0,
       calc.supply_amount, calc.discount_amount, calc.vat_amount, calc.total_amount,
       header.status && STATUSES.includes(header.status) ? header.status : 'DRAFT',
-      header.memo ?? null, createdBy ?? null,
+      header.memo ?? null, Array.isArray(header.conditions) ? JSON.stringify(header.conditions) : null,
+      createdBy ?? null,
     ]
   );
   const quoteId = r.insertId;
@@ -63,11 +64,11 @@ async function insertSections(conn, quoteId, sections) {
       const it = sec.items[ii];
       await conn.execute(
         `INSERT INTO sq_quote_items
-          (section_id, item_code, category, name, spec, qty, unit, months, unit_price, amount, note, sort)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          (section_id, item_code, category, name, spec, qty, unit, months, unit_price, base_price, amount, note, sort)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           sectionId, it.item_code ?? null, it.category ?? null, it.name, it.spec ?? null,
-          it.qty ?? 1, it.unit ?? null, it.months ?? 1, it.unit_price ?? 0, it.amount ?? 0,
+          it.qty ?? 1, it.unit ?? null, it.months ?? 1, it.unit_price ?? 0, it.base_price ?? null, it.amount ?? 0,
           it.note ?? null, ii,
         ]
       );
@@ -80,6 +81,7 @@ async function loadQuote(id) {
   const quotes = await query('SELECT * FROM sq_quotes WHERE id = ?', [id]);
   if (quotes.length === 0) return null;
   const quote = quotes[0];
+  quote.conditions = safeJson(quote.conditions); // JSON 문자열 → 배열
   const sections = await query('SELECT * FROM sq_quote_sections WHERE quote_id = ? ORDER BY sort, id', [id]);
   let items = [];
   if (sections.length > 0) {
@@ -190,7 +192,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       `UPDATE sq_quotes SET
          quote_date = ?, valid_until = ?, customer_name = ?, customer_contact = ?,
          discount_type = ?, discount_value = ?, supply_amount = ?, discount_amount = ?,
-         vat_amount = ?, total_amount = ?, status = COALESCE(?, status), memo = ?
+         vat_amount = ?, total_amount = ?, status = COALESCE(?, status), memo = ?, conditions = ?
        WHERE id = ?`,
       [
         body.quote_date ? String(body.quote_date).slice(0, 10) : existing[0].quote_date,
@@ -198,7 +200,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
         calc.discount_type, calc.discount_value ?? 0, calc.supply_amount, calc.discount_amount,
         calc.vat_amount, calc.total_amount,
         body.status && STATUSES.includes(body.status) ? body.status : null,
-        body.memo ?? null, id,
+        body.memo ?? null, Array.isArray(body.conditions) ? JSON.stringify(body.conditions) : null, id,
       ]
     );
     await insertSections(conn, id, calc.sections);

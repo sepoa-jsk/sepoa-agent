@@ -1,23 +1,20 @@
 -- 041_nego_rates_seed.sql
--- 네고율 값 시드 (전자구매 PROCURE, 기업구분 5 × 상주여부 2 = 각 10건).
+-- 네고율 시드 (전자구매 PROCURE). 모듈용 10 + 인력용 10 = 20행.
 -- ON DUPLICATE KEY UPDATE 라 재실행해도 안전(idempotent).
 
 SET NAMES utf8mb4;
 
--- 모듈용 네고율 (기업구분 5 × 상주 2 = 10)
-INSERT INTO sq_module_rates (solution, company_key, onsite_key, rate) VALUES
-  ('PROCURE','ENT','REMOTE',0.45),    ('PROCURE','ENT','ONSITE',0.60),
-  ('PROCURE','PUBLIC','REMOTE',0.45), ('PROCURE','PUBLIC','ONSITE',0.60),
-  ('PROCURE','FINANCE','REMOTE',0.45),('PROCURE','FINANCE','ONSITE',0.60),
-  ('PROCURE','MID','REMOTE',0.40),    ('PROCURE','MID','ONSITE',0.45),
-  ('PROCURE','SMALL','REMOTE',0.35),  ('PROCURE','SMALL','ONSITE',0.35)
-ON DUPLICATE KEY UPDATE rate=VALUES(rate);
-
--- 인력용 네고율 (기업구분 5 × 상주 2 = 10)
-INSERT INTO sq_labor_rates_v2 (solution, company_key, onsite_key, rate) VALUES
-  ('PROCURE','ENT','REMOTE',0.65),    ('PROCURE','ENT','ONSITE',0.70),
-  ('PROCURE','PUBLIC','REMOTE',0.65), ('PROCURE','PUBLIC','ONSITE',0.70),
-  ('PROCURE','FINANCE','REMOTE',0.65),('PROCURE','FINANCE','ONSITE',0.70),
-  ('PROCURE','MID','REMOTE',0.60),    ('PROCURE','MID','ONSITE',0.65),
-  ('PROCURE','SMALL','REMOTE',0.55),  ('PROCURE','SMALL','ONSITE',0.55)
+INSERT INTO sq_nego_rates (solution,target,company_key,onsite_key,rate) VALUES
+-- 모듈용
+('PROCURE','MODULE','ENT','REMOTE',0.45),('PROCURE','MODULE','ENT','ONSITE',0.60),
+('PROCURE','MODULE','PUBLIC','REMOTE',0.45),('PROCURE','MODULE','PUBLIC','ONSITE',0.60),
+('PROCURE','MODULE','FINANCE','REMOTE',0.45),('PROCURE','MODULE','FINANCE','ONSITE',0.60),
+('PROCURE','MODULE','MID','REMOTE',0.40),('PROCURE','MODULE','MID','ONSITE',0.45),
+('PROCURE','MODULE','SMALL','REMOTE',0.35),('PROCURE','MODULE','SMALL','ONSITE',0.35),
+-- 인력용
+('PROCURE','LABOR','ENT','REMOTE',0.65),('PROCURE','LABOR','ENT','ONSITE',0.70),
+('PROCURE','LABOR','PUBLIC','REMOTE',0.65),('PROCURE','LABOR','PUBLIC','ONSITE',0.70),
+('PROCURE','LABOR','FINANCE','REMOTE',0.65),('PROCURE','LABOR','FINANCE','ONSITE',0.70),
+('PROCURE','LABOR','MID','REMOTE',0.60),('PROCURE','LABOR','MID','ONSITE',0.65),
+('PROCURE','LABOR','SMALL','REMOTE',0.55),('PROCURE','LABOR','SMALL','ONSITE',0.55)
 ON DUPLICATE KEY UPDATE rate=VALUES(rate);

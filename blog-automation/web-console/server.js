@@ -91,12 +91,18 @@ const upload = multer({
 
 // ── 결과물 조회/이미지 업로드용 헬퍼 ────────────────────────────────
 
-// slug 는 파일 경로 조합에 쓰이므로, 폴더 이탈(../ 등)을 막기 위해
-// 영문·숫자·점·하이픈·밑줄만 허용한다(날짜-슬러그 형식과 자연히 맞는다).
+// slug 는 파일 경로 조합에 쓰이므로 "폴더 이탈(../ 등) 차단"이 핵심 목적이다.
+// write-body 스킬이 한글 슬러그(예: "2026-07-22-거점분산-전자인장솔루션")로
+// 초안을 저장하므로, 영문 전용으로 막지 않고 유니코드(한글 등)는 허용하되
+// 경로 구분자·상위경로·널/제어문자만 거부한다.
 function isSafeSlug(slug) {
-  return typeof slug === "string" && /^[A-Za-z0-9._-]+$/.test(slug);
+  if (typeof slug !== "string" || slug.length === 0 || slug.length > 200) return false;
+  if (/[\\/\u0000-\u001f]/.test(slug)) return false; // 경로 구분자(/ , \)·제어문자 금지 (한글·하이픈은 허용)
+  if (slug.includes("..")) return false;             // 상위 경로 이동 금지
+  if (slug === "." || slug === "..") return false;
+  // 방어적 확인: basename 과 달라지면(경로 조각이 섞이면) 거부.
+  return slug === path.basename(slug);
 }
-
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -137,6 +143,75 @@ function buildSpecSkeleton(content) {
     // 첫 ## 이후의 비-헤더 줄(=기존 값)은 버린다.
   }
   return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
+}
+
+// spec.md 에서 특정 "## 헤더" 아래 값(다음 ## 전까지)을 트림해 반환한다.
+// (buildSpecSkeleton 이 값만 비우므로, 값이 비어 있으면 "" 를 돌려준다.)
+function readSpecSection(content, header) {
+  if (!content) return "";
+  const lines = content.split(/\r?\n/);
+  const headerRe = new RegExp(`^##\\s+${escapeRegExp(header)}\\s*$`);
+  const out = [];
+  let capturing = false;
+  for (const line of lines) {
+    if (/^##\s/.test(line)) {
+      if (capturing) break;            // 다음 항목 시작 → 종료
+      capturing = headerRe.test(line); // 원하는 항목이면 캡처 시작
+      continue;
+    }
+    if (capturing) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
+// spec.md 가 "골격(항목명만)"이 아니라 실제 내용이 채워져 있으면 true.
+// buildSpecSkeleton 결과는 첫 ## 이후에 값 줄이 하나도 없다 → 그 반대를 본다.
+function isSpecFilled(content) {
+  if (!content) return false;
+  const lines = content.split(/\r?\n/);
+  let firstH2seen = false;
+  for (const line of lines) {
+    if (/^##\s/.test(line)) { firstH2seen = true; continue; }
+    if (!firstH2seen) continue;          // 첫 항목 이전 서문은 무시
+    if (line.trim() !== "") return true;  // 첫 ## 이후에 값이 하나라도 있으면 채워짐
+  }
+  return false;
+}
+
+// dir 안에서 가장 최근 수정된 파일 이름(숨김파일 제외)을 반환한다 (없으면 null).
+function mostRecentFileInDir(dir) {
+  let names;
+  try { names = fs.readdirSync(dir).filter((n) => !n.startsWith(".")); }
+  catch { return null; }
+  let latest = null;
+  let latestMtime = -Infinity;
+  for (const name of names) {
+    let st;
+    try { st = fs.statSync(path.join(dir, name)); } catch { continue; }
+    if (!st.isFile()) continue;
+    if (st.mtimeMs > latestMtime) { latestMtime = st.mtimeMs; latest = name; }
+  }
+  return latest;
+}
+
+// 남아 있는 작업이 대략 어느 단계인지 추정한다.
+//  - label: 사람이 읽을 단계명(모달·배너 표시용)
+//  - key:   화면 단계 머신 키(title|keyword|body|images) 또는 null(복원 대상 아님)
+// 초기화 대상인 spec.md 를 1차 근거로 쓰고, drafts/image-prompts 산출물로
+// 본문·이미지 단계를 보강한다(이들은 완성물이라 보존되므로 보조 신호로만 사용).
+function detectLeftoverStage(specContent, hasSession) {
+  const title = readSpecSection(specContent, "확정 제목");
+  const keyword = readSpecSection(specContent, "확정 키워드");
+  let hasDraft = false;
+  let hasImgPrompt = false;
+  try { hasDraft = fs.readdirSync(DRAFTS_DIR).some((n) => n.toLowerCase().endsWith(".md")); } catch {}
+  try { hasImgPrompt = fs.readdirSync(IMAGE_PROMPTS_DIR).some((n) => n.toLowerCase().endsWith(".md")); } catch {}
+  if (keyword && hasImgPrompt) return { key: "images", label: "이미지 프롬프트" };
+  if (keyword && hasDraft) return { key: "body", label: "본문 작성" };
+  if (keyword) return { key: "keyword", label: "키워드 승인" };
+  if (title) return { key: "title", label: "제목 확정" };
+  if (hasSession) return { key: null, label: "진행 중" };
+  return { key: null, label: "시작 전" };
 }
 
 // 이미지 업로드는 multer.diskStorage 의 filename 콜백만으로는 같은 요청 안의
@@ -688,6 +763,55 @@ app.post("/api/stop", (req, res) => {
   entry.stopped = true;
   killProcessTree(entry.child);
   res.json({ ok: true, stopped: true });
+});
+
+// ── 라우트: 잔재 확인 (새 워드 업로드 전, 이전 작업이 남았는지) ───────
+// GET /api/has-leftover?browserKey=...
+//  다음 중 하나라도 있으면 hasLeftover=true:
+//   - inbox/ 에 파일이 있음
+//   - spec.md 가 골격이 아니라 실제 내용으로 채워져 있음
+//   - 이 browserKey 로 진행 중인 세션이 있음
+//  함께: prevFile(이전 워드명), stage(대략 단계), detail(판단 근거) 를 준다.
+app.get("/api/has-leftover", (req, res) => {
+  const browserKey = req.query.browserKey || "";
+
+  // 1) inbox 파일 유무 + 가장 최근 파일명
+  let inboxFiles = [];
+  try { inboxFiles = fs.readdirSync(INBOX_DIR).filter((n) => !n.startsWith(".")); } catch {}
+  const hasInbox = inboxFiles.length > 0;
+
+  // 2) spec.md 실제 내용 채워짐 여부
+  let specContent = "";
+  let specFilled = false;
+  try {
+    const specPath = path.join(HARNESS_DIR, "spec.md");
+    if (fs.existsSync(specPath)) {
+      specContent = fs.readFileSync(specPath, "utf8");
+      specFilled = isSpecFilled(specContent);
+    }
+  } catch {}
+
+  // 3) 이 브라우저의 진행 중 세션
+  const hasSession = !!(browserKey && sessions[browserKey]);
+
+  const hasLeftover = hasInbox || specFilled || hasSession;
+
+  // 이전 워드명: inbox 최신 파일 우선, 없으면 spec.md 의 "## 원문 초안" 첫 줄
+  let prevFile = hasInbox ? mostRecentFileInDir(INBOX_DIR) : null;
+  if (!prevFile) {
+    const src = readSpecSection(specContent, "원문 초안");
+    if (src) prevFile = path.basename(src.split(/\r?\n/)[0].trim());
+  }
+
+  const st = hasLeftover ? detectLeftoverStage(specContent, hasSession) : { key: null, label: null };
+
+  res.json({
+    hasLeftover,
+    prevFile,
+    stage: st.label,     // 사람이 읽을 단계명
+    stageKey: st.key,    // 화면 복원용 머신 키(title|keyword|body|images|null)
+    detail: { hasInbox, specFilled, hasSession },
+  });
 });
 
 // ── 라우트: 초기화 (새 글을 처음부터 시작할 수 있는 상태로) ──────────
