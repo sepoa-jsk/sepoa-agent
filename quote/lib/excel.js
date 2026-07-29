@@ -301,9 +301,8 @@ function buildCover(wb, quote, settings) {
   const img = (file) => (fs.existsSync(file) ? wb.addImage({ buffer: fs.readFileSync(file), extension: 'png' }) : null);
   const topId = img(BAND_TOP_PATH), botId = img(BAND_BOTTOM_PATH), logoId = img(LOGO_PATH);
 
-  // 상단 브랜드 밴드 — 이미지 있으면 비율 유지해 삽입(가로 긴 띠), 없으면 색상 셀 폴백
-  const PAGE_W = 688; // A~H(각 11.5) 대략 픽셀 폭
-  if (topId != null) { cs.addImage(topId, { tl: { col: 0, row: 0 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 10.33) }, editAs: 'absolute' }); }
+  // 상단 브랜드 밴드 — 범위 앵커로 삽입(가로 긴 띠는 낮은 2행으로 비율 근사). 없으면 색상 셀 폴백
+  if (topId != null) { cs.getRow(1).height = 26; cs.getRow(2).height = 26; cs.addImage(topId, 'A1:H2'); }
   else { cs.getRow(1).height = 18; fill('A1', LIME); fill('B1', YEL); fill('C1', PINK); ['D1', 'E1', 'F1', 'G1', 'H1'].forEach((a) => fill(a, DARK)); }
 
   // 중앙 타이틀
@@ -319,14 +318,13 @@ function buildCover(wb, quote, settings) {
     r += 1;
   });
 
-  // 로고(중앙) — 이미지 있으면 비율(3.64) 유지해 가운데 배치, 없으면 상호 텍스트
+  // 로고(중앙) — oneCell 앵커 + 비율(3.64) 유지. 없으면 상호 텍스트
   if (logoId != null) {
-    const lw = 320, lh = Math.round(lw / 3.64);
-    cs.addImage(logoId, { tl: { col: (8 - lw / (PAGE_W / 8)) / 2, row: 24 }, ext: { width: lw, height: lh }, editAs: 'absolute' });
+    cs.addImage(logoId, { tl: { col: 2.2, row: 22.5 }, ext: { width: 320, height: 88 }, editAs: 'oneCell' });
   } else { cs.mergeCells('E44:H44'); put('E44', supplier, { size: 13, bold: true, h: 'right', color: 'FF7AA324' }); }
 
-  // 하단 브랜드 밴드 (미러) — 비율 유지, 페이지 하단
-  if (botId != null) { cs.addImage(botId, { tl: { col: 0, row: 44 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 12.91) }, editAs: 'absolute' }); }
+  // 하단 브랜드 밴드 (미러) — 범위 앵커, 낮은 1행으로 비율 근사
+  if (botId != null) { cs.getRow(46).height = 40; cs.addImage(botId, 'A46:H46'); }
   else { cs.getRow(46).height = 18; ['A46', 'B46', 'C46', 'D46', 'E46'].forEach((a) => fill(a, DARK)); fill('F46', PINK); fill('G46', YEL); fill('H46', LIME); }
 
   cs.pageSetup.printArea = 'A1:H47';
