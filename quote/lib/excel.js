@@ -294,9 +294,11 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
 //    없어, 상/하단 브랜드 색상 밴드 + 중앙 타이틀 + 고객정보로 근사한다.
 //    로고 이미지(PNG)를 assets 에 넣어주면 전면 삽입으로 교체 가능.
 function buildCover(wb, quote, settings) {
+  // ⚠️ views:[{showGridLines:false}] 를 주면 ExcelJS 가 만든 sheetView 가 Excel
+  //    에서 "sheet1.xml XML 오류(로드 오류)"로 복구되는 문제가 있어 제거한다
+  //    (정상 시트들엔 sheetViews 자체가 없다). 격자선은 인쇄 시 안 나오므로 무방.
   const cs = wb.addWorksheet('표지', {
     pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1, margins: { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 } },
-    views: [{ showGridLines: false }],
   });
   'ABCDEFGH'.split('').forEach((c) => (cs.getColumn(c).width = 11.5));
 
