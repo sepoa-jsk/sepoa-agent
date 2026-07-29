@@ -42,6 +42,9 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
 
   const nameOfSolution = (c) => (masters.solutionNames && masters.solutionNames[c]) || SOLUTION_NAMES[c] || c;
   const nameOfDeployment = (c) => (masters.deploymentNames && masters.deploymentNames[c]) || DEPLOYMENT_NAMES[c] || c;
+  const laborInfo = masters.laborInfo || {}; // item_code → { base(기준단가), grade(협회 직군) }
+  const baseOfLabor = (it) => { const v = laborInfo[it.item_code] && laborInfo[it.item_code].base; return v != null ? Number(v) : null; };
+  const baseOfSolution = (it) => (it.base_price != null ? Number(it.base_price) : null);
 
   // ── 유틸 ──
   function eachCell(range, fn) {
@@ -70,27 +73,34 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
   const vatIncluded = tag('부가세') === '포함';
   const onsiteText = tag('상주') || '상주';
 
-  // 데이터 분류 (솔루션 / 인건비)
-  const solItems = [], labItems = [];
+  // 데이터 분류 (솔루션 / 인건비 / 유지보수)
+  const MAINT_CATS = ['유지보수', '운영유지보수', '유지관리'];
+  const solItems = [], labItems = [], maintItems = [];
   let solutionCode = null;
   for (const sec of quote.sections || []) {
     for (const it of sec.items || []) {
       if (it.category === '시스템구축') labItems.push(it);
+      else if (MAINT_CATS.includes(it.category)) maintItems.push(it);
       else { solItems.push(it); if (!solutionCode) solutionCode = sec.solution; }
     }
   }
   const sum = (arr, f) => arr.reduce((a, x) => a + (Number(f(x)) || 0), 0);
   const solSub = sum(solItems, (i) => i.amount);
   const labSub = sum(labItems, (i) => i.amount);
+  const maintSub = sum(maintItems, (i) => i.amount);
+  const maintMM = sum(maintItems, (i) => i.qty);
+  const buildAmt = solSub + labSub; // 구축금액(①+②)
   const mmSum = sum(labItems, (i) => i.qty);
   const total = Number(quote.supply_amount) || (solSub + labSub);
   const disc = Number(quote.discount_amount) || 0;
   const vat = Number(quote.vat_amount) || 0;
   const grand = Number(quote.total_amount) || 0;
   const finalAmt = total - disc; // 최종견적금액(특별DC 반영)
-  // 적용네고율(견적조건 문구용) — 인건비 우선, 없으면 솔루션
-  const src = labItems.find((i) => Number(i.base_price)) || solItems.find((i) => Number(i.base_price));
-  const negoPct = src ? Math.round((Number(src.unit_price) / Number(src.base_price)) * 100) : 100;
+  // 적용네고율(견적조건 문구용) — 인건비 기준단가(마스터) 우선, 없으면 저장된 base_price
+  const laborNegoSrc = labItems.find((i) => baseOfLabor(i));
+  let negoPct = 100;
+  if (laborNegoSrc) negoPct = Math.round((Number(laborNegoSrc.unit_price) / baseOfLabor(laborNegoSrc)) * 100);
+  else { const src = labItems.find((i) => Number(i.base_price)) || solItems.find((i) => Number(i.base_price)); if (src) negoPct = Math.round((Number(src.unit_price) / Number(src.base_price)) * 100); }
 
   // ── 상단 주소/제목 ──
   ws.mergeCells('B1:H1');
@@ -133,25 +143,41 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
   setCell(`H${row}`, '(단위 : 원)', { size: 8.5, h: 'right', color: 'FF888888' });
   row += 1;
   row = table(row, ['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액'],
-    solItems, nameOfSolution(solutionCode) || '솔루션', '식');
+    solItems, nameOfSolution(solutionCode) || '솔루션', '식', baseOfSolution);
   row = subtotalRow(row, '솔루션 소계', solSub, null);
   row += 1;
 
   // ── ▣ 시스템 구축 견적 ──
   setCell(`B${row}`, '▣ 시스템 구축 견적', { bold: true, size: 11, color: ACCENT });
   row += 1;
-  row = table(row, ['구분', '역할(등급)', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액'],
-    labItems, '시스템구축\n개발인건비', 'MM');
-  row = subtotalRow(row, '인건비 소계', labSub, mmSum);
+  // 세부내역(D)이 비어 있으면 협회 직군(등급)으로 채운다.
+  const labRows = labItems.map((it) => ({ ...it, spec: it.spec || (laborInfo[it.item_code] && laborInfo[it.item_code].grade) || '' }));
+  row = table(row, ['구분', '역할', '세부내역(등급)', '공수(MM)', '기준단가', '제안단가', '제안금액'],
+    labRows, '시스템구축\n개발인건비', 'MM', baseOfLabor);
+  row = subtotalRow(row, '인건비 소계 (②)', labSub, mmSum);
 
-  // ── 합계 ──
-  row = totalRow(row, 'Total (솔루션 + 인건비)', total, false);
+  // ── 구축금액(①+②) ──
+  row = totalRow(row, '구축금액 (①+②)', buildAmt, false);
+  let buildFinal = buildAmt;
   if (disc > 0) {
     row = totalRow(row, '특별 DC', -disc, false);
-    row = totalRow(row, '최종견적금액 (특별 DC 적용)', finalAmt, true);
-  } else {
-    row = totalRow(row, '최종견적금액', finalAmt, true);
+    buildFinal = buildAmt - disc;
+    row = totalRow(row, '구축금액 (특별 DC 적용)', buildFinal, true);
   }
+
+  // ── ▣ 유지보수 견적 (해당 항목이 있을 때만) ──
+  if (maintItems.length) {
+    row += 1;
+    setCell(`B${row}`, '▣ 유지보수 견적', { bold: true, size: 11, color: ACCENT });
+    row += 1;
+    row = table(row, ['구분', '역할', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액'],
+      maintItems, '유지보수', 'MM', baseOfLabor);
+    row = subtotalRow(row, '유지보수 소계', maintSub, maintMM);
+  }
+
+  // ── 견적 합계 → 부가세 → 총 견적가 ──
+  const totalBeforeVat = buildFinal + maintSub; // = finalAmt
+  row = totalRow(row, maintItems.length ? '견적 합계 (구축 + 유지보수)' : '최종견적금액', totalBeforeVat, true);
   if (!vatIncluded) {
     row = totalRow(row, '부가세 (VAT 10%)', vat, false);
     row = totalRow(row, '총 견적가', grand, true, true);
@@ -178,10 +204,15 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
     row += 1;
   }
 
+  // ── 지원 시트: 02. 투입공수 / 임금단가 ──
+  buildEffortSheet(wb, labItems, laborInfo);
+  buildRateSheet(wb, masters.laborStandards || [], masters.laborYear);
+
   return wb;
 
   // ── 표 렌더 (B~H, 7컬럼) ──
-  function table(startRow, headers, items, gubunLabel, unit) {
+  function table(startRow, headers, items, gubunLabel, unit, baseOf) {
+    const resolveBase = baseOf || ((it) => (it.base_price != null ? Number(it.base_price) : null));
     let r = startRow;
     // 헤더
     headers.forEach((hd, i) => {
@@ -202,7 +233,9 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
       setCell(`C${r}`, it.name || '', { wrap: true });            // 모듈/역할
       setCell(`D${r}`, it.spec || '', { wrap: true });            // 세부기능/내역
       setCell(`E${r}`, Number(it.qty) || 0, { h: 'center' });     // 수량/공수
-      setCell(`F${r}`, Number(it.base_price) || 0, { h: 'right', money: true }); // 기준단가
+      const bp = resolveBase(it);                                 // 기준단가(없으면 공란)
+      if (bp != null && bp > 0) setCell(`F${r}`, bp, { h: 'right', money: true });
+      else setCell(`F${r}`, '', { h: 'right' });
       setCell(`G${r}`, Number(it.unit_price) || 0, { h: 'right', money: true }); // 제안단가
       setCell(`H${r}`, Number(it.amount) || 0, { h: 'right', money: true });     // 제안금액
       border(`B${r}:H${r}`);
@@ -268,8 +301,9 @@ function buildCover(wb, quote, settings) {
   const img = (file) => (fs.existsSync(file) ? wb.addImage({ buffer: fs.readFileSync(file), extension: 'png' }) : null);
   const topId = img(BAND_TOP_PATH), botId = img(BAND_BOTTOM_PATH), logoId = img(LOGO_PATH);
 
-  // 상단 브랜드 밴드 — 이미지 있으면 삽입, 없으면 색상 셀로 폴백
-  if (topId != null) { cs.getRow(1).height = 30; cs.addImage(topId, 'A1:H3'); }
+  // 상단 브랜드 밴드 — 이미지 있으면 비율 유지해 삽입(가로 긴 띠), 없으면 색상 셀 폴백
+  const PAGE_W = 688; // A~H(각 11.5) 대략 픽셀 폭
+  if (topId != null) { cs.addImage(topId, { tl: { col: 0, row: 0 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 10.33) }, editAs: 'absolute' }); }
   else { cs.getRow(1).height = 18; fill('A1', LIME); fill('B1', YEL); fill('C1', PINK); ['D1', 'E1', 'F1', 'G1', 'H1'].forEach((a) => fill(a, DARK)); }
 
   // 중앙 타이틀
@@ -285,16 +319,107 @@ function buildCover(wb, quote, settings) {
     r += 1;
   });
 
-  // 로고(우측 하단) — 이미지 있으면 삽입, 없으면 상호 텍스트
-  if (logoId != null) cs.addImage(logoId, { tl: { col: 4.3, row: 39 }, ext: { width: 260, height: 72 }, editAs: 'oneCell' });
-  else { cs.mergeCells('E44:H44'); put('E44', supplier, { size: 13, bold: true, h: 'right', color: 'FF7AA324' }); }
+  // 로고(중앙) — 이미지 있으면 비율(3.64) 유지해 가운데 배치, 없으면 상호 텍스트
+  if (logoId != null) {
+    const lw = 320, lh = Math.round(lw / 3.64);
+    cs.addImage(logoId, { tl: { col: (8 - lw / (PAGE_W / 8)) / 2, row: 24 }, ext: { width: lw, height: lh }, editAs: 'absolute' });
+  } else { cs.mergeCells('E44:H44'); put('E44', supplier, { size: 13, bold: true, h: 'right', color: 'FF7AA324' }); }
 
-  // 하단 브랜드 밴드 (미러)
-  if (botId != null) { cs.getRow(46).height = 30; cs.addImage(botId, 'A45:H47'); }
+  // 하단 브랜드 밴드 (미러) — 비율 유지, 페이지 하단
+  if (botId != null) { cs.addImage(botId, { tl: { col: 0, row: 44 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 12.91) }, editAs: 'absolute' }); }
   else { cs.getRow(46).height = 18; ['A46', 'B46', 'C46', 'D46', 'E46'].forEach((a) => fill(a, DARK)); fill('F46', PINK); fill('G46', YEL); fill('H46', LIME); }
 
   cs.pageSetup.printArea = 'A1:H47';
   return cs;
+}
+
+// ── 02. 투입공수 시트 (역할·등급·내역·총공수) ────────────────────────
+// 총공수(MM)만 자동 채움 — 월별(M1~M7) 칸은 수동 조정용으로 비운다.
+function buildEffortSheet(wb, labItems, laborInfo) {
+  const ws = wb.addWorksheet('02. 투입공수', {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.3, header: 0.2, footer: 0.2 } },
+  });
+  const W = { A: 0.9, B: 12, C: 20, D: 30, E: 7, F: 7, G: 7, H: 7, I: 7, J: 7, K: 7, L: 8.5 };
+  Object.entries(W).forEach(([c, w]) => (ws.getColumn(c).width = w));
+  const put = (addr, v, opt = {}) => {
+    const c = ws.getCell(addr); c.value = v;
+    c.font = { name: FN, size: opt.size || 9.5, bold: !!opt.bold, color: { argb: opt.color || 'FF000000' } };
+    c.alignment = { horizontal: opt.h || 'left', vertical: 'middle', wrapText: !!opt.wrap };
+    if (opt.fill) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opt.fill } };
+    return c;
+  };
+  const bd = (a1, a2) => { const c1 = colNum(a1.match(/[A-Z]+/)[0]), r1 = +a1.match(/\d+/)[0], c2 = colNum(a2.match(/[A-Z]+/)[0]), r2 = +a2.match(/\d+/)[0]; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) ws.getCell(numCol(c) + r).border = ALLB; };
+
+  ws.mergeCells('B1:L1'); put('B1', '#. 인력투입계획 — 제안 당시 공수 (월별 배분은 협의 후 확정)', { bold: true, size: 11, color: ACCENT });
+  // 헤더 2줄
+  put('B2', '역할', { bold: true, h: 'center', fill: GRAY }); put('C2', '등급', { bold: true, h: 'center', fill: GRAY }); put('D2', '내역', { bold: true, h: 'center', fill: GRAY });
+  ws.mergeCells('E2:F2'); put('E2', '분석/설계', { bold: true, h: 'center', fill: GRAY });
+  ws.mergeCells('G2:I2'); put('G2', '구현', { bold: true, h: 'center', fill: GRAY });
+  put('J2', '테스트', { bold: true, h: 'center', fill: GRAY }); put('K2', '안정화', { bold: true, h: 'center', fill: GRAY }); put('L2', '합계', { bold: true, h: 'center', fill: GRAY });
+  ['B', 'C', 'D'].forEach((c) => ws.mergeCells(`${c}2:${c}3`));
+  ws.mergeCells('L2:L3');
+  ['E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach((c, i) => put(`${c}3`, 'M' + (i + 1), { bold: true, h: 'center', fill: GRAY }));
+  bd('B2', 'L3');
+
+  let r = 4;
+  const start = r;
+  for (const it of labItems) {
+    const info = laborInfo[it.item_code] || {};
+    put(`B${r}`, it.name || it.item_code || '', { wrap: true });
+    put(`C${r}`, info.grade || '', { size: 9, wrap: true });
+    put(`D${r}`, it.spec || '', { size: 9, wrap: true });
+    ['E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach((c) => put(`${c}${r}`, '', { h: 'center' })); // 월별 비움
+    put(`L${r}`, Number(it.qty) || 0, { h: 'center', bold: true });
+    bd(`B${r}`, `L${r}`);
+    r += 1;
+  }
+  if (r === start) { ws.mergeCells(`B${r}:L${r}`); put(`B${r}`, '(인건비 항목 없음)', { h: 'center', color: 'FF999999' }); bd(`B${r}`, `L${r}`); r += 1; }
+  // 합계
+  ws.mergeCells(`B${r}:K${r}`); put(`B${r}`, '합계', { bold: true, h: 'right', fill: LIGHT });
+  put(`L${r}`, { formula: `SUM(L${start}:L${r - 1})` }, { bold: true, h: 'center', fill: LIGHT });
+  bd(`B${r}`, `L${r}`);
+  return ws;
+}
+
+// ── 임금단가 시트 (SW협회 마스터 연동) ───────────────────────────────
+function buildRateSheet(wb, standards, year) {
+  const ws = wb.addWorksheet(`임금단가(${year || ''})`, {
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.4, header: 0.2, footer: 0.2 } },
+  });
+  const W = { A: 22, B: 15, C: 16, D: 16, E: 24 };
+  Object.entries(W).forEach(([c, w]) => (ws.getColumn(c).width = w));
+  const put = (addr, v, opt = {}) => {
+    const c = ws.getCell(addr); c.value = v;
+    c.font = { name: FN, size: opt.size || 10, bold: !!opt.bold, color: { argb: opt.color || 'FF000000' } };
+    c.alignment = { horizontal: opt.h || 'left', vertical: 'middle', wrapText: !!opt.wrap };
+    if (opt.fill) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: opt.fill } };
+    if (opt.money) c.numFmt = MONEY;
+    return c;
+  };
+  const bd = (a1, a2) => { const c1 = colNum(a1.match(/[A-Z]+/)[0]), r1 = +a1.match(/\d+/)[0], c2 = colNum(a2.match(/[A-Z]+/)[0]), r2 = +a2.match(/\d+/)[0]; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) ws.getCell(numCol(c) + r).border = ALLB; };
+
+  ws.mergeCells('A1:E1'); put('A1', `한국SW산업협회 기준 SW기술자 평균임금 (${year || ''}년 적용)`, { bold: true, size: 12, h: 'center', color: ACCENT });
+  ws.getRow(1).height = 22;
+  const head = ['구분(직군)', '노임단가(M/D)', '평균임금(M/M)', '기준단가', '비고'];
+  head.forEach((h, i) => put(numCol(1 + i) + '3', h, { bold: true, h: 'center', fill: GRAY }));
+  bd('A3', 'E3');
+  let r = 4;
+  for (const s of standards) {
+    put(`A${r}`, s.role_name || '', {});
+    put(`B${r}`, Number(s.daily_rate) || 0, { h: 'right', money: true });
+    put(`C${r}`, Number(s.avgMM) || 0, { h: 'right', money: true });
+    put(`D${r}`, Number(s.baseRate) || 0, { h: 'right', money: true, bold: true });
+    put(`E${r}`, `근무 ${s.work_days || 20.5}일 기준`, { size: 9, color: 'FF888888' });
+    bd(`A${r}`, `E${r}`);
+    r += 1;
+  }
+  if (r === 4) { ws.mergeCells(`A${r}:E${r}`); put(`A${r}`, '(임금단가 마스터 없음)', { h: 'center', color: 'FF999999' }); bd(`A${r}`, `E${r}`); r += 1; }
+  r += 1;
+  ws.mergeCells(`A${r}:E${r}`);
+  put(`A${r}`, '※ 기준단가 = (평균임금 + 제경비 + 기술료). 제경비=평균임금×110%, 기술료=(평균임금+제경비)×20%.', { size: 8.5, color: 'FF888888', wrap: true });
+  ws.mergeCells(`A${r + 1}:E${r + 1}`);
+  put(`A${r + 1}`, '※ 견적서의 인건비 기준단가는 위 표를 근거로 산정하며, 제안단가는 네고율을 적용한 값입니다.', { size: 8.5, color: 'FF888888', wrap: true });
+  return ws;
 }
 
 module.exports = { buildQuoteWorkbook };
