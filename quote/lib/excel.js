@@ -353,7 +353,10 @@ function buildCover(wb, quote, settings) {
   if (botId != null) { cs.addImage(botId, { tl: { col: 0, row: 45 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 12.91) }, editAs: 'oneCell' }); }
   else { cs.getRow(46).height = 18; ['A46', 'B46', 'C46', 'D46', 'E46'].forEach((a) => fill(a, DARK)); fill('F46', PINK); fill('G46', YEL); fill('H46', LIME); }
 
-  cs.pageSetup.printArea = 'A1:H47';
+  // ⚠️ printArea 를 설정하면 ExcelJS 가 정의된 이름을 '표지'!$A1:$H47 처럼
+  //    행 절대참조($) 없이 만들어(올바른 형식은 $A$1:$H$47) Excel 이 이 시트를
+  //    "XML 오류(로드 오류)"로 복구한다. fitToPage 로 이미 한 페이지에 맞으므로
+  //    printArea 는 설정하지 않는다.
   return cs;
 }
 
