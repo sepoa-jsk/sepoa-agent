@@ -7,6 +7,11 @@ const fs = require('fs');
 const ExcelJS = require('exceljs');
 
 const ASSETS = path.join(__dirname, '..', 'assets');
+// ExcelJS 4.4.0 의 이미지 그리기(drawing) 삽입이 일부 Excel 에서 "복구된 레코드:
+// 그리기" 오류를 유발한다(앵커·이미지 크기 무관하게 재현). 그리기를 아예 만들지
+// 않도록 이미지 삽입을 끄고, 표지는 색상 밴드+텍스트로, 인감은 "(인)" 텍스트로
+// 대체한다. 원인 해결(또는 템플릿-채우기 전환) 후 true 로 되돌리면 된다.
+const EMBED_IMAGES = false;
 const SEAL_PATH = path.join(ASSETS, 'seal.png');
 const LOGO_PATH = path.join(ASSETS, 'logo.png');       // sepoasoft 로고
 const BAND_TOP_PATH = path.join(ASSETS, 'band_top.png');    // 상단 대각선 색상 바
@@ -124,9 +129,9 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
   label('F8', '대 표 이 사'); ws.mergeCells('G8:H8'); setCell('G8', (settings.supplier_ceo || '이 희 림') + '  (인)', { h: 'center' });
   border('B4:H8');
 
-  // 인감 오버레이 (대표 행 G8)
+  // 인감 오버레이 (대표 행 G8) — EMBED_IMAGES 일 때만. 기본은 "(인)" 텍스트로 대체.
   try {
-    if (fs.existsSync(SEAL_PATH)) {
+    if (EMBED_IMAGES && fs.existsSync(SEAL_PATH)) {
       const imageId = wb.addImage({ buffer: fs.readFileSync(SEAL_PATH), extension: 'png' });
       ws.getRow(8).height = 30;
       ws.addImage(imageId, { tl: { col: colNum('H') - 1.6, row: 7.05 }, ext: { width: 46, height: 46 }, editAs: 'oneCell' });
@@ -312,7 +317,10 @@ function buildCover(wb, quote, settings) {
   };
   const LIME = 'FFA6CE39', YEL = 'FFF5C400', PINK = 'FFEC008C', DARK = 'FF404040';
   const img = (file) => (fs.existsSync(file) ? wb.addImage({ buffer: fs.readFileSync(file), extension: 'png' }) : null);
-  const topId = img(BAND_TOP_PATH), botId = img(BAND_BOTTOM_PATH), logoId = img(LOGO_PATH);
+  // EMBED_IMAGES=false 면 이미지 대신 색상 밴드+텍스트 폴백(그리기 미생성 → 복구 오류 없음)
+  const topId = EMBED_IMAGES ? img(BAND_TOP_PATH) : null;
+  const botId = EMBED_IMAGES ? img(BAND_BOTTOM_PATH) : null;
+  const logoId = EMBED_IMAGES ? img(LOGO_PATH) : null;
   const PAGE_W = 684; // A~H(각 11.5) 대략 픽셀 폭 — 밴드 가로폭
 
   // 상단 브랜드 밴드 — oneCell 앵커(인감과 동일, Excel 호환) + 비율(10.33) 유지. 없으면 색상 셀 폴백
