@@ -110,6 +110,10 @@ table.grid tr.clickable { cursor: pointer; }
 /* 마스터 관리 전용: 세로 구분선으로 열을 명확히 나눈다 (다른 화면엔 영향 없음). */
 table.master-grid th, table.master-grid td { border-right: 0.5px solid var(--line); padding: 8px 12px; }
 table.master-grid th:last-child, table.master-grid td:last-child { border-right: none; }
+/* 가독성: 헤더 대비 강화 + 짝수행 옅은 음영(zebra) + 명확한 hover */
+table.master-grid th { background: #eef2f8; color: #46536b; border-bottom: 2px solid #d7deea; }
+table.master-grid tbody tr:nth-child(even) > td { background: #fafbfd; }
+table.master-grid tbody tr:hover > td { background: #eaf1fb; }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .center { text-align: center; }
 .nowrap { white-space: nowrap; }

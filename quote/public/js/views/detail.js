@@ -96,10 +96,36 @@ export async function renderDetail(root, id) {
     )
   ));
 
-  if (quote.memo) {
+  // 견적조건 (저장된 conditions)
+  if (Array.isArray(quote.conditions) && quote.conditions.length) {
+    root.appendChild(h('div', { class: 'panel' },
+      h('div', { class: 'panel-head' }, '견적조건'),
+      h('div', { class: 'panel-body' },
+        h('div', { style: 'display:flex;flex-direction:column;gap:7px' },
+          ...quote.conditions.map((c) => h('div', { style: 'color:var(--text-sub);font-size:13px;line-height:1.5' }, '-. ' + (c.text || '')))))
+    ));
+  }
+
+  // 견적 정보 (memo 태그 파싱) — 태그 원문을 그대로 뿌리지 않고 라벨로 표시
+  const memoStr = String(quote.memo || '');
+  const tag = (t) => { const m = memoStr.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
+  const MEMO_FIELDS = [
+    ['견적용도', '견적용도'], ['결제조건', '결제조건'], ['부가세', '부가세'],
+    ['상주', '상주여부'], ['특별DC', '특별 DC'], ['연락처', '연락처'], ['이메일', '이메일'],
+  ];
+  const infoRows = MEMO_FIELDS.map(([t, label]) => { const v = tag(t); return v ? meta(label, v) : null; }).filter(Boolean);
+  if (infoRows.length) {
+    root.appendChild(h('div', { class: 'panel' },
+      h('div', { class: 'panel-head' }, '견적 정보'),
+      h('div', { class: 'panel-body' }, h('div', { class: 'detail-meta' }, ...infoRows))
+    ));
+  }
+  // 태그가 아닌 자유 비고 줄만 별도 표시
+  const freeMemo = memoStr.split(/\r?\n/).filter((l) => l.trim() && !/^\s*\[[^\]]+\]/.test(l)).join('\n');
+  if (freeMemo) {
     root.appendChild(h('div', { class: 'panel' },
       h('div', { class: 'panel-head' }, '비고'),
-      h('div', { class: 'panel-body', style: 'white-space:pre-wrap;color:var(--text-sub)' }, quote.memo)
+      h('div', { class: 'panel-body', style: 'white-space:pre-wrap;color:var(--text-sub)' }, freeMemo)
     ));
   }
 

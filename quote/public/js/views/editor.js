@@ -80,6 +80,19 @@ export async function renderEditor(root, { mode, id }) {
       info.customer_contact = quote.customer_contact || '';
       info.quote_date = (quote.quote_date || todayStr()).slice(0, 10);
       info.valid_until = quote.valid_until ? String(quote.valid_until).slice(0, 10) : addDays(info.quote_date, 30);
+      // memo 태그 복원 (저장 시 [견적용도]/[결제조건]/[부가세]/[상주]/[특별DC]/[연락처]/[이메일] 로 기록됨)
+      const memoStr = String(quote.memo || '');
+      const tag = (t) => { const m = memoStr.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
+      if (tag('견적용도')) info.purpose = tag('견적용도');
+      if (tag('결제조건')) info.pay_terms = tag('결제조건');
+      if (tag('부가세')) info.vat_mode = tag('부가세') === '포함' ? 'INCLUDED' : 'EXCLUDED';
+      if (tag('상주')) cond.onsite = tag('상주') === '비상주' ? 'REMOTE' : 'ONSITE';
+      info.phone = tag('연락처');
+      info.email = tag('이메일');
+      const dcLbl = tag('특별DC');
+      if (/^할인율/.test(dcLbl)) { dc.mode = 'RATE'; dc.value = parseFloat(dcLbl.replace(/[^0-9.]/g, '')) || 0; }
+      else if (/^할인액/.test(dcLbl)) { dc.mode = 'AMOUNT'; dc.value = Number(dcLbl.replace(/[^0-9]/g, '')) || 0; }
+      else if (/최종금액/.test(dcLbl)) { dc.mode = 'FINAL'; dc.value = Number(dcLbl.replace(/[^0-9]/g, '')) || 0; }
       if (Array.isArray(quote.conditions)) savedConditions = quote.conditions;
       const s0 = quote.sections && quote.sections[0];
       if (s0) { cond.solution = s0.solution || cond.solution; cond.deployment = s0.deployment || cond.deployment; cond.company = s0.company_class || cond.company; }
@@ -305,10 +318,10 @@ export async function renderEditor(root, { mode, id }) {
         theadRow(['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액', '']), tb)),
       h('div', { style: 'padding:0 14px 14px;display:flex;gap:8px' },
         h('button', { class: 'add-section', style: 'flex:1', onclick: addModule }, '＋ 모듈 추가'),
-        h('button', { class: 'add-section', style: 'flex:1', onclick: addBundle }, '＋ 묶음(1식) 추가')));
+        h('button', { class: 'add-section', style: 'flex:1', onclick: addBundle, title: '마스터에 없는 항목을 이름·금액 직접 입력해 정액(1식)으로 추가' }, '＋ 직접입력 항목(정액) 추가')));
   }
   function moduleRow(r) {
-    const amountCell = h('td', { class: 'num' }); const propCell = h('td', { class: 'num' });
+    const amountCell = h('td', { class: 'num' }); const propCell = h('div', { class: 'num', style: 'font-weight:700' });
     r.amountCell = amountCell;
     if (r.bundle) {
       // 묶음: 이름/단가 직접입력, 네고율 없음(1식 고정가)
@@ -353,7 +366,7 @@ export async function renderEditor(root, { mode, id }) {
         h('button', { class: 'add-section', onclick: addLabor }, '＋ 인력 추가')));
   }
   function laborRow(r) {
-    const amountCell = h('td', { class: 'num' }); const propCell = h('td', { class: 'num' }); const baseCell = h('td', { class: 'num' });
+    const amountCell = h('td', { class: 'num' }); const propCell = h('div', { class: 'num', style: 'font-weight:700' }); const baseCell = h('td', { class: 'num' });
     r.amountCell = amountCell; r.propCell = propCell; r.baseCell = baseCell;
     return h('tr', {},
       h('td', {}, h('span', { style: S.gubun }, '인력')),
@@ -366,13 +379,14 @@ export async function renderEditor(root, { mode, id }) {
       h('td', { class: 'center' }, h('button', { style: S.del, title: '삭제', onclick: () => removeRow(laborRows, r, laborSection) }, '×')));
   }
 
-  // 제안단가 셀 = 적용네고율 입력(파랑) + 제안단가 텍스트 + 기준네고율 참고
+  // 제안단가 셀 = 제안단가(값, 굵게) 위 + 편집용 네고율 입력 아래.
+  // 기준네고율은 섹션 헤더에 이미 표기되므로 행마다 반복하지 않는다(% 중복 제거).
   function propWithNego(r, propCell, baseNego) {
     const rateInp = h('input', { class: 'input', type: 'number', step: 'any', style: S.rateEdit, value: r.applyRate, oninput: (e) => { r.applyRate = e.target.value; recalc(); } });
     return h('td', { class: 'num' },
-      h('div', { style: 'display:flex;gap:3px;justify-content:flex-end;align-items:center' }, rateInp, h('span', { style: S.hint }, '%')),
       propCell,
-      h('div', { style: S.hint }, '기준 ' + pctOf(baseNego).toFixed(0) + '%'));
+      h('div', { style: 'display:flex;gap:3px;justify-content:flex-end;align-items:center;margin-top:3px' },
+        h('span', { style: S.hint }, '네고'), rateInp, h('span', { style: S.hint }, '%')));
   }
   function specInput(r) { return h('input', { class: 'input', style: S.specEdit, value: r.spec, oninput: (e) => { r.spec = e.target.value; } }); }
   function qtyInput(r, step) { return h('input', { class: 'input', type: 'number', step, style: S.qtyEdit, value: r.qty, oninput: (e) => { r.qty = e.target.value; recalc(); } }); }
@@ -390,7 +404,7 @@ export async function renderEditor(root, { mode, id }) {
     });
   }
   function addBundle() {
-    modRows.push({ bundle: true, name: '묶음 항목 (1식)', spec: '', qty: 1, unitPrice: 0 });
+    modRows.push({ bundle: true, name: '직접입력 항목 (1식)', spec: '', qty: 1, unitPrice: 0 });
     rerenderSection(moduleSection);
   }
   function addLabor() {
@@ -415,7 +429,8 @@ export async function renderEditor(root, { mode, id }) {
     grandEl = h('strong', { class: 'num', style: 'font-size:18px;color:var(--accent)' });
 
     const dcModeSel = sel([['RATE', '할인율(%)'], ['AMOUNT', '할인액(원)'], ['FINAL', '최종금액 직접']], dc.mode, (v) => { dc.mode = v; recalc(); });
-    const dcValInp = h('input', { class: 'input', type: 'number', step: 'any', value: dc.value, style: 'height:32px;text-align:right', oninput: (e) => { dc.value = e.target.value; recalc(); } });
+    dcModeSel.style.cssText += ';width:100%;min-width:0;box-sizing:border-box;height:32px';
+    const dcValInp = h('input', { class: 'input', type: 'number', step: 'any', value: dc.value, style: 'height:32px;text-align:right;width:100%;min-width:0;box-sizing:border-box', oninput: (e) => { dc.value = e.target.value; recalc(); } });
     const saveBtn = h('button', { class: 'btn btn-primary', style: 'width:100%;margin-top:14px', onclick: save }, mode === 'edit' ? '견적 수정 저장' : '견적 저장');
     const line = () => h('hr', { style: 'border:0;border-top:1px solid var(--line);margin:10px 0' });
 
@@ -425,7 +440,9 @@ export async function renderEditor(root, { mode, id }) {
       srow(h('span', {}, '인건비 소계 ', h('span', { class: 'page-sub' }, '('), mmMirror, h('span', { class: 'page-sub' }, ')')), mLaborEl),
       line(), srow('Total', totalEl),
       h('div', { style: 'margin:10px 0' }, h('div', { style: S.flabel }, '특별 DC'),
-        h('div', { style: 'display:flex;gap:6px;margin-top:4px' }, dcModeSel, dcValInp)),
+        h('div', { style: 'display:flex;gap:6px;margin-top:4px' },
+          h('div', { style: 'flex:1;min-width:0' }, dcModeSel),
+          h('div', { style: 'flex:1;min-width:0' }, dcValInp))),
       srow('DC 금액', dcAmtEl),
       srow('최종견적금액', finalEl),
       line(),

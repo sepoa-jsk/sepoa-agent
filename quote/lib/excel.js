@@ -198,10 +198,23 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
       '솔루션 유지보수는 시스템 오픈 후 12개월간 무상유지보수 이후 진행되며, 유상유지보수는 솔루션 공급가의 15%로 제안합니다.',
       `본 프로젝트는 ${onsiteText}로 진행합니다.`,
     ];
+  const condStart = row;
   for (const c of conds) {
     ws.mergeCells(`B${row}:H${row}`);
-    setCell(`B${row}`, '-. ' + c, { size: 9 });
+    setCell(`B${row}`, '-. ' + c, { size: 9, wrap: true });
     row += 1;
+  }
+  // 견적조건 전체를 하나의 테두리 박스로 감싼다.
+  //  각 줄은 B:H 병합셀이라, 대표셀(B)에 좌·우 테두리를 주면 Excel이 병합 범위
+  //  바깥(=H의 오른쪽 끝)까지 그린다. 첫 줄엔 상단선, 끝 줄엔 하단선을 더한다.
+  const condEnd = row - 1;
+  for (let r = condStart; r <= condEnd; r++) {
+    ws.getCell(`B${r}`).border = {
+      left: THIN,
+      right: THIN,
+      top: r === condStart ? THIN : undefined,
+      bottom: r === condEnd ? THIN : undefined,
+    };
   }
 
   // ── 지원 시트: 02. 투입공수 / 임금단가 ──
@@ -277,7 +290,7 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
 //    로고 이미지(PNG)를 assets 에 넣어주면 전면 삽입으로 교체 가능.
 function buildCover(wb, quote, settings) {
   const cs = wb.addWorksheet('표지', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, margins: { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 } },
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1, margins: { left: 0.2, right: 0.2, top: 0.2, bottom: 0.2 } },
     views: [{ showGridLines: false }],
   });
   'ABCDEFGH'.split('').forEach((c) => (cs.getColumn(c).width = 11.5));
@@ -300,13 +313,16 @@ function buildCover(wb, quote, settings) {
   const LIME = 'FFA6CE39', YEL = 'FFF5C400', PINK = 'FFEC008C', DARK = 'FF404040';
   const img = (file) => (fs.existsSync(file) ? wb.addImage({ buffer: fs.readFileSync(file), extension: 'png' }) : null);
   const topId = img(BAND_TOP_PATH), botId = img(BAND_BOTTOM_PATH), logoId = img(LOGO_PATH);
+  const PAGE_W = 684; // A~H(각 11.5) 대략 픽셀 폭 — 밴드 가로폭
 
-  // 상단 브랜드 밴드 — 범위 앵커로 삽입(가로 긴 띠는 낮은 2행으로 비율 근사). 없으면 색상 셀 폴백
-  if (topId != null) { cs.getRow(1).height = 26; cs.getRow(2).height = 26; cs.addImage(topId, 'A1:H2'); }
+  // 상단 브랜드 밴드 — oneCell 앵커(인감과 동일, Excel 호환) + 비율(10.33) 유지. 없으면 색상 셀 폴백
+  if (topId != null) { cs.addImage(topId, { tl: { col: 0, row: 0 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 10.33) }, editAs: 'oneCell' }); }
   else { cs.getRow(1).height = 18; fill('A1', LIME); fill('B1', YEL); fill('C1', PINK); ['D1', 'E1', 'F1', 'G1', 'H1'].forEach((a) => fill(a, DARK)); }
 
-  // 중앙 타이틀
-  cs.mergeCells('A14:H15'); put('A14', (cust + ' ' + (purpose || '시스템 구축')).trim(), { size: 26, bold: true });
+  // 중앙 타이틀 — 견적용도(있으면)를 그대로 쓴다. 없으면 "고객사 시스템 구축".
+  //  (견적용도에 이미 고객사명이 포함되는 경우가 많아 cust 를 앞에 또 붙이지 않는다.)
+  const coverTitle = purpose || ((cust ? cust + ' ' : '') + '시스템 구축');
+  cs.mergeCells('A14:H15'); put('A14', coverTitle, { size: 26, bold: true });
   cs.getRow(14).height = 36; cs.getRow(15).height = 36;
   cs.mergeCells('A17:H18'); put('A17', '가 격 제 안 서', { size: 26, bold: true });
   cs.getRow(17).height = 36; cs.getRow(18).height = 36;
@@ -323,8 +339,8 @@ function buildCover(wb, quote, settings) {
     cs.addImage(logoId, { tl: { col: 2.2, row: 22.5 }, ext: { width: 320, height: 88 }, editAs: 'oneCell' });
   } else { cs.mergeCells('E44:H44'); put('E44', supplier, { size: 13, bold: true, h: 'right', color: 'FF7AA324' }); }
 
-  // 하단 브랜드 밴드 (미러) — 범위 앵커, 낮은 1행으로 비율 근사
-  if (botId != null) { cs.getRow(46).height = 40; cs.addImage(botId, 'A46:H46'); }
+  // 하단 브랜드 밴드 (미러) — oneCell 앵커, 페이지 하단에 비율(12.91) 유지
+  if (botId != null) { cs.addImage(botId, { tl: { col: 0, row: 45 }, ext: { width: PAGE_W, height: Math.round(PAGE_W / 12.91) }, editAs: 'oneCell' }); }
   else { cs.getRow(46).height = 18; ['A46', 'B46', 'C46', 'D46', 'E46'].forEach((a) => fill(a, DARK)); fill('F46', PINK); fill('G46', YEL); fill('H46', LIME); }
 
   cs.pageSetup.printArea = 'A1:H47';
