@@ -68,6 +68,7 @@ export const api = {
   setStatus: (id, status) => req('PATCH', `/api/quotes/${id}/status`, { status }),
   deleteQuote: (id) => req('DELETE', `/api/quotes/${id}`),
   excelUrl: (id) => `${BASE}/api/quotes/${id}/excel`,
+  pdfUrl: (id) => `${BASE}/api/quotes/${id}/pdf`,
 
   // 설정
   getSettings: () => req('GET', '/api/settings'),

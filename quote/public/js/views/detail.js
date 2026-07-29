@@ -31,6 +31,7 @@ export async function renderDetail(root, id) {
       statusSel,
       h('a', { class: 'btn', href: `#/quotes/${id}/edit` }, '수정'),
       h('a', { class: 'btn btn-navy', href: api.excelUrl(id), download: true }, 'Excel 다운로드'),
+      h('a', { class: 'btn', href: api.pdfUrl(id), target: '_blank', rel: 'noopener' }, 'PDF 다운로드'),
       h('button', { class: 'btn btn-danger', onclick: onDelete }, '삭제')
     )
   ));

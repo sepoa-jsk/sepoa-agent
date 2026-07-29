@@ -241,56 +241,76 @@ router.delete('/:id', requireAuth, async (req, res, next) => {
   }
 });
 
+// 솔루션/구축형태 이름 + 인건비 기준단가·등급(SW협회 마스터 연동) + 임금단가 데이터.
+// Excel·PDF 두 출력이 공유한다.
+async function buildMasters(quote) {
+  const [sols, deps] = await Promise.all([
+    query('SELECT code, name FROM sq_solutions'),
+    query('SELECT code, name FROM sq_deployments'),
+  ]);
+  const masters = {
+    solutionNames: Object.fromEntries(sols.map((s) => [s.code, s.name])),
+    deploymentNames: Object.fromEntries(deps.map((d) => [d.code, d.name])),
+  };
+  try {
+    const { calcStandardRate } = require('../lib/labor-standard');
+    const wantYear = Number(String(quote.quote_date || '').slice(0, 4)) || null;
+    const yrs = await query('SELECT DISTINCT year FROM sq_labor_standards ORDER BY year DESC');
+    const useYear = (wantYear && yrs.some((y) => Number(y.year) === wantYear)) ? wantYear : (yrs[0] && Number(yrs[0].year));
+    const stds = useYear ? await query('SELECT * FROM sq_labor_standards WHERE year=? ORDER BY sort, id', [useYear]) : [];
+    const stdByCode = Object.fromEntries(stds.map((s) => [s.role_code, s]));
+    const roles = await query('SELECT code, name, standard_role_code FROM sq_labor_roles');
+    const laborInfo = {};
+    for (const r of roles) {
+      const std = r.standard_role_code ? stdByCode[r.standard_role_code] : null;
+      laborInfo[r.code] = { base: std ? calcStandardRate(std) : null, grade: std ? std.role_name : '' };
+    }
+    masters.laborInfo = laborInfo;
+    masters.laborYear = useYear || null;
+    masters.laborStandards = stds.map((s) => ({
+      role_name: s.role_name,
+      daily_rate: Number(s.daily_rate),
+      avgMM: Math.round(Number(s.daily_rate) * Number(s.work_days || 20.5)),
+      baseRate: calcStandardRate(s),
+      work_days: Number(s.work_days || 20.5),
+    }));
+  } catch (e) {
+    console.error('[quote] 임금단가 마스터 로드 실패:', e.message);
+  }
+  return masters;
+}
+
 // ── Excel 다운로드 ──────────────────────────────────────────
 router.get('/:id/excel', requireAuth, async (req, res, next) => {
   try {
     const quote = await loadQuote(Number(req.params.id));
     if (!quote) return res.status(404).json({ error: 'NOT_FOUND' });
     const settings = await loadSettings();
-    const [sols, deps] = await Promise.all([
-      query('SELECT code, name FROM sq_solutions'),
-      query('SELECT code, name FROM sq_deployments'),
-    ]);
-    const masters = {
-      solutionNames: Object.fromEntries(sols.map((s) => [s.code, s.name])),
-      deploymentNames: Object.fromEntries(deps.map((d) => [d.code, d.name])),
-    };
-
-    // 인건비 기준단가·등급(SW협회 마스터 연동) + 임금단가 시트 데이터
-    try {
-      const { calcStandardRate } = require('../lib/labor-standard');
-      const wantYear = Number(String(quote.quote_date || '').slice(0, 4)) || null;
-      const yrs = await query('SELECT DISTINCT year FROM sq_labor_standards ORDER BY year DESC');
-      const useYear = (wantYear && yrs.some((y) => Number(y.year) === wantYear)) ? wantYear : (yrs[0] && Number(yrs[0].year));
-      const stds = useYear ? await query('SELECT * FROM sq_labor_standards WHERE year=? ORDER BY sort, id', [useYear]) : [];
-      const stdByCode = Object.fromEntries(stds.map((s) => [s.role_code, s]));
-      const roles = await query('SELECT code, name, standard_role_code FROM sq_labor_roles');
-      const laborInfo = {};
-      for (const r of roles) {
-        const std = r.standard_role_code ? stdByCode[r.standard_role_code] : null;
-        laborInfo[r.code] = {
-          base: std ? calcStandardRate(std) : null,      // 기준단가
-          grade: std ? std.role_name : '',               // 협회 직군(등급)
-        };
-      }
-      masters.laborInfo = laborInfo;
-      masters.laborYear = useYear || null;
-      masters.laborStandards = stds.map((s) => ({
-        role_name: s.role_name,
-        daily_rate: Number(s.daily_rate),
-        avgMM: Math.round(Number(s.daily_rate) * Number(s.work_days || 20.5)), // 평균임금(M/M)
-        baseRate: calcStandardRate(s),                                          // 기준단가
-        work_days: Number(s.work_days || 20.5),
-      }));
-    } catch (e) {
-      // 임금단가 마스터 로드 실패 시에도 견적서 본문은 생성되게 한다.
-      console.error('[excel] 임금단가 마스터 로드 실패:', e.message);
-    }
+    const masters = await buildMasters(quote);
     const workbook = await buildQuoteWorkbook(quote, settings, masters);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${quote.quote_no}.xlsx"`);
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── PDF 다운로드 (HTML → 헤드리스 Chrome) ────────────────────
+router.get('/:id/pdf', requireAuth, async (req, res, next) => {
+  try {
+    const { renderQuoteHtml } = require('../lib/quote-html');
+    const { htmlToPdf } = require('../lib/quote-pdf');
+    const quote = await loadQuote(Number(req.params.id));
+    if (!quote) return res.status(404).json({ error: 'NOT_FOUND' });
+    const settings = await loadSettings();
+    const masters = await buildMasters(quote);
+    const html = renderQuoteHtml(quote, settings, masters);
+    const pdf = await htmlToPdf(html);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(quote.quote_no)}.pdf"`);
+    res.end(pdf);
   } catch (err) {
     next(err);
   }
