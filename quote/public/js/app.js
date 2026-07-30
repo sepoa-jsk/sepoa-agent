@@ -8,6 +8,7 @@ import { renderDetail } from './views/detail.js';
 import { renderPricing } from './views/pricing.js';
 import { renderSettings } from './views/settings.js';
 import { renderMaster } from './views/master.js';
+import { renderLaborRates } from './views/labor-rates.js';
 
 export const store = {
   user: null,
@@ -46,6 +47,7 @@ const routes = [
   { re: /^#\/quotes$/, view: () => renderList(viewEl()) },
   { re: /^#\/master$/, admin: true, view: () => renderMaster(viewEl()) },
   { re: /^#\/pricing$/, admin: true, view: () => renderPricing(viewEl()) },
+  { re: /^#\/labor-rates$/, admin: true, view: () => renderLaborRates(viewEl()) },
   { re: /^#\/settings$/, admin: true, view: () => renderSettings(viewEl()) },
 ];
 
@@ -55,6 +57,7 @@ async function router() {
     : hash.startsWith('#/quotes') ? 'quotes'
     : hash.startsWith('#/master') ? 'master'
     : hash.startsWith('#/pricing') ? 'pricing'
+    : hash.startsWith('#/labor-rates') ? 'labor-rates'
     : hash.startsWith('#/settings') ? 'settings' : 'quotes';
   document.querySelectorAll('.sidebar-nav a').forEach((a) => {
     a.classList.toggle('active', a.dataset.nav === nav);

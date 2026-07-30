@@ -35,6 +35,7 @@ app.use('/api', require('./routes/pricing'));
 
 app.use('/api/quotes', require('./routes/quotes'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/labor-rates', require('./routes/labor-rates'));
 
 // 404 (API)
 app.use('/api', (req, res) => {

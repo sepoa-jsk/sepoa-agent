@@ -70,6 +70,13 @@ export const api = {
   excelUrl: (id) => `${BASE}/api/quotes/${id}/excel`,
   pdfUrl: (id) => `${BASE}/api/quotes/${id}/pdf`,
 
+  // 임금단가(개발인건비)
+  laborYears: () => req('GET', '/api/labor-rates/years'),
+  laborRates: (year) => req('GET', '/api/labor-rates' + (year ? `?year=${year}` : '')),
+  createLaborYear: (body) => req('POST', '/api/labor-rates/years', body),
+  updateLaborRate: (id, body) => req('PUT', `/api/labor-rates/${id}`, body),
+  setActiveLaborYear: (id) => req('PATCH', `/api/labor-rates/years/${id}/active`),
+
   // 설정
   getSettings: () => req('GET', '/api/settings'),
   putSettings: (settings) => req('PUT', '/api/settings', { settings }),

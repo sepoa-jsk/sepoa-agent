@@ -56,9 +56,19 @@ test('buildQuoteWorkbook — 재로딩 시 합계/공급자/견적번호 반영'
   assert.ok(texts.includes('19250000') || texts.includes('19,250,000'), '합계금액 누락');
 });
 
-test('buildQuoteWorkbook — 인감 이미지가 워크북에 포함', async () => {
+test('buildQuoteWorkbook — 표지·견적서 시트 + 인감 텍스트 표기', async () => {
+  // 이미지 삽입은 Excel "복구" 오류를 유발해 비활성(EMBED_IMAGES=false).
+  // 표지는 색상밴드+텍스트, 인감은 "(인)" 텍스트로 표기된다.
   const wb = await buildQuoteWorkbook(quote, settings);
-  // ExcelJS: 이미지가 등록되면 media 배열에 존재
-  assert.ok(wb.media && wb.media.length >= 1, '인감 이미지가 포함되지 않음');
-  assert.equal(wb.media[0].extension, 'png');
+  const names = wb.worksheets.map((w) => w.name);
+  assert.ok(names.includes('표지'), '표지 시트 없음');
+  assert.ok(names.includes('견적서'), '견적서 시트 없음');
+
+  const buf = await wb.xlsx.writeBuffer();
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.load(buf);
+  const ws = wb2.getWorksheet('견적서');
+  const texts = [];
+  ws.eachRow((r) => r.eachCell((c) => texts.push(String(c.value))));
+  assert.ok(texts.some((t) => t.includes('(인)')), '대표이사 인감 표기 누락');
 });

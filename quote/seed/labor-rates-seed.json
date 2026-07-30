@@ -1,0 +1,29 @@
+{
+  "note": "한국SW산업협회 SW기술자 평균임금 기준. M/M 적용단가 = 평균임금(M/M) 기반 노임단가에 제경비(110%)+기술료(20%) 가산한 견적 적용가. 견적서 실측값과 일치하도록 apply_price를 확정값으로 시드한다. 등급(grade)은 견적서 역할명 매핑용.",
+  "labor_rate_years": [
+    {
+      "year": 2026,
+      "source": "한국SW산업협회 2026년 SW기술자 평균임금 (시행 2026-01-01)",
+      "active": 1,
+      "rates": [
+        { "role_code": "CONSULTANT", "role_name": "IT 컨설턴트", "grade": "PM", "wage_md": 522340, "wage_mm": 9706020, "apply_price": 26984084, "note": "PM/컨설팅" },
+        { "role_code": "PM", "role_name": "IT PM", "grade": "고급", "wage_md": 492039, "wage_mm": 9145473, "apply_price": 25418735, "note": "PM" },
+        { "role_code": "DEV", "role_name": "응용소프트웨어 개발자", "grade": "고급/중급", "wage_md": 378250, "wage_mm": 6943457, "apply_price": 19540395, "note": "고급,중급개발자" },
+        { "role_code": "UIUX", "role_name": "UI/UX 개발자", "grade": "초급", "wage_md": 336666, "wage_mm": 6727260, "apply_price": 17392166, "note": "초급개발자" },
+        { "role_code": "QA", "role_name": "IT 품질관리자", "grade": "고급", "wage_md": 538638, "wage_mm": 9692094, "apply_price": 11095479, "note": "PMO/사업관리(제경비만 적용 케이스)" },
+        { "role_code": "ARCHITECT", "role_name": "IT 아키텍트", "grade": "특급", "wage_md": 541621, "wage_mm": 10147745, "apply_price": 25418735, "note": "SW 아키텍트" },
+        { "role_code": "SUPPORT", "role_name": "정보시스템 운용자", "grade": "고급", "wage_md": 519469, "wage_mm": 10154626, "apply_price": 25418735, "note": "기술지원" }
+      ]
+    },
+    {
+      "year": 2025,
+      "source": "한국SW산업협회 2025년 SW기술자 평균임금",
+      "active": 0,
+      "rates": [
+        { "role_code": "CONSULTANT", "role_name": "IT 컨설턴트", "grade": "PM", "wage_md": 471166, "wage_mm": null, "apply_price": null, "note": "이력용, 필요시 확정" },
+        { "role_code": "PM", "role_name": "IT PM", "grade": "고급", "wage_md": 443955, "wage_mm": null, "apply_price": null, "note": "이력용" },
+        { "role_code": "DEV", "role_name": "응용소프트웨어 개발자", "grade": "고급/중급", "wage_md": 337061, "wage_mm": null, "apply_price": null, "note": "이력용" }
+      ]
+    }
+  ]
+}

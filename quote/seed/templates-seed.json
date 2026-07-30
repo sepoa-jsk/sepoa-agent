@@ -1,0 +1,129 @@
+{
+  "note": "견적서 구성 템플릿 초안. 실제 견적서(링네트/호반/SK바이오텍/CJ올리브/SK이터닉스)에서 역산한 블록 구성. blocks는 공통 sq_blocks를 참조하는 코드 배열. default_items는 템플릿 선택 시 자동 편입될 모듈 code(seed/pricing-seed.json의 price_items.code와 매핑). labor_default는 인건비 블록 기본 투입계획(등급/공수). 값(단가)은 담지 않고 공통 마스터 참조.",
+
+  "blocks_master": [
+    { "code": "SOLUTION", "name": "솔루션 견적", "columns": ["구분","모듈","세부기능","수량","기준단가","제안단가","제안금액"], "calc": "제안금액=제안단가*수량", "has_subtotal": 1 },
+    { "code": "SETUP", "name": "셋업비용", "columns": ["구분","세부기능","수량","기준단가","제안단가","제안금액"], "calc": "제안금액=제안단가*수량", "has_subtotal": 1 },
+    { "code": "LABOR", "name": "시스템 구축 견적(개발인건비)", "columns": ["구분","역할","세부내역","공수(MM)","기준단가","제안단가","제안금액"], "calc": "제안금액=제안단가*공수, 기준단가=labor_rates.apply_price", "has_subtotal": 1 },
+    { "code": "SERVICE", "name": "서비스 이용료(월)", "columns": ["구분","모듈","세부기능","수량","사용료(월)","사용료(년)"], "calc": "사용료(년)=사용료(월)*12", "has_subtotal": 1, "recurring": 1 },
+    { "code": "DATASVC", "name": "데이터서비스 월사용료", "columns": ["구분","모듈","세부기능","수량","기준단가(월)","제안단가(월)","제안금액(월)"], "calc": "제안금액=제안단가*수량", "has_subtotal": 1, "recurring": 1, "optional": 1 },
+    { "code": "MAINT", "name": "유지보수", "columns": ["구분","모듈","세부기능","수량","기준단가(월)","제안단가(월)","제안금액(월)"], "calc": "제안금액=제안단가*수량", "has_subtotal": 1, "recurring": 1 }
+  ],
+
+  "condition_sets": [
+    { "code": "COND_ONPREM", "name": "구축형 표준조건", "lines": ["프로젝트 투입공수 및 일정은 세부 업무요건에 따라 변동될 수 있습니다.","개발단가는 한국SW산업협회 노임 단가 기준 65% 적용","문서변환은 MS제품(워드, 엑셀, 파워포인트) 기준","서버 운영체제는 윈도우 서버를 권장","서버이중화 구성시 솔루션라이선스 50% 추가","본 프로젝트는 비상주로 진행합니다.","솔루션 유지보수는 검수후 12개월 무상, 이후 연 단위 진행","인프라 환경을 위한 별도의 하드웨어는 고객사 부담"] },
+    { "code": "COND_INSTALL", "name": "구축형 분납조건", "lines": ["솔루션 유지보수는 월 분납에 포함되어 진행됩니다.","기본 5년 약정 후 년단위 자동갱신","기타 구축형 표준조건 준용"] },
+    { "code": "COND_PCLOUD", "name": "Private Cloud 조건", "lines": ["사용료는 시스템 개시일부터 월별 과금","월 사용료에는 기본 솔루션유지보수가 포함","건수 증가에 따라 월 사용료는 재협의","누적 용량 100G 추가시 월 5만원","고객사 시스템(그룹웨어 등)과의 연동은 별도 협의"] },
+    { "code": "COND_SAAS", "name": "SaaS 조건", "lines": ["클라우드서비스 약정기간은 1년(또는 협의) 단위","인프라는 세포아소프트 제공","월 사용료에는 데이터사용료/인프라사용료/유지보수 포함","내부시스템 인터페이스는 API 형태로 연계","추가 커스터마이징은 상세 협의"] }
+  ],
+
+  "templates": [
+    {
+      "solution": "EXPENSE", "code": "EXPENSE_ONPREM", "name": "경비관리 구축형", "deployment": "ONPREM",
+      "brand": "EasyExpense™", "sort": 1,
+      "blocks": ["SOLUTION","LABOR","DATASVC","MAINT"],
+      "include_maintenance": 1, "include_component": 0,
+      "condition_set": "COND_ONPREM",
+      "default_items": ["POA_CARD","POA_INVOICE","POA_GENEXP","POA_APPROVAL","POA_DOCSCV","POA_MOBILE","POA_COMMON","POA_BUDGET","POA_IVA"],
+      "labor_default": [
+        { "role_code": "CONSULTANT", "label": "PM(IT 컨설턴트)", "task": "프로젝트 관리, 요건정의 및 GAP분석", "mm": 5 },
+        { "role_code": "DEV", "label": "개발(응용소프트웨어 개발자)", "task": "솔루션 커스터마이징(ERP연동 포함)", "mm": 12 },
+        { "role_code": "QA", "label": "기술지원(IT 품질관리자)", "task": "환경설정, 시스템설치 및 튜닝", "mm": 2 },
+        { "role_code": "SUPPORT", "label": "인프라 지원", "task": "인프라 구성 컨설팅 및 지원", "mm": 1 }
+      ],
+      "datasvc_default": ["SVC_MAP","SVC_OPI"]
+    },
+    {
+      "solution": "EXPENSE", "code": "EXPENSE_SAAS", "name": "경비관리 SaaS", "deployment": "SAAS",
+      "brand": "EasyExpense™", "sort": 2,
+      "blocks": ["SERVICE","LABOR"],
+      "include_maintenance": 0, "include_component": 0,
+      "condition_set": "COND_SAAS",
+      "default_items": ["EXP_SAAS_BASE"],
+      "service_default": ["EXP_SAAS_BASE","EXP_SAAS_TAX","EXP_SAAS_BIA","EXP_SAAS_IVA","EXP_SAAS_TRAVEL"],
+      "labor_default": [
+        { "role_code": "DEV", "label": "개발 및 기술지원", "task": "ERP 연동 개발", "mm": 1 }
+      ],
+      "note": "초기 개발비(ERP연동)는 LABOR 블록으로. 월 사용료 = SERVICE 블록."
+    },
+    {
+      "solution": "EPRO", "code": "EPRO_ONPREM", "name": "전자구매 구축형", "deployment": "ONPREM",
+      "brand": "Poa Pro™", "sort": 1,
+      "blocks": ["SOLUTION","LABOR","MAINT"],
+      "include_maintenance": 1, "include_component": 1,
+      "condition_set": "COND_ONPREM",
+      "default_items": ["POA_SOURCING","POA_ORDERING","POA_CONTRACT","POA_EV","POA_COMMON_EP","PKI_TOOLKIT"],
+      "labor_default": [
+        { "role_code": "PM", "label": "PM", "task": "솔루션 GAP 분석, 설계, 테스트", "mm": 4.5 },
+        { "role_code": "DEV", "label": "개발#1", "task": "상세설계, DB설계, 구현, 테스트", "mm": 5 },
+        { "role_code": "DEV", "label": "개발#2", "task": "솔루션 커스터마이징, 테스트", "mm": 5 },
+        { "role_code": "DEV", "label": "개발#3", "task": "상세설계, DB설계, 구현, 테스트", "mm": 3 },
+        { "role_code": "UIUX", "label": "개발#4", "task": "솔루션 커스터마이징, 테스트", "mm": 2.5 },
+        { "role_code": "ARCHITECT", "label": "IT 아키텍트", "task": "솔루션 포팅, 인터페이스 지원", "mm": 1 }
+      ],
+      "maint_default": { "role_code": "DEV", "task": "오픈 후 운영지원, 수정개발. 년 2M/M", "mm": 2 }
+    },
+    {
+      "solution": "EPRO", "code": "EPRO_SAAS", "name": "전자구매 클라우드(SaaS)", "deployment": "SAAS",
+      "brand": "Poa Pro™", "sort": 2,
+      "blocks": ["SETUP","SERVICE"],
+      "include_maintenance": 0, "include_component": 0,
+      "condition_set": "COND_SAAS",
+      "default_items": ["EPRO_S2C"],
+      "setup_default": ["EPRO_SETUP"],
+      "service_default": ["EPRO_S2C","EPRO_BIA","EPRO_INFRA_S2C"],
+      "note": "셋업비용(도메인/연계/추가개발) + 월 서비스료. CJ올리브 사례 기준."
+    },
+    {
+      "solution": "ESEAL", "code": "ESEAL_ONPREM_LUMP", "name": "전자인장 구축형(일시불)", "deployment": "ONPREM",
+      "brand": "EasySeal™", "sort": 1,
+      "blocks": ["SOLUTION","LABOR"],
+      "include_maintenance": 0, "include_component": 1,
+      "condition_set": "COND_ONPREM",
+      "default_items": ["POA_SEAL","POA_ECONTRACT","ESEAL_PKI"],
+      "labor_default": [
+        { "role_code": "PM", "label": "PM", "task": "프로젝트 총괄(PM), 분석, 설계", "mm": 1 },
+        { "role_code": "DEV", "label": "PL 및 개발 #1", "task": "커스터마이징, 인터페이스", "mm": 1.5 },
+        { "role_code": "DEV", "label": "개발 #2", "task": "커스터마이징, 안정화", "mm": 1 },
+        { "role_code": "SUPPORT", "label": "기술지원", "task": "서버설치, 보안점검", "mm": 0.2 }
+      ]
+    },
+    {
+      "solution": "ESEAL", "code": "ESEAL_ONPREM_INSTALL", "name": "전자인장 구축형(분납)", "deployment": "ONPREM",
+      "brand": "EasySeal™", "sort": 2,
+      "blocks": ["SOLUTION","LABOR","SERVICE"],
+      "include_maintenance": 1, "include_component": 1,
+      "condition_set": "COND_INSTALL",
+      "default_items": ["POA_SEAL","POA_ECONTRACT","ESEAL_PKI"],
+      "labor_default": [
+        { "role_code": "PM", "label": "PM(고급)", "task": "프로젝트 총괄, 분석, 설계", "mm": 1 },
+        { "role_code": "DEV", "label": "개발(중급)", "task": "커스터마이징, 인터페이스", "mm": 1.5 },
+        { "role_code": "DEV", "label": "개발(초급)", "task": "커스터마이징, 안정화", "mm": 1 },
+        { "role_code": "SUPPORT", "label": "기술지원(고급)", "task": "서버설치, 보안점검", "mm": 0.2 }
+      ],
+      "note": "솔루션 무상(0원) + 인건비 + 월사용료. 5년 약정."
+    },
+    {
+      "solution": "ESEAL", "code": "ESEAL_PCLOUD", "name": "전자인장 Private Cloud", "deployment": "PCLOUD",
+      "brand": "EasySeal™", "sort": 3,
+      "blocks": ["SETUP","SERVICE"],
+      "include_maintenance": 1, "include_component": 1,
+      "condition_set": "COND_PCLOUD",
+      "default_items": ["ESEAL_PC"],
+      "setup_default": ["ESEAL_PC_SETUP"],
+      "service_default": ["ESEAL_PC","ESEAL_PC_INFRA","ESEAL_PC_STORAGE"],
+      "note": "셋업비용 + 서비스이용료(솔루션 라이선스, 유지보수 6년차~, 연동API, Private Server)."
+    },
+    {
+      "solution": "ESEAL", "code": "ESEAL_SAAS", "name": "전자인장 SaaS", "deployment": "SAAS",
+      "brand": "EasySeal™", "sort": 4,
+      "blocks": ["SETUP","SERVICE"],
+      "include_maintenance": 0, "include_component": 0,
+      "condition_set": "COND_SAAS",
+      "default_items": ["ESEAL_SAAS"],
+      "setup_default": ["ESEAL_SETUP"],
+      "service_default": ["ESEAL_SAAS","ESEAL_STORAGE"],
+      "note": "셋업비용 + 서비스이용료. Private Server 0원 케이스."
+    }
+  ]
+}
