@@ -9,6 +9,7 @@ import { renderPricing } from './views/pricing.js';
 import { renderSettings } from './views/settings.js';
 import { renderMaster } from './views/master.js';
 import { renderLaborRates } from './views/labor-rates.js';
+import { renderTemplates } from './views/templates.js';
 
 export const store = {
   user: null,
@@ -48,6 +49,7 @@ const routes = [
   { re: /^#\/master$/, admin: true, view: () => renderMaster(viewEl()) },
   { re: /^#\/pricing$/, admin: true, view: () => renderPricing(viewEl()) },
   { re: /^#\/labor-rates$/, admin: true, view: () => renderLaborRates(viewEl()) },
+  { re: /^#\/templates$/, admin: true, view: () => renderTemplates(viewEl()) },
   { re: /^#\/settings$/, admin: true, view: () => renderSettings(viewEl()) },
 ];
 
@@ -58,6 +60,7 @@ async function router() {
     : hash.startsWith('#/master') ? 'master'
     : hash.startsWith('#/pricing') ? 'pricing'
     : hash.startsWith('#/labor-rates') ? 'labor-rates'
+    : hash.startsWith('#/templates') ? 'templates'
     : hash.startsWith('#/settings') ? 'settings' : 'quotes';
   document.querySelectorAll('.sidebar-nav a').forEach((a) => {
     a.classList.toggle('active', a.dataset.nav === nav);

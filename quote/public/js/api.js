@@ -77,6 +77,14 @@ export const api = {
   updateLaborRate: (id, body) => req('PUT', `/api/labor-rates/${id}`, body),
   setActiveLaborYear: (id) => req('PATCH', `/api/labor-rates/years/${id}/active`),
 
+  // 블록/견적조건/템플릿
+  blocks: () => req('GET', '/api/blocks'),
+  conditions: () => req('GET', '/api/conditions'),
+  templates: (solution) => req('GET', '/api/templates' + (solution ? `?solution=${solution}` : '')),
+  templateDetail: (code) => req('GET', `/api/templates/${encodeURIComponent(code)}`),
+  createTemplate: (body) => req('POST', '/api/templates', body),
+  updateTemplate: (id, body) => req('PUT', `/api/templates/${id}`, body),
+
   // 설정
   getSettings: () => req('GET', '/api/settings'),
   putSettings: (settings) => req('PUT', '/api/settings', { settings }),
