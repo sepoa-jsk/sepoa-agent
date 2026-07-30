@@ -3,7 +3,7 @@
 const express = require('express');
 const { query, pool } = require('../lib/db');
 const { requireAuth, apiKeyOrAuth } = require('../lib/auth');
-const { calcQuote } = require('../lib/quote-service');
+const { calcQuote, computeDiscountAmount } = require('../lib/quote-service');
 const { nextQuoteNo } = require('../lib/numbering');
 const { buildQuoteWorkbook } = require('../lib/excel');
 
@@ -79,7 +79,7 @@ router.post('/calculate', apiKeyOrAuth, async (req, res, next) => {
     if (!Array.isArray(req.body.sections) || req.body.sections.length === 0) {
       return res.status(400).json({ error: 'NO_SECTIONS', message: '최소 1개 섹션이 필요합니다.' });
     }
-    const result = await calcQuote({ sections: req.body.sections, discount: req.body.discount });
+    const result = await calcFor(req.body);
     res.json(result);
   } catch (err) {
     next(err);
@@ -114,29 +114,85 @@ async function insertSections(conn, quoteId, sections) {
     const sec = sections[si];
     const [sr] = await conn.execute(
       `INSERT INTO sq_quote_sections
-        (quote_id, solution, deployment, company_class, contract_months, params, subtotal, sort)
-       VALUES (?,?,?,?,?,?,?,?)`,
+        (quote_id, solution, template_code, brand, deployment, company_class, contract_months, params, subtotal, sort)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
       [
-        quoteId, sec.solution, sec.deployment, sec.companyClass ?? null,
+        quoteId, sec.solution, sec.template_code ?? null, sec.brand ?? null, sec.deployment,
+        sec.companyClass ?? sec.company_class ?? null,
         sec.contract_months ?? 1, sec.params ? JSON.stringify(sec.params) : null,
         sec.subtotal, si,
       ]
     );
     const sectionId = sr.insertId;
-    for (let ii = 0; ii < sec.items.length; ii++) {
+    for (let ii = 0; ii < (sec.items || []).length; ii++) {
       const it = sec.items[ii];
+      // 2단가: proposed_price(제안단가)를 unit_price 와 함께 저장(unit_price=제안단가로 의미 이관)
+      const proposed = it.proposed_price != null ? Math.round(Number(it.proposed_price)) : (it.unit_price != null ? Math.round(Number(it.unit_price)) : null);
       await conn.execute(
         `INSERT INTO sq_quote_items
-          (section_id, item_code, category, name, spec, qty, unit, months, unit_price, base_price, amount, note, sort)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          (section_id, item_code, block_code, category, name, spec, qty, unit, months, unit_price, base_price, proposed_price, amount, note, sort)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
-          sectionId, it.item_code ?? null, it.category ?? null, it.name, it.spec ?? null,
-          it.qty ?? 1, it.unit ?? null, it.months ?? 1, it.unit_price ?? 0, it.base_price ?? null, it.amount ?? 0,
+          sectionId, it.item_code ?? null, it.block_code ?? null, it.category ?? null, it.name, it.spec ?? null,
+          it.qty ?? 1, it.unit ?? null, it.months ?? 1, proposed ?? 0,
+          it.base_price != null ? Math.round(Number(it.base_price)) : null, proposed, it.amount ?? 0,
           it.note ?? null, ii,
         ]
       );
     }
+    // 인건비(LABOR) 블록 라인 스냅샷
+    const labor = Array.isArray(sec.labor) ? sec.labor : [];
+    for (let li = 0; li < labor.length; li++) {
+      const l = labor[li];
+      await conn.execute(
+        `INSERT INTO sq_quote_labor
+          (section_id, role_code, role_name, task, mm, base_price, proposed_price, amount, sort)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [
+          sectionId, l.role_code, l.role_name ?? null, l.task ?? null, l.mm ?? 0,
+          l.base_price != null ? Math.round(Number(l.base_price)) : null,
+          l.proposed_price != null ? Math.round(Number(l.proposed_price)) : null,
+          l.amount ?? 0, li,
+        ]
+      );
+    }
   }
+}
+
+// 블록형 견적: 클라이언트 스냅샷(기준/제안단가·금액)을 엔진 재계산 없이 그대로 집계.
+function snapshotCalc(body) {
+  const sections = (body.sections || []).map((sec) => {
+    const items = (sec.items || []).map((it) => {
+      const proposed = Number(it.proposed_price ?? it.unit_price ?? 0);
+      const amount = it.amount != null ? Math.round(Number(it.amount)) : Math.round(proposed * (Number(it.qty) || 1));
+      return { ...it, proposed_price: proposed, amount };
+    });
+    const labor = (sec.labor || []).map((l) => {
+      const proposed = Number(l.proposed_price ?? 0);
+      const amount = l.amount != null ? Math.round(Number(l.amount)) : Math.round(proposed * (Number(l.mm) || 0));
+      return { ...l, proposed_price: proposed, amount };
+    });
+    const subtotal = items.reduce((a, i) => a + (Number(i.amount) || 0), 0) + labor.reduce((a, l) => a + (Number(l.amount) || 0), 0);
+    return { ...sec, items, labor, subtotal };
+  });
+  const supply = sections.reduce((a, s) => a + s.subtotal, 0);
+  const discount = body.discount || { type: null, value: 0 };
+  const discountAmount = computeDiscountAmount(discount, supply);
+  const afterDiscount = supply - discountAmount;
+  const vat = Math.round(afterDiscount * 0.1);
+  return {
+    sections, supply_amount: supply,
+    discount_type: discount.type || null, discount_value: discount.value ?? 0,
+    discount_amount: discountAmount, vat_amount: vat, total_amount: afterDiscount + vat,
+  };
+}
+
+// 블록형 저장 여부: 섹션에 labor 배열 또는 item.block_code 가 있으면 스냅샷 경로.
+function isBlockMode(body) {
+  return (body.sections || []).some((s) => Array.isArray(s.labor) || (s.items || []).some((i) => i.block_code));
+}
+function calcFor(body) {
+  return isBlockMode(body) ? snapshotCalc(body) : calcQuote({ sections: body.sections, discount: body.discount });
 }
 
 // 견적 전체(헤더+섹션+품목+공급자설정) 로드
@@ -152,12 +208,21 @@ async function loadQuote(id) {
     const ph = ids.map(() => '?').join(',');
     items = await query(`SELECT * FROM sq_quote_items WHERE section_id IN (${ph}) ORDER BY sort, id`, ids);
   }
+  let laborRows = [];
+  if (sections.length > 0) {
+    const ids = sections.map((s) => s.id);
+    const ph = ids.map(() => '?').join(',');
+    laborRows = await query(`SELECT * FROM sq_quote_labor WHERE section_id IN (${ph}) ORDER BY sort, id`, ids);
+  }
   const bySection = new Map(sections.map((s) => [s.id, []]));
+  const laborBySection = new Map(sections.map((s) => [s.id, []]));
   for (const it of items) bySection.get(it.section_id)?.push(it);
+  for (const l of laborRows) laborBySection.get(l.section_id)?.push(l);
   quote.sections = sections.map((s) => ({
     ...s,
     params: s.params ? safeJson(s.params) : null,
     items: bySection.get(s.id) || [],
+    labor: laborBySection.get(s.id) || [],
   }));
   return quote;
 }
@@ -181,7 +246,7 @@ router.post('/', requireAuth, async (req, res, next) => {
   }
   const conn = await pool.getConnection();
   try {
-    const calc = await calcQuote({ sections: body.sections, discount: body.discount });
+    const calc = await calcFor(body);
     const quoteDate = body.quote_date ? String(body.quote_date).slice(0, 10) : new Date().toISOString().slice(0, 10);
     await conn.beginTransaction();
     const quoteNo = await nextQuoteNo(conn, quoteDate);
@@ -247,7 +312,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
     const [existing] = await conn.execute('SELECT id, quote_date FROM sq_quotes WHERE id = ?', [id]);
     if (existing.length === 0) { conn.release(); return res.status(404).json({ error: 'NOT_FOUND' }); }
 
-    const calc = await calcQuote({ sections: body.sections, discount: body.discount });
+    const calc = await calcFor(body);
     await conn.beginTransaction();
     // 섹션 삭제(CASCADE로 품목 삭제) 후 재삽입
     await conn.execute('DELETE FROM sq_quote_sections WHERE quote_id = ?', [id]);
