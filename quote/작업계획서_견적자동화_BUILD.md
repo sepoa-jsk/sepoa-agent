@@ -79,38 +79,44 @@ DoD
 ### 5-C. 견적 작성·계산 (예상 2일) — ★ 데이터 마이그레이션 주의
 
 사전
-- [ ] **DB 백업** (기존 견적 데이터 존재 시). 백업 완료를 사용자에게 먼저 확인받기
+- [x] **DB 백업** — 사용자가 "백업 불필요" 결정(2026-07-30). 대신 영향 테이블 JSON 스냅샷을
+      스크래치패드에 덤프 후 진행. 마이그레이션은 비파괴로 설계(기존 섹션/품목 보존).
+
+모듈 마스터 (WBS 외 선행작업 — 5-C DoD 달성에 필수)
+- [x] seed/modules-seed.json: 전자인장 15종을 실측 PDF에서 역산 투입 (온프레미스/PCloud/SaaS)
+- [ ] 경비(EXPENSE)·전자구매(PROCURE) 모듈 34건은 여전히 미등록 → 해당 템플릿 견적 불가
 
 DB
-- [ ] sq_quotes 확장: quote_type, deployment, template_code, onetime_total, monthly_total, discount_type, discount_value, round_unit(기본100000)
-- [ ] sq_quote_blocks(견적 내 블록 인스턴스) 신설
-- [ ] sq_quote_items 확장: block_id, base_price, proposed_price (기존 unit_price→proposed_price 백필, base_price=정가 백필)
-- [ ] sq_quote_labor 신설(role_code, role_label, grade, task, mm, base_price, proposed_price, amount, month_alloc JSON)
-- [ ] 기존 sections/items → blocks 구조 마이그레이션(데이터 있으면 백필, 없으면 재생성)
+- [x] sq_quotes 확장: quote_type, deployment, template_code, onetime_total, monthly_total, discount_type, discount_value, round_unit(기본100000)
+- [x] sq_quote_blocks(견적 내 블록 인스턴스) 신설
+- [x] sq_quote_items 확장: block_id, base_price, proposed_price (004에서 백필 완료)
+- [x] sq_quote_labor 신설(+ block_id, role_label, grade, month_alloc)
+- [x] 기존 sections/items → blocks 구조 마이그레이션 (블록 12개 생성, 금액 불일치 0건)
 
 엔진(lib/quote-engine.js 확장)
-- [ ] 블록별 계산: SOLUTION/SETUP/LICENSE(=proposed×qty), LABOR(base=apply_price, amount=proposed×mm), SERVICE/DATASVC(월, recurring)
-- [ ] SUMMARY: 소계합 → 특별DC(금액/%) → 십만절사 → VAT. 일시불/월 분리 산출
-- [ ] 인건비 month_alloc 검증(Σ=mm)
-- [ ] 단위 테스트: 아래 실측 재현 케이스
+- [x] 블록별 계산: SOLUTION/SETUP/LICENSE(=proposed×qty), LABOR(amount=proposed×mm), SERVICE/DATASVC(월, recurring)
+- [x] SUMMARY: 소계합 → 특별DC(금액/%/최종금액) → 십만절사 → VAT. 일시불/월 분리 산출
+- [x] 인건비 month_alloc 검증(Σ=mm)
+- [x] 단위 테스트: 실측 재현 17종 (test/quote-block.test.js)
 
 API
-- [ ] POST /api/quotes/apply-template (블록·기본모듈·인건비 기본 채운 초안 반환, 미저장)
-- [ ] POST /api/quotes/calculate (블록 소계+인건비+일시불/월 분리+특별DC+절사+VAT)
-- [ ] POST/GET/PUT/PATCH/DELETE /api/quotes(:id)
+- [x] POST /api/quotes/apply-template (블록·기본모듈·인건비 기본 채운 초안 반환, 미저장)
+- [x] POST /api/quotes/calculate (블록 소계+인건비+일시불/월 분리+특별DC+절사+VAT)
+- [x] POST/GET/PUT/PATCH/DELETE /api/quotes(:id) — blocks 페이로드 저장/재조회
 
 UI (견적 작성)
-- [ ] 템플릿 선택 → apply-template 호출 → 블록 카드 자동 생성
-- [ ] 블록별 모듈 선택기(필수 고정/선택 토글, COMMON 뱃지)
-- [ ] 인건비 블록: 역할·공수(MM)·제안단가 편집, 기준단가 자동(active 연도)
-- [ ] (옵션) 인력투입계획: has_labor_plan이면 월별(M/M1/M2/M3…) 배분 입력
-- [ ] 실시간 합계(일시불/월) 표시, 특별DC 입력(금액/%)
-- [ ] 엑셀 붙여넣기 입력(모듈 코드/수량) — 기존 기획 반영
+- [x] 템플릿 선택 → apply-template 호출 → 블록 카드 자동 생성
+- [~] 블록별 모듈 선택기 — 행 추가/삭제·수량 편집은 되나 "필수 고정/COMMON 뱃지" 토글 미구현
+- [x] 인건비 블록: 역할·공수(MM)·제안단가 편집, 기준단가 자동(active 연도)
+- [x] (옵션) 인력투입계획: has_labor_plan이면 월별(M/M1/M2/M3…) 배분 입력 + Σ검증 경고
+- [x] 실시간 합계(일시불/월) 표시, 특별DC 입력(금액/%/최종금액) + 절사단위 선택
+- [x] 엑셀 붙여넣기 입력(모듈 코드/수량)
 
 DoD (실측 재현)
-- [ ] SK이터닉스 PCloud: 일시납 100,000,000 / 월 1,275,000
-- [ ] 솔브레인 온프레미스: 솔루션 50,000,000 + 인건비 36,600,000 → 특별DC → 60,000,000
-- [ ] 저장·재조회 정상, npm test 통과, 요약 보고
+- [x] SK이터닉스 PCloud: 일시납 100,000,000 / 월 1,275,000
+- [x] 솔브레인 온프레미스: 솔루션 50,000,000 + 인건비 36,600,000 → 특별DC → 60,000,000
+- [x] 솔브레인 전자인장계약: 솔루션 70,000,000 → 106,600,000 → 80,000,000 (추가 검증)
+- [x] 저장·재조회 정상 (E2E 23/23 PASS), npm test 통과 (57/57), 요약 보고
 
 ### 5-D. PDF 출력 (예상 2일)
 

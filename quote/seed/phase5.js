@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
-const SECTIONS = ['labor', 'blocks', 'conditions', 'templates'];
+const SECTIONS = ['labor', 'blocks', 'conditions', 'modules', 'templates'];
 const forceArg = process.argv.find((a) => a === '--force' || a.startsWith('--force='));
 const forced = !forceArg ? new Set()
   : new Set(forceArg.includes('=') ? forceArg.split('=')[1].split(',').map((s) => s.trim()).filter(Boolean) : SECTIONS);
@@ -21,6 +21,7 @@ for (const s of forced) if (!SECTIONS.includes(s)) { console.error(`알 수 없�
 const isForced = (s) => forced.has(s);
 const laborSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'labor-rates-seed.json'), 'utf8'));
 const tplSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'templates-seed.json'), 'utf8'));
+const modSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'modules-seed.json'), 'utf8'));
 
 const n = (v) => (v === undefined ? null : v);
 // 블록 → 시드의 기본항목 키 매핑.
@@ -104,6 +105,38 @@ async function main() {
       done.conditions = `세트 ${sets.length} / 라인 ${ln}`;
     }
 
+    // 3.5) 모듈 마스터 (sq_price_items UPSERT — 템플릿 기본모듈이 참조하는 코드)
+    //      기존 Phase 0~4 품목은 건드리지 않고, modules-seed 의 코드만 갱신/추가한다.
+    {
+      const groups = modSeed.modules || [];
+      const codes = groups.flatMap((g) => (g.items || []).map((i) => i.code));
+      const [[{ c: have }]] = await conn.query(
+        `SELECT COUNT(*) AS c FROM sq_price_items WHERE code IN (${codes.map(() => '?').join(',')})`, codes);
+      if (have < codes.length || isForced('modules')) {
+        let mi = 0;
+        for (const g of groups) {
+          for (const it of g.items || []) {
+            await conn.query(
+              `INSERT INTO sq_price_items
+                 (solution, deployment, block, category, code, name, spec, pricing_type, base_price,
+                  unit, qty_default, recurring, note, active, sort)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'FIXED', ?, ?, ?, ?, ?, 1, ?)
+               ON DUPLICATE KEY UPDATE
+                 solution=VALUES(solution), deployment=VALUES(deployment), block=VALUES(block),
+                 category=VALUES(category), name=VALUES(name), spec=VALUES(spec),
+                 pricing_type=VALUES(pricing_type), base_price=VALUES(base_price), unit=VALUES(unit),
+                 qty_default=VALUES(qty_default), recurring=VALUES(recurring), note=VALUES(note),
+                 active=VALUES(active), sort=VALUES(sort)`,
+              [g.solution, g.deployment, g.block, g.category, it.code, it.name, n(it.spec),
+               it.base_price ?? 0, n(it.unit), it.qty_default ?? 1, it.recurring ?? 0, n(it.note), it.sort ?? 0]
+            );
+            mi++;
+          }
+        }
+        done.modules = `${mi} (upsert, 기존 ${have}건 존재)`;
+      }
+    }
+
     // 4) 템플릿 (헤더 + 블록 + 기본모듈 + 인건비 기본)
     if ((await count('sq_quote_templates')) === 0) {
       let ti = 0, tl = 0, tb = 0;
@@ -125,9 +158,13 @@ async function main() {
           const bcode = blocks[bi];
           await conn.query('INSERT INTO sq_template_blocks (template_id, block_code, sort) VALUES (?, ?, ?)', [tid, bcode, bi]); tb++;
 
+          // 항목은 "코드" 또는 {code, qty} — 실측상 수량 0(참고라인)인 모듈이 있다
           const items = t[BLOCK_ITEM_KEY[bcode]] || [];
           for (let j = 0; j < items.length; j++) {
-            await conn.query('INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, sort) VALUES (?, ?, ?, 1, ?)', [tid, bcode, items[j], j]); ti++;
+            const raw = items[j];
+            const icode = typeof raw === 'string' ? raw : raw.code;
+            const iqty = typeof raw === 'string' ? 1 : (raw.qty ?? 1);
+            await conn.query('INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, sort) VALUES (?, ?, ?, ?, ?)', [tid, bcode, icode, iqty, j]); ti++;
           }
           const labor = t[BLOCK_LABOR_KEY[bcode]] || [];
           for (let j = 0; j < labor.length; j++) {
