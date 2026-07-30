@@ -143,53 +143,81 @@ async function buildQuoteWorkbook(quote, settings = {}, masters = {}) {
 
   let row = 11;
 
-  // ── ▣ 솔루션 견적 ──
-  setCell(`B${row}`, '▣ 솔루션 견적', { bold: true, size: 11, color: ACCENT });
-  setCell(`H${row}`, '(단위 : 원)', { size: 8.5, h: 'right', color: 'FF888888' });
-  row += 1;
-  row = table(row, ['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액'],
-    solItems, nameOfSolution(solutionCode) || '솔루션', '식', baseOfSolution);
-  row = subtotalRow(row, '솔루션 소계', solSub, null);
-  row += 1;
+  // 블록형 견적이면 블록 단위로, 아니면 기존 솔루션/인건비 고정 구조로 렌더.
+  const isBlock = (quote.sections || []).some((s) => (s.labor || []).length || (s.items || []).some((it) => it.block_code));
+  const blockDefs = masters.blockDefs || {};
 
-  // ── ▣ 시스템 구축 견적 ──
-  setCell(`B${row}`, '▣ 시스템 구축 견적', { bold: true, size: 11, color: ACCENT });
-  row += 1;
-  // 세부내역(D)이 비어 있으면 협회 직군(등급)으로 채운다.
-  const labRows = labItems.map((it) => ({ ...it, spec: it.spec || (laborInfo[it.item_code] && laborInfo[it.item_code].grade) || '' }));
-  row = table(row, ['구분', '역할', '세부내역(등급)', '공수(MM)', '기준단가', '제안단가', '제안금액'],
-    labRows, '시스템구축\n개발인건비', 'MM', baseOfLabor);
-  row = subtotalRow(row, '인건비 소계 (②)', labSub, mmSum);
-
-  // ── 구축금액(①+②) ──
-  row = totalRow(row, '구축금액 (①+②)', buildAmt, false);
-  let buildFinal = buildAmt;
-  if (disc > 0) {
-    row = totalRow(row, '특별 DC', -disc, false);
-    buildFinal = buildAmt - disc;
-    row = totalRow(row, '구축금액 (특별 DC 적용)', buildFinal, true);
-  }
-
-  // ── ▣ 유지보수 견적 (해당 항목이 있을 때만) ──
-  if (maintItems.length) {
-    row += 1;
-    setCell(`B${row}`, '▣ 유지보수 견적', { bold: true, size: 11, color: ACCENT });
-    row += 1;
-    row = table(row, ['구분', '역할', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액'],
-      maintItems, '유지보수', 'MM', baseOfLabor);
-    row = subtotalRow(row, '유지보수 소계', maintSub, maintMM);
-  }
-
-  // ── 견적 합계 → 부가세 → 총 견적가 ──
-  const totalBeforeVat = buildFinal + maintSub; // = finalAmt
-  row = totalRow(row, maintItems.length ? '견적 합계 (구축 + 유지보수)' : '최종견적금액', totalBeforeVat, true);
-  if (!vatIncluded) {
-    row = totalRow(row, '부가세 (VAT 10%)', vat, false);
+  if (isBlock) {
+    const groups = {};
+    const ensure = (code) => (groups[code] = groups[code] || { code, name: (blockDefs[code] && blockDefs[code].name) || code, recurring: !!(blockDefs[code] && blockDefs[code].recurring), sort: (blockDefs[code] && blockDefs[code].sort) ?? 99, rows: [] });
+    for (const sec of quote.sections || []) {
+      for (const it of sec.items || []) ensure(it.block_code || 'ETC').rows.push({ name: it.name, spec: it.spec || '', qty: Number(it.qty) || 0, base_price: it.base_price, unit_price: it.proposed_price != null ? it.proposed_price : it.unit_price, amount: it.amount });
+      for (const l of sec.labor || []) ensure('LABOR').rows.push({ name: l.role_name || l.role_code, spec: l.task || '', qty: Number(l.mm) || 0, base_price: l.base_price, unit_price: l.proposed_price, amount: l.amount });
+    }
+    const order = Object.values(groups).sort((a, b) => a.sort - b.sort);
+    for (let gi = 0; gi < order.length; gi++) {
+      const g = order[gi];
+      const isLabor = g.code === 'LABOR';
+      setCell(`B${row}`, '▣ ' + g.name + (g.recurring ? ' (월정액)' : ''), { bold: true, size: 11, color: ACCENT });
+      if (gi === 0) setCell(`H${row}`, '(단위 : 원)', { size: 8.5, h: 'right', color: 'FF888888' });
+      row += 1;
+      row = table(row, ['구분', isLabor ? '역할' : '모듈', '세부내역', isLabor ? '공수(MM)' : '수량', '기준단가', g.recurring ? '제안단가(월)' : '제안단가', g.recurring ? '제안금액(월)' : '제안금액'], g.rows, g.name, isLabor ? 'MM' : '식');
+      const sub = g.rows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+      row = subtotalRow(row, g.name + ' 소계' + (g.recurring ? '(월)' : ''), sub, isLabor ? g.rows.reduce((a, r) => a + Number(r.qty), 0) : null);
+      row += 1;
+    }
+    const afterDc = total - disc;
+    row = totalRow(row, '블록 소계 합계', total, false);
+    if (disc > 0) row = totalRow(row, '특별 DC', -disc, false);
+    row = totalRow(row, '공급가액', vatIncluded ? Math.round(afterDc / 1.1) : afterDc, true);
+    row = totalRow(row, vatIncluded ? '부가세 (포함)' : '부가세 (별도, 10%)', vat, false);
     row = totalRow(row, '총 견적가', grand, true, true);
+    row += 1;
   } else {
-    row = totalRow(row, '총 견적가 (부가세 포함)', grand, true, true);
+    // ── ▣ 솔루션 견적 ──
+    setCell(`B${row}`, '▣ 솔루션 견적', { bold: true, size: 11, color: ACCENT });
+    setCell(`H${row}`, '(단위 : 원)', { size: 8.5, h: 'right', color: 'FF888888' });
+    row += 1;
+    row = table(row, ['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액'],
+      solItems, nameOfSolution(solutionCode) || '솔루션', '식', baseOfSolution);
+    row = subtotalRow(row, '솔루션 소계', solSub, null);
+    row += 1;
+
+    // ── ▣ 시스템 구축 견적 ──
+    setCell(`B${row}`, '▣ 시스템 구축 견적', { bold: true, size: 11, color: ACCENT });
+    row += 1;
+    const labRows = labItems.map((it) => ({ ...it, spec: it.spec || (laborInfo[it.item_code] && laborInfo[it.item_code].grade) || '' }));
+    row = table(row, ['구분', '역할', '세부내역(등급)', '공수(MM)', '기준단가', '제안단가', '제안금액'],
+      labRows, '시스템구축\n개발인건비', 'MM', baseOfLabor);
+    row = subtotalRow(row, '인건비 소계 (②)', labSub, mmSum);
+
+    row = totalRow(row, '구축금액 (①+②)', buildAmt, false);
+    let buildFinal = buildAmt;
+    if (disc > 0) {
+      row = totalRow(row, '특별 DC', -disc, false);
+      buildFinal = buildAmt - disc;
+      row = totalRow(row, '구축금액 (특별 DC 적용)', buildFinal, true);
+    }
+
+    if (maintItems.length) {
+      row += 1;
+      setCell(`B${row}`, '▣ 유지보수 견적', { bold: true, size: 11, color: ACCENT });
+      row += 1;
+      row = table(row, ['구분', '역할', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액'],
+        maintItems, '유지보수', 'MM', baseOfLabor);
+      row = subtotalRow(row, '유지보수 소계', maintSub, maintMM);
+    }
+
+    const totalBeforeVat = buildFinal + maintSub;
+    row = totalRow(row, maintItems.length ? '견적 합계 (구축 + 유지보수)' : '최종견적금액', totalBeforeVat, true);
+    if (!vatIncluded) {
+      row = totalRow(row, '부가세 (VAT 10%)', vat, false);
+      row = totalRow(row, '총 견적가', grand, true, true);
+    } else {
+      row = totalRow(row, '총 견적가 (부가세 포함)', grand, true, true);
+    }
+    row += 1;
   }
-  row += 1;
 
   // ── ▣ 견적조건 ──
   setCell(`B${row}`, '▣ 견적조건', { bold: true, size: 11, color: ACCENT });

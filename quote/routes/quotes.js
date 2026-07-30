@@ -405,6 +405,18 @@ async function buildMasters(quote) {
   } catch (e) {
     console.error('[quote] 임금단가 마스터 로드 실패:', e.message);
   }
+  // 블록 정의(블록형 견적서 렌더용)
+  try {
+    const bl = await query('SELECT code, name, `columns`, recurring, has_subtotal, sort FROM sq_blocks ORDER BY sort');
+    masters.blockDefs = {};
+    for (const b of bl) {
+      let cols = b.columns;
+      if (typeof cols === 'string') { try { cols = JSON.parse(cols); } catch { cols = []; } }
+      masters.blockDefs[b.code] = { name: b.name, columns: Array.isArray(cols) ? cols : [], recurring: !!b.recurring, has_subtotal: !!b.has_subtotal, sort: b.sort };
+    }
+  } catch (e) {
+    console.error('[quote] 블록 정의 로드 실패:', e.message);
+  }
   return masters;
 }
 

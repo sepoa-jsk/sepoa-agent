@@ -75,6 +75,55 @@ function renderQuoteHtml(quote, settings = {}, masters = {}) {
     }).join('');
   };
   const labRows = labItems.map((it) => ({ ...it, spec: it.spec || (laborInfo[it.item_code] && laborInfo[it.item_code].grade) || '' }));
+
+  // ── 블록형 견적 여부 + 블록 단위 렌더 ──
+  const isBlock = (quote.sections || []).some((s) => (s.labor || []).length || (s.items || []).some((it) => it.block_code));
+  const blockDefs = masters.blockDefs || {};
+  let bodyTablesHtml, totalsHtml;
+
+  if (isBlock) {
+    const groups = {};
+    const ensure = (code) => (groups[code] = groups[code] || { code, name: (blockDefs[code] && blockDefs[code].name) || code, recurring: !!(blockDefs[code] && blockDefs[code].recurring), sort: (blockDefs[code] && blockDefs[code].sort) ?? 99, rows: [] });
+    for (const sec of quote.sections || []) {
+      for (const it of sec.items || []) ensure(it.block_code || 'ETC').rows.push({ name: it.name, spec: it.spec || '', qty: Number(it.qty) || 0, base: it.base_price, proposed: it.proposed_price != null ? it.proposed_price : it.unit_price, amount: it.amount });
+      for (const l of sec.labor || []) ensure('LABOR').rows.push({ name: l.role_name || l.role_code, spec: l.task || '', qty: Number(l.mm) || 0, base: l.base_price, proposed: l.proposed_price, amount: l.amount, isLabor: true });
+    }
+    const order = Object.values(groups).sort((a, b) => a.sort - b.sort);
+    const blockTable = (g) => {
+      const isLabor = g.code === 'LABOR';
+      const sub = g.rows.reduce((a, r) => a + (Number(r.amount) || 0), 0);
+      const body = g.rows.length ? g.rows.map((r, i) =>
+        `<tr>${i === 0 ? `<td class="gubun" rowspan="${g.rows.length}">${esc(g.name)}</td>` : ''}<td>${esc(r.name)}</td><td>${esc(r.spec)}</td><td class="c">${r.qty}</td><td class="r">${r.base != null && r.base > 0 ? won(r.base) : ''}</td><td class="r">${won(r.proposed)}</td><td class="r b">${won(r.amount)}</td></tr>`).join('')
+        : '<tr><td colspan="7" class="c muted">(항목 없음)</td></tr>';
+      return `<div class="sec">▣ ${esc(g.name)}${g.recurring ? ' <span style="font-weight:400;color:#888">(월정액)</span>' : ''}</div>`
+        + `<table class="grid"><tr><th>구분</th><th>${isLabor ? '역할' : '모듈'}</th><th>세부내역</th><th>${isLabor ? '공수(MM)' : '수량'}</th><th>기준단가</th><th>${g.recurring ? '제안단가(월)' : '제안단가'}</th><th>${g.recurring ? '제안금액(월)' : '제안금액'}</th></tr>`
+        + `${body}<tr class="subrow"><td colspan="6" class="r">${esc(g.name)} 소계${g.recurring ? '(월)' : ''}</td><td class="r">${won(sub)}</td></tr></table>`;
+    };
+    bodyTablesHtml = order.map(blockTable).join('\n');
+    const afterDc = total - disc; // = 공급가액(별도) 기준
+    totalsHtml = `<table class="tot">
+      <tr><td class="r">블록 소계 합계</td><td class="r b" style="width:150px">${won(total)}</td></tr>
+      ${disc > 0 ? `<tr><td class="r">특별 DC</td><td class="r">-${won(disc)}</td></tr>` : ''}
+      <tr><td class="r b">공급가액</td><td class="r b">${won(vatIncluded ? Math.round(afterDc / 1.1) : afterDc)}</td></tr>
+      <tr><td class="r">부가세 ${vatIncluded ? '(포함)' : '(별도, 10%)'}</td><td class="r">${won(vat)}</td></tr>
+      <tr><td class="r grand">총 견적가</td><td class="r grand">${won(grand)} 원</td></tr></table>`;
+  } else {
+    bodyTablesHtml = `<div class="sec">▣ 솔루션 견적</div>
+      <table class="grid"><tr><th>구분</th><th>모듈</th><th>세부기능</th><th>수량</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>
+      ${rows(solItems, nameOfSolution(solutionCode) || '솔루션', baseOfSolution)}
+      <tr class="subrow"><td colspan="6" class="r">솔루션 소계 (①)</td><td class="r">${won(solSub)}</td></tr></table>
+      <div class="sec">▣ 시스템 구축 견적 (인건비)</div>
+      <table class="grid"><tr><th>구분</th><th>역할</th><th>세부내역(등급)</th><th>공수(MM)</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>
+      ${rows(labRows, '시스템구축', baseOfLabor)}
+      <tr class="subrow"><td colspan="6" class="r">인건비 소계 (②)</td><td class="r">${won(labSub)}</td></tr></table>
+      ${maintItems.length ? `<div class="sec">▣ 유지보수 견적</div><table class="grid"><tr><th>구분</th><th>역할</th><th>세부내역</th><th>공수(MM)</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>${rows(maintItems, '유지보수', baseOfLabor)}<tr class="subrow"><td colspan="6" class="r">유지보수 소계</td><td class="r">${won(maintSub)}</td></tr></table>` : ''}`;
+    totalsHtml = `<table class="tot">
+      <tr><td class="r">구축금액 (①+②)</td><td class="r b" style="width:150px">${won(buildAmt)}</td></tr>
+      ${disc > 0 ? `<tr><td class="r">특별 DC</td><td class="r">-${won(disc)}</td></tr>` : ''}
+      <tr><td class="r b">${maintItems.length ? '견적 합계 (구축 + 유지보수)' : '최종견적금액'}</td><td class="r b">${won(finalAmt)}</td></tr>
+      ${!vatIncluded ? `<tr><td class="r">부가세 (VAT 10%)</td><td class="r">${won(vat)}</td></tr>` : ''}
+      <tr><td class="r grand">총 견적가${vatIncluded ? ' (부가세 포함)' : ''}</td><td class="r grand">${won(grand)} 원</td></tr></table>`;
+  }
   const bandFallbackTop = '<div style="background:#A6CE39"></div><div style="background:#F5C400"></div><div style="background:#EC008C"></div><div style="background:#404040;flex:5"></div>';
   const bandFallbackBot = '<div style="background:#404040;flex:5"></div><div style="background:#EC008C"></div><div style="background:#F5C400"></div><div style="background:#A6CE39"></div>';
 
@@ -138,29 +187,9 @@ table.grid th { background:#ddd; font-weight:700; text-align:center; }
   </table>
   <div class="note">하기와 같이 견적하오니 참조 바랍니다.<span class="u">(단위: 원, 부가세 ${vatIncluded ? '포함' : '별도'})</span></div>
 
-  <div class="sec">▣ 솔루션 견적</div>
-  <table class="grid">
-    <tr><th>구분</th><th>모듈</th><th>세부기능</th><th>수량</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>
-    ${rows(solItems, nameOfSolution(solutionCode) || '솔루션', baseOfSolution)}
-    <tr class="subrow"><td colspan="6" class="r">솔루션 소계 (①)</td><td class="r">${won(solSub)}</td></tr>
-  </table>
+  ${bodyTablesHtml}
 
-  <div class="sec">▣ 시스템 구축 견적 (인건비)</div>
-  <table class="grid">
-    <tr><th>구분</th><th>역할</th><th>세부내역(등급)</th><th>공수(MM)</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>
-    ${rows(labRows, '시스템구축', baseOfLabor)}
-    <tr class="subrow"><td colspan="6" class="r">인건비 소계 (②)</td><td class="r">${won(labSub)}</td></tr>
-  </table>
-
-  ${maintItems.length ? `<div class="sec">▣ 유지보수 견적</div><table class="grid"><tr><th>구분</th><th>역할</th><th>세부내역</th><th>공수(MM)</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr>${rows(maintItems, '유지보수', baseOfLabor)}<tr class="subrow"><td colspan="6" class="r">유지보수 소계</td><td class="r">${won(maintSub)}</td></tr></table>` : ''}
-
-  <table class="tot">
-    <tr><td class="r">구축금액 (①+②)</td><td class="r b" style="width:150px">${won(buildAmt)}</td></tr>
-    ${disc > 0 ? `<tr><td class="r">특별 DC</td><td class="r">-${won(disc)}</td></tr>` : ''}
-    <tr><td class="r b">${maintItems.length ? '견적 합계 (구축 + 유지보수)' : '최종견적금액'}</td><td class="r b">${won(finalAmt)}</td></tr>
-    ${!vatIncluded ? `<tr><td class="r">부가세 (VAT 10%)</td><td class="r">${won(vat)}</td></tr>` : ''}
-    <tr><td class="r grand">총 견적가${vatIncluded ? ' (부가세 포함)' : ''}</td><td class="r grand">${won(grand)} 원</td></tr>
-  </table>
+  ${totalsHtml}
 
   <div class="sec">▣ 견적조건</div>
   <div class="conds">${conds.map((c) => `<div>-. ${esc(c)}</div>`).join('')}</div>
