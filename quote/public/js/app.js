@@ -10,6 +10,7 @@ import { renderSettings } from './views/settings.js';
 import { renderMaster } from './views/master.js';
 import { renderLaborRates } from './views/labor-rates.js';
 import { renderTemplates } from './views/templates.js';
+import { renderQuoteBlock } from './views/quote-block.js';
 
 export const store = {
   user: null,
@@ -42,6 +43,7 @@ export const store = {
 const viewEl = () => document.getElementById('view');
 
 const routes = [
+  { re: /^#\/quotes\/new-template$/, view: () => renderQuoteBlock(viewEl()) },
   { re: /^#\/quotes\/new$/, view: () => renderEditor(viewEl(), { mode: 'new' }) },
   { re: /^#\/quotes\/(\d+)\/edit$/, view: (m) => renderEditor(viewEl(), { mode: 'edit', id: Number(m[1]) }) },
   { re: /^#\/quotes\/(\d+)$/, view: (m) => renderDetail(viewEl(), Number(m[1])) },
@@ -55,7 +57,8 @@ const routes = [
 
 async function router() {
   const hash = location.hash || '#/quotes';
-  const nav = hash.startsWith('#/quotes/new') ? 'new'
+  const nav = hash.startsWith('#/quotes/new-template') ? 'new-template'
+    : hash.startsWith('#/quotes/new') ? 'new'
     : hash.startsWith('#/quotes') ? 'quotes'
     : hash.startsWith('#/master') ? 'master'
     : hash.startsWith('#/pricing') ? 'pricing'
