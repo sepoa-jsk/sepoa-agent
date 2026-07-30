@@ -84,6 +84,7 @@ export const api = {
   templateDetail: (code) => req('GET', `/api/templates/${encodeURIComponent(code)}`),
   createTemplate: (body) => req('POST', '/api/templates', body),
   updateTemplate: (id, body) => req('PUT', `/api/templates/${id}`, body),
+  applyTemplate: (template_code) => req('POST', '/api/quotes/apply-template', { template_code }),
 
   // 설정
   getSettings: () => req('GET', '/api/settings'),

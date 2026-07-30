@@ -10,6 +10,69 @@ const { buildQuoteWorkbook } = require('../lib/excel');
 const router = express.Router();
 const STATUSES = ['DRAFT', 'SENT', 'WON', 'LOST'];
 
+function parseCols(v) { if (v == null) return []; if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch { return []; } }
+
+// ── 템플릿 적용: 블록/기본모듈/인건비 기본이 채워진 견적 초안 반환(미저장) ─
+// 각 라인에 기준단가(base_price) 프리필: 모듈=price_items 정가, 인건비=active 연도 apply_price.
+// 제안단가(proposed_price)는 null(사용자 네고 입력). 계산은 클라이언트가 수행.
+router.post('/apply-template', requireAuth, async (req, res, next) => {
+  try {
+    const code = req.body.template_code;
+    const [tpl] = await query('SELECT * FROM sq_quote_templates WHERE code = ?', [code]);
+    if (!tpl) return res.status(404).json({ error: 'NOT_FOUND', message: '템플릿을 찾을 수 없습니다.' });
+
+    const blocks = await query(
+      `SELECT tb.block_code, tb.sort, b.name, b.\`columns\`, b.recurring, b.optional, b.has_subtotal
+         FROM sq_template_blocks tb JOIN sq_blocks b ON b.code = tb.block_code
+        WHERE tb.template_id = ? ORDER BY tb.sort`, [tpl.id]);
+    const titems = await query('SELECT block_code, item_code, qty_default FROM sq_template_items WHERE template_id = ? ORDER BY block_code, sort', [tpl.id]);
+    const tlabor = await query('SELECT role_code, label, task, mm_default FROM sq_template_labor WHERE template_id = ? ORDER BY sort', [tpl.id]);
+
+    // 모듈 정가 조회
+    const codes = [...new Set(titems.map((t) => t.item_code))];
+    const priceMap = new Map();
+    if (codes.length) {
+      const ph = codes.map(() => '?').join(',');
+      const pis = await query(`SELECT code, name, spec, base_price, unit, recurring FROM sq_price_items WHERE code IN (${ph})`, codes);
+      for (const p of pis) priceMap.set(p.code, p);
+    }
+    // 활성 연도 인건비 기준단가(apply_price)
+    const [ly] = await query('SELECT id, `year` FROM sq_labor_rate_years WHERE active = 1 LIMIT 1');
+    const laborMap = new Map();
+    if (ly) {
+      const rl = await query('SELECT role_code, role_name, apply_price FROM sq_labor_rate_lines WHERE year_id = ?', [ly.id]);
+      for (const r of rl) laborMap.set(r.role_code, r);
+    }
+
+    const draftBlocks = blocks.map((b) => {
+      const out = { block_code: b.block_code, name: b.name, columns: parseCols(b.columns), recurring: !!b.recurring, optional: !!b.optional, has_subtotal: !!b.has_subtotal };
+      if (b.block_code === 'LABOR') {
+        out.labor = tlabor.map((l) => {
+          const r = laborMap.get(l.role_code) || {};
+          return { role_code: l.role_code, role_name: r.role_name || l.label || l.role_code, label: l.label || '', task: l.task || '', mm: Number(l.mm_default) || 0, base_price: r.apply_price != null ? Number(r.apply_price) : null, proposed_price: null, amount: 0 };
+        });
+      } else {
+        out.items = titems.filter((t) => t.block_code === b.block_code).map((t) => {
+          const p = priceMap.get(t.item_code) || {};
+          return { item_code: t.item_code, name: p.name || t.item_code, spec: p.spec || null, qty: Number(t.qty_default) || 1, base_price: p.base_price != null ? Number(p.base_price) : null, proposed_price: null, amount: 0, unit: p.unit || null, recurring: !!p.recurring };
+        });
+      }
+      return out;
+    });
+
+    const conditions = tpl.condition_set
+      ? (await query('SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no', [tpl.condition_set])).map((r) => r.text)
+      : [];
+
+    res.json({
+      template: { code: tpl.code, name: tpl.name, solution: tpl.solution, deployment: tpl.deployment, brand: tpl.brand, condition_set: tpl.condition_set, include_maintenance: !!tpl.include_maintenance, include_component: !!tpl.include_component },
+      blocks: draftBlocks,
+      labor_year: ly ? ly.year : null,
+      conditions,
+    });
+  } catch (err) { next(err); }
+});
+
 // ── 계산 전용 (저장 안 함, 타시스템 연계) ───────────────────
 router.post('/calculate', apiKeyOrAuth, async (req, res, next) => {
   try {
