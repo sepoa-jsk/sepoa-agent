@@ -7,7 +7,7 @@ const { requireAuth, requireAdmin } = require('../lib/auth');
 
 const router = express.Router();
 
-const RATE_COLS = ['role_name', 'grade', 'wage_md', 'wage_mm', 'apply_price', 'note'];
+const RATE_COLS = ['role_name', 'grade', 'wage_md', 'wage_mm', 'overhead', 'tech_fee', 'apply_price', 'note'];
 
 // ── 연도 목록 (active 표시 + 라인 수) ─────────────────────────
 router.get('/years', requireAuth, async (req, res, next) => {
@@ -57,8 +57,8 @@ router.post('/years', requireAdmin, async (req, res, next) => {
       const [src] = await conn.execute('SELECT id FROM sq_labor_rate_years WHERE `year` = ?', [cloneFrom]);
       if (src.length) {
         const [r] = await conn.execute(
-          `INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, apply_price, note, sort)
-             SELECT ?, role_code, role_name, grade, wage_md, wage_mm, apply_price, note, sort
+          `INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort)
+             SELECT ?, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort
                FROM sq_labor_rate_lines WHERE year_id = ?`,
           [newId, src[0].id]
         );

@@ -79,6 +79,8 @@ export async function renderLaborRates(root) {
         h('td', {}, cell('grade')),
         h('td', { class: 'num' }, cell('wage_md', { num: true })),
         h('td', { class: 'num' }, cell('wage_mm', { num: true })),
+        h('td', { class: 'num' }, cell('overhead', { num: true })),
+        h('td', { class: 'num' }, cell('tech_fee', { num: true })),
         h('td', { class: 'num' }, cell('apply_price', { num: true })),
         h('td', {}, cell('note'))));
     }
@@ -87,10 +89,12 @@ export async function renderLaborRates(root) {
         h('thead', {}, h('tr', {},
           h('th', {}, '역할코드'), h('th', {}, '역할명'), h('th', {}, '등급'),
           h('th', { class: 'num' }, '노임(M/D)'), h('th', { class: 'num' }, '평균임금(M/M)'),
+          h('th', { class: 'num' }, '제경비(110%)'), h('th', { class: 'num' }, '기술료(20%)'),
           h('th', { class: 'num' }, '기준단가(적용가)'), h('th', {}, '비고'))),
         tb)),
       h('div', { style: 'padding:12px 14px;display:flex;justify-content:flex-end;gap:8px' },
-        h('span', { class: 'page-sub', style: 'align-self:center' }, '기준단가(적용가)가 견적 인건비의 기준단가로 쓰입니다.'),
+        h('span', { class: 'page-sub', style: 'align-self:center' },
+          '산정식: 평균임금=노임×20.5 → 제경비=평균임금×110% → 기술료=(평균임금+제경비)×20% → 기준단가=합. 기준단가가 견적 인건비의 기준단가로 쓰입니다.'),
         h('button', { class: 'btn btn-navy', onclick: saveEdits }, '변경사항 저장'))));
   }
 

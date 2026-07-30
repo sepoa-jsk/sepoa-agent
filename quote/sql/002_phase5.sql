@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS sq_labor_rate_years (
 -- 임금단가 라인 (역할별 노임/적용가). apply_price = 기준단가로 사용.
 -- ⚠️ 이름은 sq_labor_rate_lines. (레거시 sq_labor_rates = 구 네고 테이블과 충돌 회피.
 --    header(sq_labor_rate_years)+lines 패턴 — sq_condition_sets/lines 와 동일 규칙.)
+-- 산정식: wage_mm = wage_md × 20.5 → overhead = wage_mm × 110%
+--         → tech_fee = (wage_mm + overhead) × 20% → apply_price = 합(표의 확정값 우선).
 CREATE TABLE IF NOT EXISTS sq_labor_rate_lines (
   id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
   year_id     INT UNSIGNED NOT NULL,
@@ -25,6 +27,8 @@ CREATE TABLE IF NOT EXISTS sq_labor_rate_lines (
   grade       VARCHAR(40)  NULL,
   wage_md     BIGINT       NULL,
   wage_mm     BIGINT       NULL,
+  overhead    BIGINT       NULL,
+  tech_fee    BIGINT       NULL,
   apply_price BIGINT       NULL,
   note        VARCHAR(255) NULL,
   sort        INT          NOT NULL DEFAULT 0,
@@ -32,6 +36,10 @@ CREATE TABLE IF NOT EXISTS sq_labor_rate_lines (
   UNIQUE KEY uq_year_role (year_id, role_code),
   CONSTRAINT fk_labor_rate_year FOREIGN KEY (year_id) REFERENCES sq_labor_rate_years(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 산정식 분해 컬럼(제경비/기술료) — 선행 배포본에 없으므로 멱등 추가.
+ALTER TABLE sq_labor_rate_lines ADD COLUMN IF NOT EXISTS overhead BIGINT NULL AFTER wage_mm;
+ALTER TABLE sq_labor_rate_lines ADD COLUMN IF NOT EXISTS tech_fee BIGINT NULL AFTER overhead;
 
 -- 블록 정의 (컬럼구성/계산방식/소계·recurring 여부)
 CREATE TABLE IF NOT EXISTS sq_blocks (

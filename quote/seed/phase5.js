@@ -2,14 +2,23 @@
 // Phase 5 공통+템플릿 시드 로더.
 //   labor-rates-seed.json  → sq_labor_rate_years / sq_labor_rate_lines
 //   templates-seed.json     → sq_blocks, sq_condition_sets/lines, sq_quote_templates(+blocks/items/labor)
-// 섹션별 멱등: 각 테이블이 비어 있을 때만 투입(부분 재실행 안전). --force 시 전부 삭제 후 재투입.
-// 사용: node seed/phase5.js [--force]
+// 섹션별 멱등: 각 테이블이 비어 있을 때만 투입(부분 재실행 안전). --force 시 재투입.
+// 사용: node seed/phase5.js [--force[=labor,blocks,conditions,templates]]
+//   --force              전 섹션 재투입
+//   --force=labor,blocks 지정 섹션만 재투입 (나머지는 손대지 않음)
+// blocks/conditions 는 외부 FK(sq_template_blocks.block_code, sq_quote_templates.condition_set)가
+// 걸려 있어 삭제 대신 UPSERT 로 갱신한다. labor/templates 는 삭제 후 재투입(CASCADE).
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
-const FORCE = process.argv.includes('--force');
+const SECTIONS = ['labor', 'blocks', 'conditions', 'templates'];
+const forceArg = process.argv.find((a) => a === '--force' || a.startsWith('--force='));
+const forced = !forceArg ? new Set()
+  : new Set(forceArg.includes('=') ? forceArg.split('=')[1].split(',').map((s) => s.trim()).filter(Boolean) : SECTIONS);
+for (const s of forced) if (!SECTIONS.includes(s)) { console.error(`알 수 없는 섹션: ${s} (가능: ${SECTIONS.join(', ')})`); process.exit(1); }
+const isForced = (s) => forced.has(s);
 const laborSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'labor-rates-seed.json'), 'utf8'));
 const tplSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'templates-seed.json'), 'utf8'));
 
@@ -34,13 +43,10 @@ async function main() {
   try {
     await conn.beginTransaction();
 
-    if (FORCE) {
-      console.log('--force: 기존 Phase5 마스터/템플릿을 삭제합니다.');
-      await conn.query('DELETE FROM sq_quote_templates'); // blocks/items/labor CASCADE
-      await conn.query('DELETE FROM sq_labor_rate_years'); // lines CASCADE
-      await conn.query('DELETE FROM sq_condition_sets');   // lines CASCADE
-      await conn.query('DELETE FROM sq_blocks');
-    }
+    if (forced.size) console.log(`--force: 재투입 섹션 = ${[...forced].join(', ')}`);
+    // 삭제형 재투입(외부 FK 없음). blocks/conditions 는 아래에서 UPSERT.
+    if (isForced('templates')) await conn.query('DELETE FROM sq_quote_templates'); // blocks/items/labor CASCADE
+    if (isForced('labor')) await conn.query('DELETE FROM sq_labor_rate_years');    // lines CASCADE
 
     const done = {};
 
@@ -54,9 +60,10 @@ async function main() {
         for (let i = 0; i < rates.length; i++) {
           const it = rates[i];
           await conn.query(
-            `INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, apply_price, note, sort)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [ins.insertId, it.role_code, it.role_name, n(it.grade), n(it.wage_md), n(it.wage_mm), n(it.apply_price), n(it.note), i]
+            `INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [ins.insertId, it.role_code, it.role_name, n(it.grade), n(it.wage_md), n(it.wage_mm),
+             n(it.overhead), n(it.tech_fee), n(it.apply_price), n(it.note), i]
           );
           r++;
         }
@@ -64,26 +71,29 @@ async function main() {
       done.labor = `연도 ${y} / 라인 ${r}`;
     }
 
-    // 2) 블록 정의
-    if ((await count('sq_blocks')) === 0) {
+    // 2) 블록 정의 (UPSERT — sq_template_blocks.block_code FK 때문에 삭제하지 않는다)
+    if ((await count('sq_blocks')) === 0 || isForced('blocks')) {
       const blocks = tplSeed.blocks_master || [];
       for (let i = 0; i < blocks.length; i++) {
         const b = blocks[i];
         await conn.query(
           `INSERT INTO sq_blocks (code, name, \`columns\`, calc, has_subtotal, recurring, optional, sort)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name=VALUES(name), \`columns\`=VALUES(\`columns\`), calc=VALUES(calc),
+             has_subtotal=VALUES(has_subtotal), recurring=VALUES(recurring), optional=VALUES(optional), sort=VALUES(sort)`,
           [b.code, b.name, JSON.stringify(b.columns || []), n(b.calc), b.has_subtotal ?? 1, b.recurring ?? 0, b.optional ?? 0, i]
         );
       }
-      done.blocks = `${blocks.length}`;
+      done.blocks = `${blocks.length} (upsert)`;
     }
 
-    // 3) 견적조건 세트 + 라인
-    if ((await count('sq_condition_sets')) === 0) {
+    // 3) 견적조건 세트 + 라인 (세트 UPSERT / 라인은 해당 세트만 교체 — 템플릿 FK 보존)
+    if ((await count('sq_condition_sets')) === 0 || isForced('conditions')) {
       let ln = 0;
       const sets = tplSeed.condition_sets || [];
       for (const s of sets) {
-        await conn.query('INSERT INTO sq_condition_sets (code, name) VALUES (?, ?)', [s.code, s.name]);
+        await conn.query('INSERT INTO sq_condition_sets (code, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name)', [s.code, s.name]);
+        await conn.query('DELETE FROM sq_condition_lines WHERE set_code = ?', [s.code]);
         const lines = s.lines || [];
         for (let i = 0; i < lines.length; i++) { await conn.query('INSERT INTO sq_condition_lines (set_code, line_no, `text`) VALUES (?, ?, ?)', [s.code, i + 1, lines[i]]); ln++; }
       }
