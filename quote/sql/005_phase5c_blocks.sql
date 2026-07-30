@@ -17,6 +17,10 @@ ALTER TABLE sq_quotes ADD COLUMN IF NOT EXISTS round_unit INT NOT NULL DEFAULT 1
 -- 특별DC 유형 확장: 실측 견적서는 "최종 얼마"로 떨어뜨리는 방식(TARGET)이라 값 추가.
 -- ENUM 값 추가는 기존 행에 영향 없음(멱등).
 ALTER TABLE sq_quotes MODIFY COLUMN discount_type ENUM('AMOUNT','RATE','TARGET') NULL;
+-- 월사용료에도 특별DC 가 걸리는 실측이 있다(하겐다즈 SaaS: 월 300,000 → 100,000).
+-- 일시불 DC 와 별도로 보관해야 재편집 시 값이 유지된다.
+ALTER TABLE sq_quotes ADD COLUMN IF NOT EXISTS monthly_discount_type ENUM('AMOUNT','RATE','TARGET') NULL AFTER round_unit;
+ALTER TABLE sq_quotes ADD COLUMN IF NOT EXISTS monthly_discount_value BIGINT NOT NULL DEFAULT 0 AFTER monthly_discount_type;
 
 -- ── 견적 내 블록 인스턴스 ────────────────────────────────────
 -- section_id 는 레거시 섹션과의 연결(백필 추적용). 신규 견적은 NULL 허용.

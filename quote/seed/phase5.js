@@ -113,7 +113,7 @@ async function main() {
       const [[{ c: have }]] = await conn.query(
         `SELECT COUNT(*) AS c FROM sq_price_items WHERE code IN (${codes.map(() => '?').join(',')})`, codes);
       if (have < codes.length || isForced('modules')) {
-        let mi = 0;
+        let mi = 0, mb = 0;
         for (const g of groups) {
           for (const it of g.items || []) {
             await conn.query(
@@ -131,9 +131,23 @@ async function main() {
                it.base_price ?? 0, n(it.unit), it.qty_default ?? 1, it.recurring ?? 0, n(it.note), it.sort ?? 0]
             );
             mi++;
+            // 건수 밴드표(SaaS) — sq_price_variants 재사용. 계산엔 쓰지 않고 PDF 하단 참조표로 출력.
+            if (it.bands) {
+              const [[row]] = await conn.query('SELECT id FROM sq_price_items WHERE code = ?', [it.code]);
+              await conn.query('DELETE FROM sq_price_variants WHERE item_id = ?', [row.id]);
+              for (let bi = 0; bi < it.bands.length; bi++) {
+                const bd = it.bands[bi];
+                await conn.query(
+                  'INSERT INTO sq_price_variants (item_id, `key`, label, min_qty, max_qty, price, sort) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                  [row.id, `M${bd.monthly_count}`, `월 ${bd.monthly_count}건 / 년 ${bd.yearly_count}건`,
+                   bd.monthly_count, bd.yearly_count, bd.price, bi]
+                );
+                mb++;
+              }
+            }
           }
         }
-        done.modules = `${mi} (upsert, 기존 ${have}건 존재)`;
+        done.modules = `${mi} (upsert, 기존 ${have}건 존재)${mb ? ` / 밴드 ${mb}` : ''}`;
       }
     }
 

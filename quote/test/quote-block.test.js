@@ -127,6 +127,52 @@ test('recurring 블록은 일시불 합계에 섞이지 않는다', () => {
   assert.notEqual(r.onetime_subtotal, 105675000, '월 금액이 일시불에 합산되면 안 된다');
 });
 
+// ── 실측 3: 하겐다즈 SaaS ─────────────────────────────────────
+// 셋업 2,000,000 → 특별DC → 무상제공(0)
+// 서비스 이용료(월) 300,000 → 특별DC → 100,000  ← 월 금액에도 DC 가 걸린다
+function hagenDazs() {
+  return {
+    round_unit: 100000,
+    discount: { type: 'TARGET', value: 0 },          // 셋업 무상제공
+    monthly_discount: { type: 'TARGET', value: 100000 }, // 월 300,000 → 100,000 (360건 밴드)
+    blocks: [
+      {
+        block_code: 'SETUP', recurring: 0,
+        items: [{ item_code: 'ESEAL_SAAS_SETUP', category: '전자인장관리솔루션(Easy Seal™)', name: 'SaaS 셋업',
+          qty: 0.4, unit: 'MM', base_price: 10000000, proposed_price: 5000000 }],
+      },
+      {
+        block_code: 'SERVICE', recurring: 1,
+        items: [{ item_code: 'ESEAL_SAAS_BASE', category: '전자인장관리솔루션(Easy Seal™)', name: '전자인장 서비스 이용료',
+          qty: 1, base_price: 500000, proposed_price: 300000 }],
+      },
+    ],
+  };
+}
+
+test('실측 하겐다즈 SaaS — 셋업 2,000,000 → 무상제공(0) / 월 300,000 → 100,000', () => {
+  const r = calcQuoteBlocks(hagenDazs());
+  assert.equal(r.blocks[0].subtotal, 2000000, '셋업비용 소계 (0.4MM × 5,000,000)');
+  assert.equal(r.onetime_total, 0, '솔루션 소계(특별 DC) = 무상제공');
+  assert.equal(r.blocks[1].subtotal, 300000, '서비스 이용료 소계(월)');
+  assert.equal(r.monthly_total, 100000, '솔루션 소계(특별 DC) = 월 100,000');
+  assert.equal(r.monthly_discount_amount, 200000);
+});
+
+test('월 특별DC 가 없으면 월 소계가 그대로 유지된다 (SK이터닉스)', () => {
+  const r = calcQuoteBlocks(skEternix());
+  assert.equal(r.monthly_discount_amount, 0);
+  assert.equal(r.monthly_total, 1275000);
+});
+
+test('월 금액은 절사하지 않는다 (밴드 금액 150,000 보존)', () => {
+  const r = calcQuoteBlocks({
+    round_unit: 100000,
+    blocks: [{ block_code: 'SERVICE', recurring: 1, items: [{ qty: 1, proposed_price: 150000 }] }],
+  });
+  assert.equal(r.monthly_total, 150000, '십만절사되면 100,000 이 되어 밴드가 깨진다');
+});
+
 // ── 계산 순서·절사·할인 ───────────────────────────────────────
 test('계산 순서 고정 — 소계합 → 특별DC → 절사 (절사를 먼저 하면 값이 달라진다)', () => {
   const r = calcQuoteBlocks({

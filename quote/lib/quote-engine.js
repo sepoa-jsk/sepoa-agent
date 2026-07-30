@@ -93,8 +93,11 @@ function validateMonthAlloc(labor) {
 // 특별DC — AMOUNT(할인액) / RATE(%) / TARGET(최종 목표금액, 실측 견적서가 쓰는 방식)
 function computeDiscount(discount, base) {
   const type = discount?.type || null;
-  const value = num(discount?.value);
-  if (!type || !value) return 0;
+  if (!type) return 0;
+  // TARGET 은 0 이 유효한 값이다(하겐다즈 셋업 "무상제공"). 미입력만 걸러낸다.
+  const raw = discount?.value;
+  if (raw == null || raw === '') return 0;
+  const value = num(raw);
   if (type === 'RATE') return Math.round(base * (value / 100));
   if (type === 'TARGET') return Math.max(0, base - value);
   return Math.round(value); // AMOUNT
@@ -108,21 +111,29 @@ function floorTo(amount, unit) {
 }
 
 // 블록형 견적 전체 계산.
-//   input: { blocks: [{block_code, recurring, items|labor}], discount: {type,value}, round_unit }
-function calcQuoteBlocks({ blocks = [], discount = null, round_unit = 100000 } = {}) {
+//   input: { blocks: [{block_code, recurring, items|labor}],
+//            discount: {type,value},          ← 일시불 특별DC
+//            monthly_discount: {type,value},  ← 월사용료 특별DC (하겐다즈 SaaS: 300,000→100,000)
+//            round_unit }
+// 월 금액에 DC 가 걸리는 실측이 있어(하겐다즈) 일시불/월 DC 를 따로 받는다.
+// 월 금액은 절사하지 않는다(실측 100,000 은 십만절사하면 그대로지만 150,000 같은 밴드가 깨진다).
+function calcQuoteBlocks({ blocks = [], discount = null, monthly_discount = null, round_unit = 100000 } = {}) {
   const calcedBlocks = blocks.map(calcBlock);
 
   // 일시불 / 월(recurring) 분리 — SaaS·PCloud 는 총견적가에 두 금액을 따로 노출한다
   const onetimeSubtotal = calcedBlocks.filter((b) => !b.recurring).reduce((a, b) => a + b.subtotal, 0);
   const monthlySubtotal = calcedBlocks.filter((b) => b.recurring).reduce((a, b) => a + b.subtotal, 0);
 
-  // 순서 고정: 소계합 → 특별DC → 절사. DC/절사는 일시불에만 적용(실측: 월사용료는 그대로).
+  // 순서 고정: 소계합 → 특별DC → 절사.
   const discountAmount = computeDiscount(discount, onetimeSubtotal);
   const afterDiscount = onetimeSubtotal - discountAmount;
   const onetimeTotal = floorTo(afterDiscount, round_unit);
 
+  const monthlyDiscountAmount = computeDiscount(monthly_discount, monthlySubtotal);
+  const monthlyTotal = monthlySubtotal - monthlyDiscountAmount;
+
   const vatAmount = Math.round(onetimeTotal * VAT_RATE);
-  const monthlyVat = Math.round(monthlySubtotal * VAT_RATE);
+  const monthlyVat = Math.round(monthlyTotal * VAT_RATE);
 
   const laborErrors = calcedBlocks.flatMap((b) => validateMonthAlloc(b.labor));
 
@@ -133,10 +144,13 @@ function calcQuoteBlocks({ blocks = [], discount = null, round_unit = 100000 } =
     discount_type: discount?.type || null,
     discount_value: num(discount?.value),
     discount_amount: discountAmount,
+    monthly_discount_type: monthly_discount?.type || null,
+    monthly_discount_value: num(monthly_discount?.value),
+    monthly_discount_amount: monthlyDiscountAmount,
     round_unit: num(round_unit),
     rounding_adjustment: afterDiscount - onetimeTotal, // 절사로 깎인 금액
     onetime_total: onetimeTotal,
-    monthly_total: monthlySubtotal,
+    monthly_total: monthlyTotal,
     vat_amount: vatAmount,
     monthly_vat: monthlyVat,
     total_amount: onetimeTotal + vatAmount,   // 일시불 기준 VAT 포함

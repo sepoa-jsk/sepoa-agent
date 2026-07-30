@@ -110,6 +110,7 @@ router.post('/calculate', apiKeyOrAuth, async (req, res, next) => {
       return res.json(calcQuoteBlocks({
         blocks: req.body.blocks,
         discount: req.body.discount,
+        monthly_discount: req.body.monthly_discount,
         round_unit: req.body.round_unit ?? 100000,
       }));
     }
@@ -248,6 +249,7 @@ async function persistQuoteBlocks(conn, { header, calc, quoteNo, createdBy, quot
     customer_contact: header.customer_contact ?? null,
     discount_type: calc.discount_type, discount_value: calc.discount_value ?? 0,
     round_unit: calc.round_unit ?? 100000,
+    monthly_discount_type: calc.monthly_discount_type, monthly_discount_value: calc.monthly_discount_value ?? 0,
     supply_amount: calc.supply_amount, discount_amount: calc.discount_amount,
     vat_amount: calc.vat_amount, total_amount: calc.total_amount,
     onetime_total: calc.onetime_total, monthly_total: calc.monthly_total,
@@ -395,7 +397,7 @@ router.post('/', requireAuth, async (req, res, next) => {
   const conn = await pool.getConnection();
   try {
     const calc = blockMode
-      ? calcQuoteBlocks({ blocks: body.blocks, discount: body.discount, round_unit: body.round_unit ?? 100000 })
+      ? calcQuoteBlocks({ blocks: body.blocks, discount: body.discount, monthly_discount: body.monthly_discount, round_unit: body.round_unit ?? 100000 })
       : await calcFor(body);
     const quoteDate = body.quote_date ? String(body.quote_date).slice(0, 10) : new Date().toISOString().slice(0, 10);
     await conn.beginTransaction();
@@ -465,7 +467,7 @@ router.put('/:id', requireAuth, async (req, res, next) => {
     if (existing.length === 0) { conn.release(); return res.status(404).json({ error: 'NOT_FOUND' }); }
 
     if (blockMode) {
-      const calc = calcQuoteBlocks({ blocks: body.blocks, discount: body.discount, round_unit: body.round_unit ?? 100000 });
+      const calc = calcQuoteBlocks({ blocks: body.blocks, discount: body.discount, monthly_discount: body.monthly_discount, round_unit: body.round_unit ?? 100000 });
       await conn.beginTransaction();
       await persistQuoteBlocks(conn, {
         header: { ...body, quote_date: body.quote_date ? String(body.quote_date).slice(0, 10) : existing[0].quote_date },
@@ -568,6 +570,52 @@ async function buildMasters(quote) {
   } catch (e) {
     console.error('[quote] 임금단가 마스터 로드 실패:', e.message);
   }
+  // Phase 5 임금단가표(첨부 페이지) — 견적의 인건비 기준단가가 나온 그 표.
+  // 견적일 연도를 우선하고, 없으면 active 연도.
+  try {
+    const wantYear = Number(String(quote.quote_date || '').slice(0, 4)) || null;
+    let yr = wantYear ? (await query('SELECT * FROM sq_labor_rate_years WHERE `year` = ?', [wantYear]))[0] : null;
+    if (!yr) [yr] = await query('SELECT * FROM sq_labor_rate_years WHERE active = 1 LIMIT 1');
+    if (yr) {
+      masters.laborRateYear = yr.year;
+      masters.laborRateSource = yr.source;
+      masters.laborRates = await query(
+        'SELECT role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note FROM sq_labor_rate_lines WHERE year_id = ? ORDER BY sort, id',
+        [yr.id]);
+    }
+  } catch (e) {
+    console.error('[quote] Phase5 임금단가표 로드 실패:', e.message);
+  }
+
+  // 견적조건 — 저장된 conditions 가 없을 때 템플릿의 condition_set 을 쓴다
+  try {
+    if (quote.template_code) {
+      const [tpl] = await query('SELECT condition_set FROM sq_quote_templates WHERE code = ?', [quote.template_code]);
+      if (tpl && tpl.condition_set) {
+        masters.conditionLines = (await query(
+          'SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no', [tpl.condition_set])).map((r) => r.text);
+      }
+    }
+  } catch (e) {
+    console.error('[quote] 견적조건 로드 실패:', e.message);
+  }
+
+  // 건수 밴드표(SaaS) — 견적에 담긴 모듈 중 밴드가 있는 것만
+  try {
+    const codes = [...new Set((quote.blocks || []).flatMap((b) => (b.items || []).map((i) => i.item_code)).filter(Boolean))];
+    if (codes.length) {
+      const ph = codes.map(() => '?').join(',');
+      const rows = await query(
+        `SELECT p.code, v.label, v.min_qty, v.max_qty, v.price
+           FROM sq_price_variants v JOIN sq_price_items p ON p.id = v.item_id
+          WHERE p.code IN (${ph}) ORDER BY v.sort`, codes);
+      masters.bands = {};
+      for (const r of rows) (masters.bands[r.code] = masters.bands[r.code] || []).push(r);
+    }
+  } catch (e) {
+    console.error('[quote] 밴드표 로드 실패:', e.message);
+  }
+
   // 블록 정의(블록형 견적서 렌더용)
   try {
     const bl = await query('SELECT code, name, `columns`, recurring, has_subtotal, sort FROM sq_blocks ORDER BY sort');
@@ -609,7 +657,8 @@ router.get('/:id/pdf', requireAuth, async (req, res, next) => {
     if (!quote) return res.status(404).json({ error: 'NOT_FOUND' });
     const settings = await loadSettings();
     const masters = await buildMasters(quote);
-    const html = renderQuoteHtml(quote, settings, masters);
+    // ?cover=0 → 표지 없이 본문만(외부 커버 PDF 병합용 훅)
+    const html = renderQuoteHtml(quote, settings, masters, { withCover: req.query.cover !== '0' });
     const pdf = await htmlToPdf(html);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(quote.quote_no)}.pdf"`);
