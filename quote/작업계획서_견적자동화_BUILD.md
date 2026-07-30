@@ -57,20 +57,24 @@ DoD(완료기준)
 ### 5-B. 템플릿 (예상 1일)
 
 DB
-- [ ] 002에 sq_quote_templates, sq_template_blocks, sq_template_items, sq_template_labor 추가
-- [ ] templates-seed.json의 templates(BUILD 8종) 투입
+- [x] 002에 sq_quote_templates, sq_template_blocks, sq_template_items, sq_template_labor 추가
+      → 003_phase5_templates.sql 에 존재. quote_type/has_labor_plan, label→role_label, grade,
+        block_code(LABOR/SETUP 구분) 멱등 ALTER 추가.
+- [x] templates-seed.json의 templates(BUILD 8종) 투입 (블록 27 / 모듈 49 / 인건비 19)
 
 API
-- [ ] GET /api/templates?quote_type=BUILD&solution=
-- [ ] GET /api/templates/:code (블록·기본모듈·인건비 기본 포함)
-- [ ] POST/PUT /api/templates (ADMIN)
+- [x] GET /api/templates?quote_type=BUILD&solution= (active 필터·블록구성 요약 포함)
+- [x] GET /api/templates/:code (블록·기본모듈·인건비 기본 포함, 미등록 모듈 표시)
+- [x] POST/PUT /api/templates (ADMIN)
 
 UI
-- [ ] 템플릿 관리 화면(ADMIN): 목록 / 상세(블록 구성·기본 모듈세트·인건비 기본·조건세트)
+- [x] 템플릿 관리 화면(ADMIN): 목록 / 상세(블록 구성·기본 모듈세트·인건비 기본·조건세트)
 
 DoD
-- [ ] 솔루션별 BUILD 템플릿 목록 노출, 상세에서 블록·기본모듈·인건비 확인
-- [ ] npm test 통과, 요약 보고
+- [x] 솔루션별 BUILD 템플릿 목록 노출, 상세에서 블록·기본모듈·인건비 확인 (API 스모크 22/22 PASS)
+- [x] npm test 통과 (40/40), 요약 보고
+- [ ] **미해결**: 기본모듈 49건이 전부 가격마스터(sq_price_items) 미등록 → 5-C 실측 재현 불가.
+      모듈 마스터 구축 필요(5-C 선행). 상세 화면에 경고로 노출 중.
 
 ### 5-C. 견적 작성·계산 (예상 2일) — ★ 데이터 마이그레이션 주의
 

@@ -23,11 +23,15 @@ const laborSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'labor-rates-s
 const tplSeed = JSON.parse(fs.readFileSync(path.join(__dirname, 'templates-seed.json'), 'utf8'));
 
 const n = (v) => (v === undefined ? null : v);
-// 블록 → 시드의 기본항목 키 매핑 (LABOR 는 labor_default 로 별도 처리)
+// 블록 → 시드의 기본항목 키 매핑.
+// LABOR/SETUP 의 인건비 기본은 labor_default / setup_labor_default 로 별도 처리(BLOCK_LABOR_KEY).
+// SUMMARY 는 계산 전용 블록이라 기본항목이 없다.
 const BLOCK_ITEM_KEY = {
-  SOLUTION: 'default_items', SETUP: 'setup_default', SERVICE: 'service_default',
-  DATASVC: 'datasvc_default', MAINT: 'maint_default',
+  SOLUTION: 'default_items', SETUP: 'setup_default', LICENSE: 'license_default',
+  SERVICE: 'service_default', DATASVC: 'datasvc_default', MAINT: 'maint_default',
 };
+// 블록 → 인건비 기본 키. SaaS/PCloud 는 셋업비를 MM 으로 산정하므로 SETUP 에 인건비가 붙는다.
+const BLOCK_LABOR_KEY = { LABOR: 'labor_default', SETUP: 'setup_labor_default' };
 
 async function main() {
   const conn = await mysql.createConnection({
@@ -103,33 +107,46 @@ async function main() {
     // 4) 템플릿 (헤더 + 블록 + 기본모듈 + 인건비 기본)
     if ((await count('sq_quote_templates')) === 0) {
       let ti = 0, tl = 0, tb = 0;
+      const warn = [];
       const tpls = tplSeed.templates || [];
       for (let ix = 0; ix < tpls.length; ix++) {
         const t = tpls[ix];
         const [ins] = await conn.query(
           `INSERT INTO sq_quote_templates
-            (solution, code, name, deployment, brand, include_maintenance, include_component, condition_set, active, sort)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-          [t.solution, t.code, t.name, t.deployment, n(t.brand), t.include_maintenance ?? 0, t.include_component ?? 0, n(t.condition_set), t.sort ?? ix]
+            (quote_type, solution, code, name, deployment, brand, include_maintenance, include_component,
+             condition_set, has_labor_plan, active, sort)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+          [t.quote_type || 'BUILD', t.solution, t.code, t.name, t.deployment, n(t.brand),
+           t.include_maintenance ?? 0, t.include_component ?? 0, n(t.condition_set), t.has_labor_plan ?? 0, t.sort ?? ix]
         );
         const tid = ins.insertId;
         const blocks = t.blocks || [];
         for (let bi = 0; bi < blocks.length; bi++) {
           const bcode = blocks[bi];
           await conn.query('INSERT INTO sq_template_blocks (template_id, block_code, sort) VALUES (?, ?, ?)', [tid, bcode, bi]); tb++;
-          if (bcode === 'LABOR') continue; // 인건비는 labor_default 로
+
           const items = t[BLOCK_ITEM_KEY[bcode]] || [];
           for (let j = 0; j < items.length; j++) {
             await conn.query('INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, sort) VALUES (?, ?, ?, 1, ?)', [tid, bcode, items[j], j]); ti++;
           }
+          const labor = t[BLOCK_LABOR_KEY[bcode]] || [];
+          for (let j = 0; j < labor.length; j++) {
+            const l = labor[j];
+            await conn.query(
+              'INSERT INTO sq_template_labor (template_id, block_code, role_code, role_label, grade, task, mm_default, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+              [tid, bcode, l.role_code, n(l.role_label ?? l.label), n(l.grade), n(l.task), l.mm ?? 0, j]); tl++;
+          }
         }
-        const labor = t.labor_default || [];
-        for (let j = 0; j < labor.length; j++) {
-          const l = labor[j];
-          await conn.query('INSERT INTO sq_template_labor (template_id, role_code, label, task, mm_default, sort) VALUES (?, ?, ?, ?, ?, ?)', [tid, l.role_code, n(l.label), n(l.task), l.mm ?? 0, j]); tl++;
+        // 블록에 없는 기본항목 키가 남아 있으면 시드 오기입 — 조용히 버리지 않고 알린다
+        for (const [bcode, key] of Object.entries(BLOCK_ITEM_KEY)) {
+          if (t[key] && !blocks.includes(bcode)) warn.push(`${t.code}: ${key} 가 있으나 blocks 에 ${bcode} 없음 → ${t[key].length}건 미투입`);
+        }
+        for (const [bcode, key] of Object.entries(BLOCK_LABOR_KEY)) {
+          if (t[key] && !blocks.includes(bcode)) warn.push(`${t.code}: ${key} 가 있으나 blocks 에 ${bcode} 없음 → ${t[key].length}건 미투입`);
         }
       }
       done.templates = `${tpls.length} (블록 ${tb} / 모듈 ${ti} / 인건비 ${tl})`;
+      if (warn.length) done['templates(경고)'] = '\n      ' + warn.join('\n      ');
     }
 
     await conn.commit();

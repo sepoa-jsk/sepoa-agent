@@ -20,7 +20,7 @@
 
   "templates": [
     {
-      "quote_type": "BUILD", "solution": "ESEAL", "code": "ESEAL_ONPREM_LUMP", "name": "전자인장 온프레미스(일시불)", "deployment": "ONPREM_LUMP",
+      "quote_type": "BUILD", "solution": "SEAL", "code": "ESEAL_ONPREM_LUMP", "name": "전자인장 온프레미스(일시불)", "deployment": "ONPREM_LUMP",
       "brand": "전자인장관리솔루션", "condition_set": "COND_ONPREM", "has_labor_plan": 1, "sort": 1,
       "blocks": ["SOLUTION","LABOR","SUMMARY"],
       "default_items": ["POA_SEAL","POA_ECONTRACT","POA_DOCSCV_ES","POA_COMMON_ES","POA_APPROVAL_ES","WEB_GRID_ES","ESEAL_PKI"],
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "quote_type": "BUILD", "solution": "ESEAL", "code": "ESEAL_ONPREM_INSTALL", "name": "전자인장 온프레미스(분납)", "deployment": "ONPREM_INSTALL",
+      "quote_type": "BUILD", "solution": "SEAL", "code": "ESEAL_ONPREM_INSTALL", "name": "전자인장 온프레미스(분납)", "deployment": "ONPREM_INSTALL",
       "brand": "전자인장관리솔루션", "condition_set": "COND_INSTALL", "has_labor_plan": 1, "sort": 2,
       "blocks": ["SOLUTION","LABOR","SERVICE","SUMMARY"],
       "default_items": ["POA_SEAL","POA_ECONTRACT","POA_DOCSCV_ES","POA_COMMON_ES","POA_APPROVAL_ES","WEB_GRID_ES","ESEAL_PKI"],
@@ -43,20 +43,23 @@
       "note": "솔루션 무상(0원) 처리 + 인건비 + 월사용료(SERVICE) 별도 표기."
     },
     {
-      "quote_type": "BUILD", "solution": "ESEAL", "code": "ESEAL_PCLOUD", "name": "전자인장 Private Cloud", "deployment": "PCLOUD",
+      "quote_type": "BUILD", "solution": "SEAL", "code": "ESEAL_PCLOUD", "name": "전자인장 Private Cloud", "deployment": "PCLOUD",
       "brand": "전자인장시스템", "condition_set": "COND_PCLOUD", "has_labor_plan": 1, "sort": 3,
       "blocks": ["SETUP","LICENSE","SERVICE","SUMMARY"],
-      "default_items": ["ESEAL_PC_SETUP","ESEAL_PC_LICENSE","ESEAL_PC_API","ESEAL_PC_SERVER","ESEAL_PC_MAINT"],
+      "setup_default": ["ESEAL_PC_SETUP"],
+      "license_default": ["ESEAL_PC_LICENSE"],
+      "service_default": ["ESEAL_PC_API","ESEAL_PC_SERVER","ESEAL_PC_MAINT"],
       "setup_labor_default": [
         { "role_code": "DEV", "role_label": "셋업(응용SW기준)", "grade": "중급", "task": "독립 도메인/디자인(CI)/운영환경 SETUP/그룹웨어 SSO·인사·결재 연동/커스터마이징(1MM 수준)", "mm": 3.7 }
       ],
       "note": "셋업비용(MM 기반, 응용SW 단가 참조) + 라이선스비용 + 서비스이용료(연동API/Private Server/유지보수). 일시납합계→최종셋업비(특별DC)."
     },
     {
-      "quote_type": "BUILD", "solution": "ESEAL", "code": "ESEAL_SAAS", "name": "전자인장 SaaS", "deployment": "SAAS",
+      "quote_type": "BUILD", "solution": "SEAL", "code": "ESEAL_SAAS", "name": "전자인장 SaaS", "deployment": "SAAS",
       "brand": "전자인장관리솔루션", "condition_set": "COND_SAAS", "has_labor_plan": 0, "sort": 4,
       "blocks": ["SETUP","SERVICE","SUMMARY"],
-      "default_items": ["ESEAL_SAAS_SETUP","ESEAL_SAAS_BASE"],
+      "setup_default": ["ESEAL_SAAS_SETUP"],
+      "service_default": ["ESEAL_SAAS_BASE"],
       "setup_labor_default": [
         { "role_code": "DEV", "role_label": "셋업", "grade": "중급", "task": "독립 도메인/디자인(CI)/운영환경 SETUP(별도 커스터마이징 없음)", "mm": 0.4 }
       ],
@@ -81,14 +84,13 @@
       "quote_type": "BUILD", "solution": "EXPENSE", "code": "EXPENSE_SAAS", "name": "경비관리 SaaS", "deployment": "SAAS",
       "brand": "EasyExpense", "condition_set": "COND_SAAS", "has_labor_plan": 0, "sort": 2,
       "blocks": ["SERVICE","LABOR","SUMMARY"],
-      "default_items": ["EXP_SAAS_BASE"],
       "service_default": ["EXP_SAAS_BASE","EXP_SAAS_TAX","EXP_SAAS_BIA","EXP_SAAS_IVA","EXP_SAAS_TRAVEL"],
       "labor_default": [ { "role_code": "DEV", "role_label": "개발 및 기술지원", "grade": "중급", "task": "ERP 연동 개발", "mm": 1 } ],
       "note": "월 서비스료 + 초기 개발비(ERP연동)."
     },
 
     {
-      "quote_type": "BUILD", "solution": "EPRO", "code": "EPRO_ONPREM", "name": "전자구매 온프레미스", "deployment": "ONPREM_LUMP",
+      "quote_type": "BUILD", "solution": "PROCURE", "code": "EPRO_ONPREM", "name": "전자구매 온프레미스", "deployment": "ONPREM_LUMP",
       "brand": "Poa Pro", "condition_set": "COND_ONPREM", "has_labor_plan": 1, "sort": 1,
       "blocks": ["SOLUTION","LABOR","SUMMARY"],
       "default_items": ["POA_SOURCING","POA_ORDERING","POA_CONTRACT","POA_EV","POA_SUPPLIER","POA_COMMON_EP","WEB_GRID_EP","PKI_TOOLKIT"],
@@ -102,10 +104,9 @@
       ]
     },
     {
-      "quote_type": "BUILD", "solution": "EPRO", "code": "EPRO_SAAS", "name": "전자구매 클라우드(SaaS)", "deployment": "SAAS",
+      "quote_type": "BUILD", "solution": "PROCURE", "code": "EPRO_SAAS", "name": "전자구매 클라우드(SaaS)", "deployment": "SAAS",
       "brand": "Poa Pro", "condition_set": "COND_SAAS", "has_labor_plan": 0, "sort": 2,
       "blocks": ["SETUP","SERVICE","SUMMARY"],
-      "default_items": ["EPRO_S2C"],
       "setup_default": ["EPRO_SETUP"],
       "service_default": ["EPRO_S2C","EPRO_BIA","EPRO_INFRA_S2C"],
       "note": "셋업(도메인/연계/추가개발) + 월 서비스료."

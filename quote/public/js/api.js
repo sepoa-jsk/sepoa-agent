@@ -80,7 +80,12 @@ export const api = {
   // 블록/견적조건/템플릿
   blocks: () => req('GET', '/api/blocks'),
   conditions: () => req('GET', '/api/conditions'),
-  templates: (solution) => req('GET', '/api/templates' + (solution ? `?solution=${solution}` : '')),
+  // templates() / templates('SEAL') / templates({ quote_type:'BUILD', solution:'SEAL' })
+  templates: (opt) => {
+    const p = typeof opt === 'string' ? { solution: opt } : (opt || {});
+    const qs = new URLSearchParams(Object.entries(p).filter(([, v]) => v !== undefined && v !== '')).toString();
+    return req('GET', '/api/templates' + (qs ? `?${qs}` : ''));
+  },
   templateDetail: (code) => req('GET', `/api/templates/${encodeURIComponent(code)}`),
   createTemplate: (body) => req('POST', '/api/templates', body),
   updateTemplate: (id, body) => req('PUT', `/api/templates/${id}`, body),

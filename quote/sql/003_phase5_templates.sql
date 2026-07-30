@@ -60,3 +60,19 @@ CREATE TABLE IF NOT EXISTS sq_template_labor (
   KEY idx_tpl (template_id),
   CONSTRAINT fk_tl_tpl FOREIGN KEY (template_id) REFERENCES sq_quote_templates(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── 5-B(REV) 보정: 견적유형 + 인력투입계획 플래그 + 인건비 표기/등급 ──
+-- PLAN_PHASE5_REV §1·§4 반영. 선행 배포본에 없으므로 멱등 ALTER 로 추가한다.
+
+-- quote_type: BUILD | MAINT | ADDDEV (이번 구현은 BUILD 만, 나머지는 Phase 6 예약)
+ALTER TABLE sq_quote_templates ADD COLUMN IF NOT EXISTS quote_type VARCHAR(10) NOT NULL DEFAULT 'BUILD' AFTER id;
+-- has_labor_plan: 켜면 인건비 라인에 월별 배분(M/M1/M2…) 입력 + 인력투입계획표 출력
+ALTER TABLE sq_quote_templates ADD COLUMN IF NOT EXISTS has_labor_plan TINYINT NOT NULL DEFAULT 0 AFTER condition_set;
+ALTER TABLE sq_quote_templates ADD INDEX IF NOT EXISTS idx_type_solution (quote_type, solution);
+
+-- label → role_label 로 통일(REV §4 명칭), 등급 컬럼 추가.
+ALTER TABLE sq_template_labor CHANGE COLUMN IF EXISTS label role_label VARCHAR(120) NULL;
+ALTER TABLE sq_template_labor ADD COLUMN IF NOT EXISTS grade VARCHAR(40) NULL AFTER role_label;
+-- 셋업비를 MM 으로 산정하는 SaaS/PCloud 는 인건비 기본이 SETUP 블록에 붙는다
+-- (REV §4 원안에는 없으나, labor_default 와 setup_labor_default 를 구분하려면 필요).
+ALTER TABLE sq_template_labor ADD COLUMN IF NOT EXISTS block_code VARCHAR(30) NOT NULL DEFAULT 'LABOR' AFTER template_id;
