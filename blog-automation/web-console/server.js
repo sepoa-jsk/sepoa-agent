@@ -15,7 +15,9 @@
 
 // .env(있으면)를 먼저 읽어 환경변수로 올린다. 없으면 조용히 넘어가고
 // 아래의 기본값(fallback)을 그대로 쓴다.
-require("dotenv").config();
+//  ※ cwd 가 아니라 이 파일(server.js) 옆의 .env 를 읽는다. 어느 폴더에서
+//    npm start 를 하든 PANDOC_DIR 등 설정이 항상 로드되게 하기 위함이다.
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 
 const express = require("express");
 const multer = require("multer");
@@ -305,7 +307,21 @@ function runClaude(prompt, resumeId, browserKey, model) {
     //  - cross-spawn 은 .cmd(배치) 를 shell 없이 실행하면서도 cmd.exe / CRT argv
     //    파서 양쪽 규칙에 맞게 각 인자를 정확히 이스케이프해준다.
     //  - HARNESS_DIR 안에서 실행해야 CLAUDE.md/스킬/DESIGN.md 를 자동 로드한다.
-    const CLAUDE_BIN = "C:\\Users\\sepoa\\AppData\\Roaming\\npm\\claude.cmd";
+    //회사PC
+    // const CLAUDE_BIN = "C:\\Users\\sepoa\\AppData\\Roaming\\npm\\claude.cmd";
+
+
+   const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
+
+    // pandoc 이 시스템 PATH 에 없을 때를 대비해, PANDOC_DIR(pandoc.exe 가 있는
+    // 폴더)이 지정돼 있으면 claude 자식 프로세스의 PATH 앞에 끼워 넣는다.
+    // 이렇게 하면 claude 가 워드(.docx)를 읽을 때 pandoc 을 찾을 수 있다.
+    // PANDOC_DIR 이 비어있으면 시스템 PATH 를 그대로 사용한다.
+    const PANDOC_DIR = process.env.PANDOC_DIR || "";
+    const childEnv = { ...process.env };
+    if (PANDOC_DIR) {
+      childEnv.PATH = PANDOC_DIR + path.delimiter + (process.env.PATH || "");
+    }
 
     // 디버깅용: 실제로 claude 에 넘기는 전체 명령을 터미널에 찍는다.
     // -p 프롬프트는 매우 길어서 로그를 가리므로 길이만 표시하고, --model 등
@@ -317,7 +333,7 @@ function runClaude(prompt, resumeId, browserKey, model) {
 
     const child = spawn(CLAUDE_BIN, args, {
       cwd: HARNESS_DIR,
-      env: process.env,
+      env: childEnv,
     });
 
     child.stdout.setEncoding("utf8");
@@ -385,7 +401,11 @@ const STEP_PROMPTS = {
   //  ※ 제목 단계는 가볍게: spec.md 전체를 채우지 않는다. 나머지 spec 작성은
   //    제목 확정 후 keyword-approve 단계로 미룬다.
   start_from_docx:
-    "inbox/ 에서 가장 최근 .docx 초안을 제목 판단에 필요한 수준으로 빠르게 훑어 " +
+    "inbox/ 에서 가장 최근 .docx 초안을 읽는다. .docx 는 바이너리라 Read 로 " +
+    "바로 열리지 않으니, 반드시 pandoc 으로 텍스트를 뽑아 읽어라: " +
+    '`pandoc "inbox/파일명.docx" -t plain`. ' +
+    "python-docx·unzip·PowerShell 등 다른 방법은 허용 도구가 아니니 시도하지 마라. " +
+    "이렇게 뽑은 텍스트를 제목 판단에 필요한 수준으로 빠르게 훑어 " +
     "주제·앵글·타깃 독자만 파악한 뒤 /title-select 를 실행해 제목 3안을 제시하고 STOP 하라. " +
     "spec.md 전체를 채우지 말고, 나머지는 제목 확정 후 keyword-approve 에서 채운다. " +
     "아직 다음 단계로 넘어가지 마라.",
@@ -394,8 +414,9 @@ const STEP_PROMPTS = {
   //  ※ 제목 단계는 가볍게: spec.md 전체를 채우지 않는다.
   start_from_topic: (topic) =>
     `다음 주제로 블로그를 시작한다: "${topic}". references/ 폴더에 참고 자료가 ` +
-    "있으면 모두 확인한다: 문서(pdf/docx/txt)는 내용을 읽고, 이미지는 무엇이 담겼는지 " +
-    "보고 파악한다. 주제와 참고 자료를 종합해 앵글·타깃 독자·핵심 메시지를 잡고, " +
+    "있으면 모두 확인한다: pdf·txt·md·이미지는 Read 로 바로 읽고, .docx 는 " +
+    '`pandoc "references/파일명.docx" -t plain` 으로 텍스트를 뽑아 읽는다. ' +
+    "주제와 참고 자료를 종합해 앵글·타깃 독자·핵심 메시지를 잡고, " +
     "제목에 필요한 최소 정보만 파악한 뒤 /title-select 로 제목 3안을 제시하고 STOP 하라. " +
     "참고 자료는 사실 근거로만 쓰고, 지어내지 않는다. " +
     "spec.md 전체를 채우지 말고, 나머지는 제목 확정 후 keyword-approve 에서 채운다. " +

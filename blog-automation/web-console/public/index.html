@@ -10,6 +10,8 @@
   :root {
     --primary: #0747A6;
     --primary-weak: #E8EFF9;
+    --heading: #15803D;        /* 본문 제목(목차) 색 — 초록 */
+    --heading-weak: #DCFCE7;   /* h1 밑줄용 옅은 초록 */
     --dark: #0F172A;
     --line: #E2E8F0;
     --ink: #1E293B;
@@ -167,12 +169,12 @@
   .out > :first-child { margin-top: 0; }
   .out > :last-child { margin-bottom: 0; }
   .out h1, .out h2, .out h3, .out h4 {
-    color: var(--primary); font-weight: 700; line-height: 1.35; margin: 22px 0 10px;
+    color: var(--heading); font-weight: 700; line-height: 1.35; margin: 22px 0 10px;
   }
-  .out h1 { font-size: 21px; border-bottom: 2px solid var(--primary-weak); padding-bottom: 7px; }
+  .out h1 { font-size: 21px; border-bottom: 2px solid var(--heading-weak); padding-bottom: 7px; }
   .out h2 { font-size: 17.5px; }
   .out h3 { font-size: 15.5px; }
-  .out h4 { font-size: 14.5px; color: var(--primary); }
+  .out h4 { font-size: 14.5px; color: var(--heading); }
   .out p { margin: 10px 0; }
   .out strong { font-weight: 700; color: var(--primary); }
   .out em { font-style: italic; color: var(--muted); }
@@ -788,12 +790,26 @@
     if (window.marked) {
       el.innerHTML = marked.parse(text || "");
       sanitize(el);          // 혹시 섞여 온 스크립트/이벤트 핸들러 제거
+      hideBrokenImages(el);  // 아직 생성 안 된 대표이미지 등 깨진 이미지 숨김
       highlightKeywords(el);
     } else {
       // marked 로드 실패 시 원본 텍스트로 폴백
       el.style.whiteSpace = "pre-wrap";
       el.textContent = text || "";
     }
+  }
+
+  // 본문 미리보기에서 깨진 이미지(아직 생성 전인 대표이미지 등)를 숨긴다.
+  //  - 본문 작성(3단계)은 이미지 생성(4단계)보다 먼저라, 이 시점엔 썸네일 SVG가
+  //    아직 없어 항상 깨져 보인다. 마크다운의 이미지 표식은 그대로 두고(나중
+  //    이미지 단계의 삽입 위치), 렌더링에서만 깨진 아이콘을 감춘다.
+  //  - 실제로 이미지가 생성되면 정상 로드되어 그대로 표시된다.
+  //  - onerror 를 속성이 아닌 프로퍼티로 걸어 sanitize(on* 속성 제거)에 안 걸리게 한다.
+  function hideBrokenImages(root) {
+    root.querySelectorAll("img").forEach((img) => {
+      img.onerror = () => { img.style.display = "none"; };
+      if (img.complete && img.naturalWidth === 0) img.style.display = "none";
+    });
   }
 
   // 결과 텍스트를 마크다운으로 렌더링해 결과 카드에 표시

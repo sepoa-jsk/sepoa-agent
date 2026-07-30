@@ -31,6 +31,14 @@
 - 이미지 프롬프트: `images/YYYY-MM-DD-{슬러그}-prompts.md`
 - 각 글은 `spec.md`를 진실의 원천으로 삼는다 (없으면 먼저 작성 요청)
 
+## 3-1. 파일 읽기 규칙 (docx)
+
+- `.docx` 는 바이너리라 Read 로 바로 열리지 않는다. **반드시 pandoc 으로**
+  텍스트를 뽑아 읽는다: `pandoc "inbox/파일명.docx" -t plain`
+  (references/ 의 docx 도 동일).
+- python-docx·unzip·PowerShell·node 등은 허용 도구가 아니다. 시도하지 말고
+  pandoc(또는 soffice)만 쓴다. pdf 는 Read 로 직접 읽거나 `pdftotext` 로 보완한다.
+
 ## 4. 가드레일 (반드시 지킴)
 
 - **[STOP] 지점을 건너뛰지 않는다.** 앞 단계 승인 없이 다음으로 못 넘어간다.
