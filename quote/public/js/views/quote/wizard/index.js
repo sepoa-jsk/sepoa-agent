@@ -34,15 +34,18 @@ function blankState() {
   return {
     step: 1,
     basic: {
-      customer_name: '', customer_contact: '', purpose: '',
+      customer_name: '', customer_contact: '', purpose: '', phone: '', email: '',
       quote_date: todayStr(), valid_until: addDays(todayStr(), 30),
       pay_terms: '고객사 결제조건', install_note: '협의된 프로젝트 기간',
       // 마스터 연동 예정 (작업 13) — 화면에는 비활성으로 노출한다
       company_class: null, channel: null,
     },
     type: { quote_type: 'BUILD', deployment: null, template_code: null },
-    // 작업 9 에서 채운다
-    blocks: [], labor: [], discount: null,
+    blocks: [], applied: null, laborYear: null, hasLaborPlan: false,
+    round_unit: 100000,
+    discount: { mode: 'TARGET', value: null },          // null = DC 미적용
+    monthly_discount: { mode: 'TARGET', value: null },  // 월 사용료 특별DC (하겐다즈 SaaS 300,000→100,000)
+    conds: [], riskFactors: [],
     savedAt: null,
   };
 }
@@ -71,8 +74,6 @@ export async function renderWizard(root) {
         const err = validate(state.step, state);
         if (err) return toast(err, 'err');
       }
-      // 작업 9 이전: STEP③ 이후는 스텁이므로 진입 시 안내한다.
-      if (n >= 3 && state.step < 3) toast('STEP③ 이후는 작업 9 에서 구현됩니다.', 'ok');
       state.step = n; persist(); paint();
     },
     next() { api.go(state.step + 1); },

@@ -90,4 +90,13 @@ UPDATE sq_quotes q
  WHERE q.deployment IS NULL;
 
 -- ── 백필 5: 일시불 합계(기존 견적은 전액 일시불로 본다) ──────
-UPDATE sq_quotes SET onetime_total = supply_amount WHERE onetime_total = 0 AND supply_amount > 0;
+-- ⚠️ onetime_total = 0 을 "아직 백필 안 됨"으로 보면 안 된다.
+--    특별DC 로 전액 할인된 견적(무상제공)은 0 이 정답이며, 조건 없이 덮어쓰면
+--    migrate 를 돌릴 때마다 그 값이 supply_amount 로 되살아난다(실제로 발생했다).
+--    할인이 적용된 견적은 제외하고, 블록 구조가 없는 구(舊) 견적만 백필한다.
+UPDATE sq_quotes q
+   SET q.onetime_total = q.supply_amount
+ WHERE q.onetime_total = 0
+   AND q.supply_amount > 0
+   AND COALESCE(q.discount_amount, 0) = 0
+   AND NOT EXISTS (SELECT 1 FROM sq_quote_blocks b WHERE b.quote_id = q.id);

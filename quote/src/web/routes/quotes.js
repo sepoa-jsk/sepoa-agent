@@ -124,6 +124,39 @@ router.post('/calculate', apiKeyOrAuth, async (req, res, next) => {
   }
 });
 
+// ── 미리보기 (저장 안 함) ────────────────────────────────────
+// 위저드 STEP③ 우측 실시간 미리보기용. PDF 와 같은 renderQuoteHtml·같은 masters 를
+// 쓴다. 별도 렌더러를 두면 화면과 PDF 가 반드시 어긋나므로 경로를 하나로 유지한다.
+router.post('/preview', requireAuth, async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    if (!Array.isArray(body.blocks)) return res.status(400).json({ error: 'NO_BLOCKS', message: 'blocks 가 필요합니다.' });
+    const calc = calcQuoteBlocks({
+      blocks: body.blocks,
+      discount: body.discount,
+      monthly_discount: body.monthly_discount,
+      round_unit: body.round_unit ?? 100000,
+    });
+    // 저장 전이라 견적번호가 없다. 실제 채번은 저장 시점에 일어난다.
+    const quote = {
+      ...body.header,
+      quote_no: body.header?.quote_no || '(저장 시 채번)',
+      quote_date: body.header?.quote_date || new Date().toISOString().slice(0, 10),
+      blocks: calc.blocks.map((b) => ({ ...b, title: b.name ?? b.title })),
+      sections: [],
+      onetime_total: calc.onetime_total, monthly_total: calc.monthly_total,
+      supply_amount: calc.supply_amount, discount_amount: calc.discount_amount,
+      vat_amount: calc.vat_amount, total_amount: calc.total_amount,
+      round_unit: calc.round_unit,
+      conditions: Array.isArray(body.header?.conditions) ? body.header.conditions : null,
+    };
+    const { renderQuoteHtml } = require('../../domain/render/html');
+    const settings = await loadSettings();
+    const masters = await buildMasters(quote);
+    res.json({ html: renderQuoteHtml(quote, settings, masters, { withCover: false }), calc });
+  } catch (err) { next(err); }
+});
+
 // ── 견적 저장(공통) — 트랜잭션 커넥션에 헤더+섹션+품목 기록 ──
 async function persistQuote(conn, { header, calc, quoteNo, createdBy }) {
   const [r] = await conn.execute(

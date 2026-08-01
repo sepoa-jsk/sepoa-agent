@@ -1,6 +1,8 @@
 {
   "note": "BUILD 견적 템플릿. 전자인장 실물 5종(하겐다즈 SaaS/솔브레인 온프레미스 2건/SK이터닉스 PCloud) 역산. 경비·전자구매는 앞선 실물(호반/SK바이오텍/링네트/CJ) 기준 초안. 블록은 sq_blocks 참조. default_items는 price_items.code 매핑. labor_default는 인건비 기본 투입(임금단가 role_code 참조). 값(단가)은 담지 않고 마스터 참조.",
 
+  "rule_setup_labor_default": "setup_labor_default 는 has_labor_plan=1 인 템플릿에만 둔다. SETUP 등 비-LABOR 블록의 인건비 행은 금액이 아니라 인력투입계획 부록용 공수 배분이고, 금액은 같은 블록의 셋업 품목(setup_default)이 이미 담고 있다. has_labor_plan=0 인 템플릿은 부록 자체를 만들지 않으므로 이 행을 두면 화면에 쓰이지도 않으면서 이중 계상 오해만 부른다. (실측 하겐다즈 SaaS 셋업표는 '0.4MM × 5,000,000 = 2,000,000' 한 줄뿐이고 인건비 행이 없다)",
+
   "blocks_master": [
     { "code": "SOLUTION", "name": "솔루션 견적", "columns": ["구분","모듈","세부기능","수량","기준단가","제안단가","제안금액"], "calc": "amount=proposed*qty", "recurring": 0, "optional": 0, "sort": 1 },
     { "code": "SETUP", "name": "셋업비용", "columns": ["구분","세부기능","수량","기준단가","제안단가","제안금액"], "calc": "amount=proposed*qty", "recurring": 0, "optional": 0, "sort": 2 },
@@ -60,9 +62,6 @@
       "blocks": ["SETUP","SERVICE","SUMMARY"],
       "setup_default": [{ "code": "ESEAL_SAAS_SETUP", "qty": 0.4 }],
       "service_default": ["ESEAL_SAAS_BASE"],
-      "setup_labor_default": [
-        { "role_code": "DEV", "role_label": "셋업", "grade": "중급", "task": "독립 도메인/디자인(CI)/운영환경 SETUP(별도 커스터마이징 없음)", "mm": 0.4 }
-      ],
       "band_note": "서비스 이용료는 월 건수 밴드(pricing BAND) 적용. 건수별 제안금액표 하단 첨부.",
       "note": "셋업비용 + 월 서비스료. Private Server/유지보수 포함."
     },

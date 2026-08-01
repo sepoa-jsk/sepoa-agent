@@ -178,7 +178,11 @@ function renderQuoteHtml(quote, settings = {}, masters = {}, opts = {}) {
       // 블록 정의의 컬럼 수를 따른다(REV §2). 7열=구분·모듈·세부기능·… / 6열=구분·세부기능·…
       // 6열 블록(SETUP/LICENSE/SERVICE)은 모듈명과 세부기능을 한 칸에 합쳐 출력한다.
       const wide = (def.columns || []).length >= 7 || isLabor;
-      // 모듈 행 + 인건비 행(SETUP 은 둘 다 올 수 있다)
+      // 금액표에는 **LABOR 블록만** 인건비 행을 싣는다.
+      // 비-LABOR 블록(SETUP 등)의 labor 행은 인력투입계획 부록용 공수 배분이며 금액이 아니다.
+      //   실측 SK이터닉스 셋업비용표도 "3.7 MM × 12,000,000 = 44,400,000" 한 줄뿐이고
+      //   인건비 행이 없다. 3.7MM 의 출처는 부속 인력투입계획표가 설명한다.
+      // 부록(buildAppendix)은 전 블록의 labor 를 계속 모으므로 영향받지 않는다.
       const rowsData = [
         ...(b.items || []).map((it) => ({
           gubun: it.category || title, name: it.name, spec: it.spec || '',
@@ -186,12 +190,12 @@ function renderQuoteHtml(quote, settings = {}, masters = {}, opts = {}) {
           base: it.base_price, proposed: it.proposed_price != null ? it.proposed_price : it.unit_price,
           amount: Number(it.amount) || 0,
         })),
-        ...(b.labor || []).map((l) => ({
+        ...(isLabor ? (b.labor || []).map((l) => ({
           gubun: l.category || '개발인건비',
           name: (l.role_label || l.role_name || l.role_code) + (l.grade ? ` (${l.grade})` : ''),
           spec: l.task || '', qty: Number(l.mm) || 0, unit: 'MM',
           base: l.base_price, proposed: l.proposed_price, amount: Number(l.amount) || 0, isLabor: true,
-        })),
+        })) : []),
       ];
       const spans = groupSpans(rowsData);
       const nCols = wide ? 7 : 6;

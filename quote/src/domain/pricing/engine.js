@@ -62,8 +62,14 @@ const num = (v) => (v == null || v === '' ? 0 : Number(v) || 0);
 
 // 블록 1개의 라인별 금액과 소계. LABOR 는 공수(mm), 그 외는 수량(qty) 기준.
 //   amount = 제안단가 × (mm | qty).  라인에 amount 가 이미 있으면 그 값을 신뢰(스냅샷 재조회).
+// 금액 라인은 LABOR 블록만 labor 를 쓴다.
+// 비-LABOR 블록(SETUP 등)의 labor 행은 **인력투입계획 부록용 공수 배분**이며 금액이 아니다.
+//   예) PCloud 셋업 = 3.7MM × 12,000,000(모듈 단가) = 44,400,000.
+//       같은 3.7MM 을 인건비 단가로 한 번 더 곱하면 이중 계상이 된다.
+// 과거에는 Array.isArray(block.labor) 도 판정에 넣어, labor: [] 를 함께 보내기만 해도
+// 품목 블록이 인건비 블록으로 오인돼 소계가 0 이 되는 문제가 있었다.
 function calcBlock(block) {
-  const isLabor = block.block_code === 'LABOR' || Array.isArray(block.labor);
+  const isLabor = block.block_code === 'LABOR';
   const rows = isLabor ? (block.labor || []) : (block.items || []);
   const lines = rows.map((r) => {
     const proposed = num(r.proposed_price);

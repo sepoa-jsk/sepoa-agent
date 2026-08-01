@@ -61,6 +61,7 @@ export const api = {
 
   // 견적
   calculate: (payload) => req('POST', '/api/quotes/calculate', payload),
+  previewQuote: (body) => req('POST', '/api/quotes/preview', body),
   createQuote: (payload) => req('POST', '/api/quotes', payload),
   listQuotes: (params) => req('GET', `/api/quotes${qs(params)}`),
   getQuote: (id) => req('GET', `/api/quotes/${id}`),

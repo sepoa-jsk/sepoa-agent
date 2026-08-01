@@ -42,6 +42,9 @@ export async function renderStep1(root, state, wiz) {
       fld('수신처 (고객사명)', inp('customer_name', { ph: '예) 솔브레인' })),
       fld('담당자', inp('customer_contact', { ph: '예) 김OO 책임' })),
       fld('견적용도', inp('purpose', { ph: '예) 전자계약관리 시스템 견적_구축형' })),
+      // 연락처·이메일은 견적서 본문이 아니라 메모에 실린다(구 화면과 동일).
+      fld('연락처', inp('phone', { ph: '예) 010-0000-0000' })),
+      fld('이메일', inp('email', { ph: '예) name@company.co.kr' })),
       fld('기업구분', ro(''), '마스터 연동 예정 — 현재 고객사 마스터가 없습니다'),
       fld('채널', ro(''), '마스터 연동 예정'),
       fld('견적번호', ro('저장 시 자동 채번 (SYYYYMMDD###)'), '형식 전환은 작업 10'))));
