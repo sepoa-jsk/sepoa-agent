@@ -5,7 +5,7 @@ const { query, pool } = require('../../infra/db');
 const { requireAuth, apiKeyOrAuth } = require('../../infra/auth');
 const { calcQuote, computeDiscountAmount } = require('../../domain/quote/service');
 const { calcQuoteBlocks } = require('../../domain/pricing/engine');
-const { nextQuoteNo } = require('../../domain/quote/numbering');
+const { nextQuoteNo, quoteNoSearchClause } = require('../../domain/quote/numbering');
 const { buildQuoteWorkbook } = require('../../domain/render/excel');
 
 const router = express.Router();
@@ -454,13 +454,18 @@ router.post('/', requireAuth, async (req, res, next) => {
 // ── 목록 ────────────────────────────────────────────────────
 router.get('/', requireAuth, async (req, res, next) => {
   try {
-    const { status, customer } = req.query;
+    const { status, customer, quote_no: quoteNo } = req.query;
     const page = Math.max(1, Number(req.query.page) || 1);
     const size = Math.min(100, Math.max(1, Number(req.query.size) || 20));
     const conds = [];
     const params = [];
     if (status && STATUSES.includes(status)) { conds.push('status = ?'); params.push(status); }
     if (customer) { conds.push('customer_name LIKE ?'); params.push(`%${customer}%`); }
+    // 견적번호는 신형식(QT20260802_001)과 구형식(S20260802001)을 모두 찾는다.
+    if (quoteNo) {
+      const c = quoteNoSearchClause(quoteNo);
+      if (c) { conds.push(c.sql); params.push(...c.params); }
+    }
     const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
     const [{ cnt }] = await query(`SELECT COUNT(*) AS cnt FROM sq_quotes ${where}`, params);
     const rows = await query(
