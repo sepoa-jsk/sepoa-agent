@@ -195,15 +195,21 @@ sepoa-agent/
 
 ### 4.1 신규 테이블 (기획서 6.4)
 
-```
-승인·발송    sq_quote_approval · sq_quote_send · sq_quote_open_log · sq_quote_version
-정책         sq_mst_policy · sq_mst_grade_price · sq_mst_rule · sq_mst_risk_factor
-코드·문구    sq_mst_code · sq_mst_code_item · sq_mst_term_template
-템플릿       sq_mst_mail_template · sq_mst_doc_template
-조직·권한    sq_mst_dept · sq_mst_role · sq_mst_role_menu · sq_mst_role_limit
-```
+이 표는 **신규 테이블 전체 인벤토리**다. 각 STEP은 자기 담당 테이블만 생성한다.
 
-`sq_users`는 `dept_id` `role_id` `emp_no` `status` `last_login_at` 컬럼을 확장합니다.
+| 구분 | 테이블 | 담당 STEP |
+|---|---|---|
+| 정책 | `sq_mst_policy` · `sq_mst_grade_price` · `sq_mst_rule` · `sq_mst_risk_factor` | STEP 5-a (작업 13) |
+| 코드 | `sq_mst_code` · `sq_mst_code_item` | STEP 5-a (작업 13) |
+| 문구·템플릿 | `sq_mst_term_template` · `sq_mst_mail_template` · `sq_mst_doc_template` | STEP 5-b (작업 14) |
+| 조직·권한 | `sq_mst_dept` · `sq_mst_role` · `sq_mst_role_menu` · `sq_mst_role_limit` · `sq_users` 확장 | STEP 7-a (작업 17) |
+| 승인·버전 | `sq_quote_approval` · `sq_quote_version` | STEP 7-b (작업 18) |
+| 발송·열람 | `sq_quote_send` · `sq_quote_open_log` | STEP 7-c (작업 19) |
+
+`sq_users` 확장 컬럼: `dept_id` `role_id` `emp_no` `status` `last_login_at`
+
+> 분담 기준 — 그 테이블 없이 앞 작업이 완결되는가로 나눈다. 마스터 재편은 권한 없이 완결되나,
+> 권한 체계는 마스터가 있어야 수정 범위를 정할 수 있다.
 
 ### 4.2 정리 대상 (STEP 8)
 
@@ -315,12 +321,16 @@ sepoa-agent/
 
 ### STEP 5 — 마스터 재편 (2일)
 
-- [ ] `db/migrations/` 신규 DDL — §4.1 테이블 전부
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **5-a 인 6종**
+      (`sq_mst_policy` · `sq_mst_grade_price` · `sq_mst_rule` · `sq_mst_risk_factor` ·
+       `sq_mst_code` · `sq_mst_code_item`)
 - [ ] `sq_mst_policy` 시드 — 기존안/신규안/2026년안 3버전, 2026년안만 활성
 - [ ] `sq_mst_grade_price` 시드 — 등급별 정가 + 툴킷
 - [ ] `sq_mst_rule` 시드 — 이중화 0.5 / 계열사 0.25 / 유지보수 0.15 / PC유지보수 0.5
 - [ ] `sq_mst_risk_factor` 시드 — 리스크 팩터 6종
 - [ ] `sq_mst_code` / `_item` 시드 — 기업구분·견적유형·견적상태·채널·역할등급·리스크팩터·결제조건·부가세구분
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **5-b 인 3종**
+      (`sq_mst_term_template` · `sq_mst_mail_template` · `sq_mst_doc_template`)
 - [ ] `sq_mst_term_template` 시드 — 유형별 필수/조건부 문구, 치환변수 포함
 - [ ] `sq_mst_mail_template` 시드 — 발송 4종
 - [ ] `sq_mst_doc_template` 시드 — 유형별 섹션 구성 5종
@@ -354,14 +364,27 @@ sepoa-agent/
 
 - [ ] **`sq_users` 백업 (3차) — 작업 17 착수 시.** 전체 백업이 아니라 테이블 복사로 갈음한다. → §1.1
       `CREATE TABLE sq_users_bak_YYYYMMDD AS SELECT * FROM sq_users;`
-- [ ] `sq_mst_dept` / `_role` / `_role_menu` / `_role_limit` DDL + 시드(6역할)
+**7-a (작업 17) 조직·사용자·권한**
+
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **7-a 인 4종**
+      (`sq_mst_dept` · `sq_mst_role` · `sq_mst_role_menu` · `sq_mst_role_limit`) + 시드(6역할)
 - [ ] `sq_users` 확장 및 기존 ADMIN/USER → 신규 역할 매핑
 - [ ] `src/web/middleware/permission.js` — 메뉴 권한 + 발행 한도 + 배율 상한
 - [ ] 화면: `#/system/user` `#/system/role` `#/system/dept`
-- [ ] 승인 워크플로우 — `sq_quote_approval`, `#/approvals` 화면
+
+**7-b (작업 18) 승인 워크플로우 + 버전 스냅샷**
+
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **7-b 인 2종**
+      (`sq_quote_approval` · `sq_quote_version`)
+- [ ] 승인 워크플로우 — `#/approvals` 화면
 - [ ] `sq_quote_version` — 발행 시 스냅샷 저장 (마스터 변경이 기발행 견적에 영향 없음)
+
+**7-c (작업 19) 발송·열람 추적**
+
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **7-c 인 2종**
+      (`sq_quote_send` · `sq_quote_open_log`)
 - [ ] 발송 — `src/domain/dispatch/mail.js`, 메일 템플릿 치환
-- [ ] 열람 추적 — `sq_quote_send` / `sq_quote_open_log`, 링크 클릭 기준 토큰
+- [ ] 열람 추적 — 링크 클릭 기준 토큰
 - [ ] 화면: `#/dispatch` 발송·열람 현황 + 타임라인
 - [ ] 자동 리마인드 3종 (미열람 7일 / 유효일 5일 전 / 재열람 2회)
 
