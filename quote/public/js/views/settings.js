@@ -66,7 +66,7 @@ export async function renderSettings(root) {
       h('button', { class: 'btn btn-sm btn-danger', onclick: () => { tplRows.splice(i, 1); renderTpl(); } }, '삭제'));
   }
   renderTpl();
-  const addTpl = h('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { tplRows.push({ text: '', auto: false }); renderTpl(); } }, '＋ 조건 추가');
+  const addTpl = h('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { tplRows.push({ text: '', auto: false }); renderTpl(); } }, '+ 조건 추가');
   const varHelp = h('div', { class: 'page-sub', style: 'margin-bottom:10px;line-height:1.7' },
     '치환 변수: {laborRate}=인력 적용네고율 · {moduleRate}=모듈 적용네고율 · {onsiteLabel}=상주(상주로/부분상주로) · {companyLabel}=기업구분명. ',
     h('br'), '"자동" 체크 시 견적 작성에서 변수 치환·자동 갱신됩니다(직접 수정한 줄은 고정).');

@@ -40,11 +40,11 @@ export async function renderTemplates(root) {
     clear(listCol);
     if (!templates.length) { listCol.appendChild(h('div', { class: 'empty' }, '템플릿이 없습니다. db/seeds/phase5.js 로 시드하세요.')); return; }
     for (const [sol, list] of Object.entries(bySol)) {
-      listCol.appendChild(h('div', { class: 'page-sub', style: 'font-weight:700;margin:10px 4px 6px;color:var(--text-sub)' }, solName(sol)));
+      listCol.appendChild(h('div', { class: 'page-sub', style: 'font-weight:700;margin:10px 4px 6px;color:var(--text-2)' }, solName(sol)));
       for (const t of list) {
         const on = t.code === curCode;
         listCol.appendChild(h('div', {
-          class: 'panel', style: 'padding:10px 12px;margin-bottom:6px;cursor:pointer;' + (on ? 'border-color:var(--accent);box-shadow:0 0 0 2px rgba(26,86,170,.12)' : ''),
+          class: 'panel', style: 'padding:10px 12px;margin-bottom:6px;cursor:pointer;' + (on ? 'border-color:var(--primary);box-shadow:0 0 0 2px rgba(7,71,166,.12)' : ''),
           onclick: () => selectTpl(t.code),
         },
           h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' },

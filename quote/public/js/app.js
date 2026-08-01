@@ -11,6 +11,8 @@ import { renderMaster } from './views/master.js';
 import { renderLaborRates } from './views/labor-rates.js';
 import { renderTemplates } from './views/templates.js';
 import { renderQuoteBlock } from './views/quote-block.js';
+import { renderSidebar, setActiveNav } from './layout/sidebar.js';
+import { setPage, setUser, PAGE_META } from './layout/gnb.js';
 
 export const store = {
   user: null,
@@ -65,9 +67,11 @@ async function router() {
     : hash.startsWith('#/labor-rates') ? 'labor-rates'
     : hash.startsWith('#/templates') ? 'templates'
     : hash.startsWith('#/settings') ? 'settings' : 'quotes';
-  document.querySelectorAll('.sidebar-nav a').forEach((a) => {
-    a.classList.toggle('active', a.dataset.nav === nav);
-  });
+  setActiveNav(nav);
+  // 상세는 별도 메타. 화면이 액션 버튼을 올리면 렌더 중 setPage({actions}) 로 덮어쓴다.
+  const metaKey = /^#\/quotes\/\d+$/.test(hash) ? 'detail' : nav;
+  const meta = PAGE_META[metaKey] || PAGE_META.quotes;
+  setPage({ title: meta.title, path: meta.path, actions: [] });
 
   for (const r of routes) {
     const m = hash.match(r.re);
@@ -107,10 +111,8 @@ function showApp() {
   const u = store.user;
   document.getElementById('user-name').textContent = u.name || u.email;
   document.getElementById('user-role').textContent = u.role === 'ADMIN' ? '관리자' : '사용자';
-  document.getElementById('user-avatar').textContent = (u.name || u.email || '?').trim().charAt(0).toUpperCase();
-  document.querySelectorAll('[data-admin]').forEach((el) => {
-    el.classList.toggle('hidden', u.role !== 'ADMIN');
-  });
+  renderSidebar(document.querySelector('.side'), { isAdmin: u.role === 'ADMIN' });
+  setUser(u);
 }
 
 async function bootstrap() {

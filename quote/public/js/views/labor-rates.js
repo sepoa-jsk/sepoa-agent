@@ -34,7 +34,7 @@ export async function renderLaborRates(root) {
         h('div', { class: 'page-title' }, '임금단가 관리'),
         h('div', { class: 'page-sub' }, '개발인건비 기준단가(한국SW산업협회 노임 기반). 연도별 이력으로 관리하며, 활성 연도의 단가가 견적에 적용됩니다.')),
       h('div', { class: 'page-actions' },
-        h('button', { class: 'btn', onclick: newYear }, '＋ 새 연도(직전 복제)'))));
+        h('button', { class: 'btn', onclick: newYear }, '+ 새 연도(직전 복제)'))));
 
     // 연도 탭
     const tabs = h('div', { class: 'tabs', style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px' });
@@ -66,7 +66,7 @@ export async function renderLaborRates(root) {
     for (const r of cur.rates) {
       const cell = (key, opt = {}) => {
         const inp = h('input', {
-          class: 'input', style: 'height:28px;' + (opt.num ? 'text-align:right;width:120px' : 'width:100%;min-width:90px'),
+          class: 'input', style: 'height:28px;' + (opt.num ? 'text-align:right;width:104px' : 'width:100%;min-width:90px'),
           type: opt.num ? 'number' : 'text', step: 'any', value: r[key] == null ? '' : r[key],
           oninput: (e) => { edits(r.id)[key] = e.target.value; },
         });

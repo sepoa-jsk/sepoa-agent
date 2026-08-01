@@ -103,7 +103,7 @@ export async function renderDetail(root, id) {
       h('div', { class: 'panel-head' }, '견적조건'),
       h('div', { class: 'panel-body' },
         h('div', { style: 'display:flex;flex-direction:column;gap:7px' },
-          ...quote.conditions.map((c) => h('div', { style: 'color:var(--text-sub);font-size:13px;line-height:1.5' }, '-. ' + (c.text || '')))))
+          ...quote.conditions.map((c) => h('div', { style: 'color:var(--text-2);font-size:13px;line-height:1.5' }, '-. ' + (c.text || '')))))
     ));
   }
 
@@ -126,7 +126,7 @@ export async function renderDetail(root, id) {
   if (freeMemo) {
     root.appendChild(h('div', { class: 'panel' },
       h('div', { class: 'panel-head' }, '비고'),
-      h('div', { class: 'panel-body', style: 'white-space:pre-wrap;color:var(--text-sub)' }, freeMemo)
+      h('div', { class: 'panel-body', style: 'white-space:pre-wrap;color:var(--text-2)' }, freeMemo)
     ));
   }
 

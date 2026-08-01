@@ -5,12 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>세포아 견적 시스템</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/static/pretendard.min.css" />
-  <!-- tokens → base → components 순. app.css 는 잔여 스타일 흡수용으로
-       마지막에 두며, 작업 7(사용처 치환) 종료 시 제거한다. -->
+  <!-- tokens → base → components. app.css 는 작업 7 에서 흡수·제거됨. -->
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
-  <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
   <!-- 로그인 게이트 -->
@@ -36,35 +34,34 @@
   </div>
 
   <!-- 앱 셸 -->
-  <div id="app-shell" class="app-shell hidden">
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <div class="sidebar-logo">SQ</div>
-        <div class="sidebar-title">견적 시스템</div>
+  <div id="app-shell" class="app hidden">
+    <aside class="side">
+      <div class="brand">
+        <div class="logo">S</div><span>SingleSuite</span>
       </div>
-      <nav class="sidebar-nav">
-        <a href="#/quotes" data-nav="quotes"><span class="nav-ico">▤</span> 견적 목록</a>
-        <a href="#/quotes/new" data-nav="new"><span class="nav-ico">＋</span> 새 견적</a>
-        <a href="#/quotes/new-template" data-nav="new-template"><span class="nav-ico">▤</span> 템플릿 견적</a>
-        <a href="#/master" data-nav="master" data-admin><span class="nav-ico">▦</span> 마스터 관리</a>
-        <a href="#/pricing" data-nav="pricing" data-admin><span class="nav-ico">₩</span> 가격정책 관리</a>
-        <a href="#/labor-rates" data-nav="labor-rates" data-admin><span class="nav-ico">👷</span> 임금단가 관리</a>
-        <a href="#/templates" data-nav="templates" data-admin><span class="nav-ico">▤</span> 견적 템플릿</a>
-        <a href="#/settings" data-nav="settings" data-admin><span class="nav-ico">⚙</span> 설정</a>
-      </nav>
-      <div class="sidebar-foot">
-        <div class="user-box">
-          <div class="user-avatar" id="user-avatar"></div>
-          <div class="user-meta">
-            <div class="user-name" id="user-name"></div>
-            <div class="user-role" id="user-role"></div>
-          </div>
+      <nav><!-- layout/sidebar.js 가 채운다 --></nav>
+      <div class="side-foot">
+        <div class="side-user">
+          <div class="side-name" id="user-name"></div>
+          <div class="side-role" id="user-role"></div>
         </div>
         <button id="logout-btn" class="btn btn-ghost btn-sm btn-block">로그아웃</button>
       </div>
     </aside>
-    <main class="content">
-      <div id="view" class="view"></div>
+    <main class="main">
+      <header class="gnb">
+        <h1 id="gnb-title"></h1>
+        <span class="path" id="gnb-path"></span>
+        <span class="sp"></span>
+        <span class="gnb-actions" id="gnb-actions"></span>
+        <span class="user">
+          <span id="gnb-username"></span>
+          <span class="avatar" id="gnb-avatar"></span>
+        </span>
+      </header>
+      <div class="content">
+        <div id="view" class="view"></div>
+      </div>
     </main>
   </div>
 

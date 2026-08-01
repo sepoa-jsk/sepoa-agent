@@ -39,23 +39,23 @@ function addDays(dateStr, days) {
 
 const S = {
   hdr: 'border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:14px',
-  hdrTitle: 'background:var(--accent);color:#fff;padding:10px 16px;font-weight:800;letter-spacing:2px;display:flex;justify-content:space-between;align-items:center',
+  hdrTitle: 'background:var(--primary);color:#fff;padding:10px 16px;font-weight:800;letter-spacing:2px;display:flex;justify-content:space-between;align-items:center',
   hdrGrid: 'display:grid;grid-template-columns:110px 1fr 110px 1fr;gap:0',
   hcell: 'padding:8px 12px;border-top:1px solid var(--line);border-right:1px solid var(--line);font-size:13px;display:flex;align-items:center;gap:8px',
-  hkey: 'background:var(--bg);color:var(--text-sub);font-weight:700;font-size:12px',
-  card: 'display:flex;gap:14px;flex-wrap:wrap;padding:14px 16px;background:var(--panel);border:0.5px solid var(--line);border-radius:var(--radius);margin-bottom:14px',
+  hkey: 'background:var(--bg);color:var(--text-2);font-weight:700;font-size:12px',
+  card: 'display:flex;gap:14px;flex-wrap:wrap;padding:14px 16px;background:var(--white);border:0.5px solid var(--line);border-radius:var(--radius);margin-bottom:14px',
   field: 'display:flex;flex-direction:column;gap:4px',
-  flabel: 'font-size:12px;color:var(--text-sub);font-weight:700',
+  flabel: 'font-size:12px;color:var(--text-2);font-weight:700',
   thead: 'background:var(--bg)',
   blockHead: 'display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px;border-bottom:1px solid var(--line)',
-  rateEdit: 'height:26px;text-align:right;background:#E8EFF9;color:var(--accent);font-weight:600;width:56px',
-  priceEdit: 'height:28px;text-align:right;background:#E8EFF9;color:var(--accent);font-weight:600;width:110px',
+  rateEdit: 'height:26px;text-align:right;background:#E8EFF9;color:var(--primary);font-weight:600;width:56px',
+  priceEdit: 'height:28px;text-align:right;background:#E8EFF9;color:var(--primary);font-weight:600;width:110px',
   qtyEdit: 'height:28px;text-align:right;width:60px',
   specEdit: 'height:28px;width:100%;min-width:130px',
-  read: 'color:var(--text-sub)',
+  read: 'color:var(--text-2)',
   hint: 'font-size:10px;color:#aaa',
-  del: 'background:none;border:none;color:var(--red);cursor:pointer;font-size:15px;line-height:1',
-  gubun: 'color:var(--text-sub);font-weight:700;font-size:12px;white-space:nowrap',
+  del: 'background:none;border:none;color:var(--danger);cursor:pointer;font-size:15px;line-height:1',
+  gubun: 'color:var(--text-2);font-weight:700;font-size:12px;white-space:nowrap',
 };
 
 export async function renderEditor(root, { mode, id }) {
@@ -148,7 +148,7 @@ export async function renderEditor(root, { mode, id }) {
       (grandTopEl = h('span', { style: 'font-size:14px' }, ''))),
     h('div', { style: S.hdrGrid },
       hc('수신', (rcvEl = h('span', { style: 'font-weight:700' }, '고객사 귀중')), true),
-      hc('견적번호', (quoteNoEl = h('span', { style: 'font-family:ui-monospace,Consolas,monospace;color:var(--text-sub)' }, ''))),
+      hc('견적번호', (quoteNoEl = h('span', { style: 'font-family:ui-monospace,Consolas,monospace;color:var(--text-2)' }, ''))),
       hc('고객사명', custInp, true), hc('견적용도', purposeInp),
       hc('견적일자', dateInp, true), hc('결제조건', payInp),
       hc('견적유효일', validInp, true), hc('부가세', h('div', { style: 'display:flex;align-items:center;gap:6px' }, vatSel, h('span', { style: S.hint }, '별도/포함 전환'))),
@@ -296,13 +296,13 @@ export async function renderEditor(root, { mode, id }) {
           h('span', { class: 'page-sub', style: 'margin-left:8px' }, '자동(파랑) 문구는 네고율·상주여부에 따라 갱신됩니다. 직접 수정한 줄은 고정됩니다.')),
         h('span', {})),
       h('div', { style: 'padding:12px 14px' }, list,
-        h('button', { class: 'add-section', style: 'margin-top:8px', onclick: () => { condRows.push({ raw: '', text: '', auto: false, edited: true }); renderConditions(); } }, '＋ 조건 추가'))));
+        h('button', { class: 'add-section', style: 'margin-top:8px', onclick: () => { condRows.push({ raw: '', text: '', auto: false, edited: true }); renderConditions(); } }, '+ 조건 추가'))));
   }
   function condRow(r) {
     const inp = h('input', { class: 'input', style: 'flex:1', value: r.text,
       oninput: (e) => { r.text = e.target.value; r.edited = true; } });
     return h('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:6px' },
-      h('span', { style: 'color:var(--text-sub);width:16px' }, '-.'), inp,
+      h('span', { style: 'color:var(--text-2);width:16px' }, '-.'), inp,
       (r.auto && !r.edited) ? h('span', { class: 'badge badge-blue', title: '자동 갱신 문구' }, '자동') : null,
       h('button', { style: S.del, title: '삭제', onclick: () => { const i = condRows.indexOf(r); if (i >= 0) condRows.splice(i, 1); renderConditions(); } }, '×'));
   }
@@ -317,8 +317,8 @@ export async function renderEditor(root, { mode, id }) {
       h('div', { class: 'table-wrap' }, h('table', { class: 'grid master-grid' },
         theadRow(['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액', '']), tb)),
       h('div', { style: 'padding:0 14px 14px;display:flex;gap:8px' },
-        h('button', { class: 'add-section', style: 'flex:1', onclick: addModule }, '＋ 모듈 추가'),
-        h('button', { class: 'add-section', style: 'flex:1', onclick: addBundle, title: '마스터에 없는 항목을 이름·금액 직접 입력해 정액(1식)으로 추가' }, '＋ 직접입력 항목(정액) 추가')));
+        h('button', { class: 'add-section', style: 'flex:1', onclick: addModule }, '+ 모듈 추가'),
+        h('button', { class: 'add-section', style: 'flex:1', onclick: addBundle, title: '마스터에 없는 항목을 이름·금액 직접 입력해 정액(1식)으로 추가' }, '+ 직접입력 항목(정액) 추가')));
   }
   function moduleRow(r) {
     const amountCell = h('td', { class: 'num' }); const propCell = h('div', { class: 'num', style: 'font-weight:700' });
@@ -363,7 +363,7 @@ export async function renderEditor(root, { mode, id }) {
       h('div', { class: 'table-wrap' }, h('table', { class: 'grid master-grid' },
         theadRow(['구분', '역할(등급)', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액', '']), tb)),
       h('div', { style: 'padding:0 14px 14px' },
-        h('button', { class: 'add-section', onclick: addLabor }, '＋ 인력 추가')));
+        h('button', { class: 'add-section', onclick: addLabor }, '+ 인력 추가')));
   }
   function laborRow(r) {
     const amountCell = h('td', { class: 'num' }); const propCell = h('div', { class: 'num', style: 'font-weight:700' }); const baseCell = h('td', { class: 'num' });
@@ -425,8 +425,8 @@ export async function renderEditor(root, { mode, id }) {
     mSolEl = h('span', { class: 'num' }); mLaborEl = h('span', { class: 'num' }); mmMirror = h('span', { class: 'page-sub' });
     totalEl = h('strong', { class: 'num' }); dcAmtEl = h('span', { class: 'num' });
     finalEl = h('strong', { class: 'num' }); supplyEl = h('span', { class: 'num' });
-    vatEl = h('strong', { class: 'num' }); vatLabelEl = h('span', { style: 'color:var(--text-sub)' }, '부가세 (별도, 10%)');
-    grandEl = h('strong', { class: 'num', style: 'font-size:18px;color:var(--accent)' });
+    vatEl = h('strong', { class: 'num' }); vatLabelEl = h('span', { style: 'color:var(--text-2)' }, '부가세 (별도, 10%)');
+    grandEl = h('strong', { class: 'num', style: 'font-size:18px;color:var(--primary)' });
 
     const dcModeSel = sel([['RATE', '할인율(%)'], ['AMOUNT', '할인액(원)'], ['FINAL', '최종금액 직접']], dc.mode, (v) => { dc.mode = v; recalc(); });
     dcModeSel.style.cssText += ';width:100%;min-width:0;box-sizing:border-box;height:32px';
@@ -451,7 +451,7 @@ export async function renderEditor(root, { mode, id }) {
   }
   function srow(label, valEl) {
     return h('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;margin:6px 0;font-size:13px' },
-      typeof label === 'string' ? h('span', { style: 'color:var(--text-sub)' }, label) : label, valEl);
+      typeof label === 'string' ? h('span', { style: 'color:var(--text-2)' }, label) : label, valEl);
   }
 
   async function save() {

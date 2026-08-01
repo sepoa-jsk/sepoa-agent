@@ -8,12 +8,12 @@ import { h, won, toast, loading, clear, openModal, confirmModal } from '../ui.js
 const TABS = [
   {
     key: 'modules', tabLabel: '솔루션 모듈 단가', type: 'modules', scoped: true,
-    unitLabel: '모듈', priceLabel: '기준단가', addLabel: '＋ 모듈 추가',
+    unitLabel: '모듈', priceLabel: '기준단가', addLabel: '+ 모듈 추가',
     nameLabel: '모듈명', priceFieldLabel: '기준단가 (원)',
   },
   {
     key: 'labor', tabLabel: '직무별 단가', type: 'labor_roles', scoped: false,
-    unitLabel: '직무', priceLabel: '표준단가 (1 M/M)', addLabel: '＋ 직무 추가',
+    unitLabel: '직무', priceLabel: '표준단가 (1 M/M)', addLabel: '+ 직무 추가',
     nameLabel: '직무명', priceFieldLabel: '표준단가 1 M/M (원)',
     notice: '직무 단가는 전 솔루션 공통, 1 M/M 기준입니다.',
     injectSolution: 'PROCURE', // 신규 저장 시 solution(NOT NULL) 자동 세팅
@@ -22,9 +22,9 @@ const TABS = [
 
 const S = {
   tabActive: 'padding:7px 16px;border-radius:999px;border:1px solid #0747A6;background:#0747A6;color:#fff;font-weight:600;font-size:13px;cursor:pointer',
-  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-sub);font-weight:600;font-size:13px;cursor:pointer',
-  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--panel);border:0.5px solid var(--line);border-radius:var(--radius)',
-  linkBtn: 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
+  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-2);font-weight:600;font-size:13px;cursor:pointer',
+  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--white);border:0.5px solid var(--line);border-radius:var(--radius)',
+  linkBtn: 'background:none;border:none;color:var(--primary);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
   thead: 'background:var(--bg)',
   check: 'color:#0747A6;font-weight:700',
   uncheck: 'color:#ccc',
@@ -65,7 +65,7 @@ export async function renderPricing(root) {
   const tbody = h('tbody');
   root.appendChild(h('div', { class: 'panel' }, h('div', { class: 'table-wrap' },
     h('table', { class: 'grid master-grid' }, thead, tbody))));
-  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editItem(null) }, '＋ 추가');
+  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editItem(null) }, '+ 추가');
   root.appendChild(addBtn);
 
   function syncTabs() {
@@ -81,7 +81,7 @@ export async function renderPricing(root) {
       const sel = h('select', { class: 'select', onchange: () => { state.solution = sel.value; load(); } },
         ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)));
       ctxWrap.appendChild(h('div', { style: S.ctxBar },
-        h('span', { style: 'font-size:12.5px;color:var(--text-sub);font-weight:700' }, '솔루션'), sel));
+        h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '솔루션'), sel));
     } else if (t.notice) {
       ctxWrap.appendChild(h('div', { class: 'page-sub', style: 'margin:2px 0 12px' }, t.notice));
     }

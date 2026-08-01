@@ -19,7 +19,7 @@ export async function renderList(root) {
       h('div', { class: 'page-sub' }, '작성한 견적을 조회하고 상태를 관리합니다.')
     ),
     h('div', { class: 'page-actions' },
-      h('a', { class: 'btn btn-primary', href: '#/quotes/new' }, '＋ 새 견적')
+      h('a', { class: 'btn btn-primary', href: '#/quotes/new' }, '+ 새 견적')
     )
   ));
 

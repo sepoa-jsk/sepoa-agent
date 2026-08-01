@@ -143,7 +143,7 @@ export async function renderQuoteBlock(root) {
     // 헤더 정보
     const inp = (key, opt = {}) => h('input', { class: 'input', type: opt.type || 'text', value: st.info[key], style: opt.style || '', onchange: (e) => { st.info[key] = e.target.value; } });
     // 부가세는 실측 견적서 전부 '별도' 표기 — 선택지를 두지 않는다(PLAN_PHASE5_REV §6)
-    const vatLbl = h('div', { class: 'input', style: 'display:flex;align-items:center;background:var(--bg-sub);color:var(--text-sub)' }, '별도 (10%)');
+    const vatLbl = h('div', { class: 'input', style: 'display:flex;align-items:center;background:var(--bg);color:var(--text-2)' }, '별도 (10%)');
     bodyWrap.appendChild(h('div', { class: 'panel', style: 'margin-bottom:14px' },
       h('div', { class: 'panel-body', style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px' },
         field('고객사명', inp('customer_name')), field('견적용도', inp('purpose')), field('담당자', inp('customer_contact')),
@@ -166,7 +166,7 @@ export async function renderQuoteBlock(root) {
     condWrap.appendChild(h('div', { class: 'panel' },
       h('div', { class: 'panel-head' }, '▣ 견적조건'),
       h('div', { style: 'padding:12px 14px' }, list,
-        h('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: () => { st.conds.push({ text: '' }); const r = condRow(st.conds[st.conds.length - 1]); list.appendChild(r); } }, '＋ 조건 추가'))));
+        h('button', { class: 'btn btn-sm', style: 'margin-top:8px', onclick: () => { st.conds.push({ text: '' }); const r = condRow(st.conds[st.conds.length - 1]); list.appendChild(r); } }, '+ 조건 추가'))));
     bodyWrap.appendChild(condWrap);
     recalc();
   }
@@ -197,7 +197,7 @@ export async function renderQuoteBlock(root) {
           ? { role_code: 'DEV', role_label: '', role_name: '', grade: '', task: '', mm: 1, base_price: null, proposed_price: 0, amount: 0, month_alloc: {} }
           : { item_code: '', category: '', name: '항목', spec: '', qty: 1, base_price: null, proposed_price: 0, amount: 0 };
         rows.push(nr); tb.appendChild(rowEl(b, nr, isLabor)); recalc();
-      } }, isLabor ? '＋ 인력 추가' : '＋ 항목 추가');
+      } }, isLabor ? '+ 인력 추가' : '+ 항목 추가');
       // 엑셀 붙여넣기 — "모듈코드[TAB]수량" 행을 그대로 붙여 넣어 일괄 편입
       const pasteBtn = isLabor ? null : h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 6px', onclick: () => pasteInto(b, rows, tb) }, '엑셀 붙여넣기');
 
@@ -278,7 +278,7 @@ export async function renderQuoteBlock(root) {
       : null;
     const specInp = h('input', { class: 'input', style: 'width:100%', value: (isLabor ? r.task : r.spec) || '', oninput: (e) => { if (isLabor) r.task = e.target.value; else r.spec = e.target.value; } });
     const qtyInp = h('input', { class: 'input', type: 'number', step: 'any', style: 'width:70px;text-align:right', value: r[qtyKey], oninput: (e) => { r[qtyKey] = e.target.value; recalc(); } });
-    const propInp = h('input', { class: 'input', type: 'number', step: 'any', style: 'width:110px;text-align:right;background:#E8EFF9;color:var(--accent);font-weight:600', value: r.proposed_price, oninput: (e) => { r.proposed_price = e.target.value; recalc(); } });
+    const propInp = h('input', { class: 'input', type: 'number', step: 'any', style: 'width:110px;text-align:right;background:#E8EFF9;color:var(--primary);font-weight:600', value: r.proposed_price, oninput: (e) => { r.proposed_price = e.target.value; recalc(); } });
     const tr = h('tr', {},
       h('td', {}, isLabor
         ? h('div', { style: 'display:flex;flex-direction:column;gap:3px' },
@@ -302,8 +302,8 @@ export async function renderQuoteBlock(root) {
     els.build = h('strong', { class: 'num' }); els.dc = h('span', { class: 'num' });
     els.trunc = h('span', { class: 'num' }); els.final = h('strong', { class: 'num' });
     els.vat = h('strong', { class: 'num' });
-    els.grand = h('strong', { class: 'num', style: 'font-size:18px;color:var(--accent)' });
-    els.monthly = h('strong', { class: 'num', style: 'font-size:16px;color:var(--accent)' });
+    els.grand = h('strong', { class: 'num', style: 'font-size:18px;color:var(--primary)' });
+    els.monthly = h('strong', { class: 'num', style: 'font-size:16px;color:var(--primary)' });
     els.laborWarn = h('div', { style: 'display:none;margin-top:10px;padding:8px;background:#FFF7E0;border:1px solid #e0a800;font-size:12px;line-height:1.5' });
 
     const dcModeSel = h('select', { class: 'select', style: 'width:100%;height:32px', onchange: (e) => { st.dc.mode = e.target.value; recalc(); } },
@@ -324,10 +324,10 @@ export async function renderQuoteBlock(root) {
     return h('div', { class: 'panel', style: 'position:sticky;top:16px;padding:16px' },
       h('div', { style: 'font-weight:800;margin-bottom:12px' }, '견적 합계'),
       srow('일시불 소계 (블록 합)', els.build),
-      h('div', { style: 'margin:10px 0' }, h('div', { style: 'font-size:12px;color:var(--text-sub);font-weight:700' }, '특별 DC'),
+      h('div', { style: 'margin:10px 0' }, h('div', { style: 'font-size:12px;color:var(--text-2);font-weight:700' }, '특별 DC'),
         h('div', { style: 'display:flex;gap:6px;margin-top:4px' }, h('div', { style: 'flex:1;min-width:0' }, dcModeSel), h('div', { style: 'flex:1;min-width:0' }, dcValInp))),
       srow('DC 금액', els.dc),
-      h('div', { style: 'margin:10px 0' }, h('div', { style: 'font-size:12px;color:var(--text-sub);font-weight:700' }, '절사'), roundSel),
+      h('div', { style: 'margin:10px 0' }, h('div', { style: 'font-size:12px;color:var(--text-2);font-weight:700' }, '절사'), roundSel),
       srow('절사액', els.trunc), line(),
       srow('최종견적금액 (일시불)', els.final),
       srow('부가세 (별도, 10%)', els.vat), line(),
@@ -338,7 +338,7 @@ export async function renderQuoteBlock(root) {
   }
   function srow(label, valEl) {
     return h('div', { style: 'display:flex;justify-content:space-between;align-items:baseline;margin:6px 0;font-size:13px' },
-      typeof label === 'string' ? h('span', { style: 'color:var(--text-sub)' }, label) : label, valEl);
+      typeof label === 'string' ? h('span', { style: 'color:var(--text-2)' }, label) : label, valEl);
   }
 
   async function save() {
@@ -385,5 +385,5 @@ export async function renderQuoteBlock(root) {
     } catch (err) { toast(err.message, 'err'); }
   }
 
-  function field(label, el) { return h('div', { class: 'field', style: 'display:flex;flex-direction:column;gap:4px' }, h('span', { style: 'font-size:12px;color:var(--text-sub);font-weight:700' }, label), el); }
+  function field(label, el) { return h('div', { class: 'field', style: 'display:flex;flex-direction:column;gap:4px' }, h('span', { style: 'font-size:12px;color:var(--text-2);font-weight:700' }, label), el); }
 }

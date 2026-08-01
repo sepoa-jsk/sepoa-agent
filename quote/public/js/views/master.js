@@ -193,11 +193,11 @@ const MASTERS = [
 
 const S = {
   tabActive: 'padding:7px 16px;border-radius:999px;border:1px solid #0747A6;background:#0747A6;color:#fff;font-weight:600;font-size:13px;cursor:pointer',
-  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-sub);font-weight:600;font-size:13px;cursor:pointer',
-  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--panel);border:0.5px solid var(--line);border-radius:var(--radius)',
-  mono: 'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--accent);font-weight:600',
-  linkBtn: 'background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
-  linkDanger: 'background:none;border:none;color:var(--red);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
+  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-2);font-weight:600;font-size:13px;cursor:pointer',
+  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--white);border:0.5px solid var(--line);border-radius:var(--radius)',
+  mono: 'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--primary);font-weight:600',
+  linkBtn: 'background:none;border:none;color:var(--primary);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
+  linkDanger: 'background:none;border:none;color:var(--danger);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
   thead: 'background:var(--bg)',
   check: 'color:#0747A6;font-weight:700',
   uncheck: 'color:#ccc',
@@ -250,7 +250,7 @@ export async function renderMaster(root) {
 
   // ── 탭 바 ──
   const tabbar = h('div', { style: 'display:flex;align-items:center;gap:8px;margin:4px 0 14px;flex-wrap:wrap' });
-  tabbar.appendChild(h('span', { style: 'font-size:12px;color:var(--muted);font-weight:700;margin-right:2px' }, '기준정보'));
+  tabbar.appendChild(h('span', { style: 'font-size:12px;color:var(--text-3);font-weight:700;margin-right:2px' }, '기준정보'));
   MASTERS.forEach((m) => tabbar.appendChild(h('button', {
     dataset: { tab: m.type },
     style: m.type === state.type ? S.tabActive : S.tabIdle,
@@ -267,7 +267,7 @@ export async function renderMaster(root) {
   const tbody = h('tbody');
   const tablePanel = h('div', { class: 'panel' }, h('div', { class: 'table-wrap' },
     h('table', { class: 'grid master-grid' }, thead, tbody)));
-  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editRow(null) }, '＋ 새 항목 추가');
+  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editRow(null) }, '+ 새 항목 추가');
   const customWrap = h('div', { style: 'display:none' }); // 네고율 매트릭스 등 전용 렌더 영역
   root.appendChild(tablePanel);
   root.appendChild(addBtn);
@@ -286,7 +286,7 @@ export async function renderMaster(root) {
     const sel = h('select', { class: 'select', onchange: () => { state.solution = sel.value; load(); } },
       ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)));
     ctxWrap.appendChild(h('div', { style: S.ctxBar },
-      h('span', { style: 'font-size:12.5px;color:var(--text-sub);font-weight:700' }, '솔루션'), sel));
+      h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '솔루션'), sel));
   }
 
   // 연도 필터 셀렉트(협회노임단가 등 filterYear 마스터). 데이터에서 연도를 뽑아 구성.
@@ -295,7 +295,7 @@ export async function renderMaster(root) {
     const sel = h('select', { class: 'select', onchange: () => { state.year = Number(sel.value); load(); } },
       ...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
     ctxWrap.appendChild(h('div', { style: S.ctxBar },
-      h('span', { style: 'font-size:12.5px;color:var(--text-sub);font-weight:700' }, '연도'), sel));
+      h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '연도'), sel));
   }
 
   function buildHead() {
@@ -360,7 +360,7 @@ export async function renderMaster(root) {
           const pct = row ? (Number(row.rate) * 100).toFixed(0) + '%' : '-';
           return h('td', {
             class: 'num',
-            style: row ? 'cursor:pointer;color:var(--accent);font-weight:600' : 'color:#ccc',
+            style: row ? 'cursor:pointer;color:var(--primary);font-weight:600' : 'color:#ccc',
             onclick: row ? () => editRate(row) : null,
           }, pct);
         })
@@ -541,7 +541,7 @@ export async function renderMaster(root) {
     const refreshPreview = m.preview
       ? () => { previewEl.textContent = m.preview(form, previewCtx); }
       : null;
-    if (m.preview) previewEl = h('div', { style: 'margin-top:12px;padding:10px 12px;background:var(--primary-weak);border-radius:8px;font-weight:700;color:var(--accent);text-align:right' });
+    if (m.preview) previewEl = h('div', { style: 'margin-top:12px;padding:10px 12px;background:var(--primary-weak);border-radius:8px;font-weight:700;color:var(--primary);text-align:right' });
 
     // showIf 로 조건부 노출. rerenders 필드(예: calc_type) 변경 시 폼을 다시 그린다.
     const gridEl = h('div', { class: 'form-grid' });

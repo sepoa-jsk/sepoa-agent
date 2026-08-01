@@ -122,3 +122,107 @@ table.grid tfoot td{background:#FAFBFC;border-top:1px solid var(--line);border-b
 .chk .tx b{display:block;font-weight:600;margin-bottom:2px}
 .chk .tx span{font-size:11px;color:var(--text-2);line-height:1.55}
 .chk .code{font-size:10.5px;color:var(--text-3);font-weight:600;flex-shrink:0}
+
+/* ══════════════════════════════════════════════════════════════
+   app.css 흡수분 — 기존 화면 9종이 의존하는 컴포넌트.
+   별칭 변수(--accent/--muted 등)는 전부 신 토큰으로 치환했다.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 버튼 (기존 화면용 변형) ── */
+.btn { justify-content: center; background: #fff; color: var(--text); transition: .12s; }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-navy { background: var(--navy); border-color: var(--navy); color: #fff; }
+.btn-navy:hover { background: var(--navy-2); }
+.btn-ghost { background: transparent; border-color: transparent; color: #B3BAC5; }
+.btn-ghost:hover { background: var(--navy-2); color: #fff; }
+.btn-danger { color: var(--danger); border-color: #FFBDAD; background: #fff; }
+.btn-danger:hover { background: var(--danger-bg); }
+.btn-sm { height: 26px; padding: 0 9px; font-size: 11.5px; font-weight: 500; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── 페이지 헤더 (제목은 GNB 로 올라갔고 설명·액션만 남는다) ── */
+.page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.page-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.page-sub { color: var(--text-3); font-size: 12px; margin-top: 2px; }
+.page-actions { display: flex; gap: 8px; }
+
+/* ── 패널 ── */
+.panel { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); }
+.panel + .panel { margin-top: 14px; }
+.panel-head { padding: 0 14px; height: 38px; border-bottom: 1px solid var(--line-2); font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: space-between; }
+.panel-body { padding: 14px; }
+
+/* ── 폼 ── */
+.filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11.5px; color: var(--text-2); font-weight: 600; }
+.input, .select, .textarea { height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius); background: #FAFBFC; color: var(--text); }
+.textarea { height: auto; padding: 8px 10px; resize: vertical; }
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 2px var(--primary-weak); }
+.qty-input { width: 72px; height: 28px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.price-input { width: 110px; height: 28px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.chk-box { width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
+
+/* ── 표 (기존 화면용 보강) ── */
+.table-wrap { overflow-x: auto; }
+table.grid th { position: sticky; top: 0; z-index: 1; }
+table.grid tr.clickable { cursor: pointer; }
+.nowrap { white-space: nowrap; }
+
+/* 마스터 관리 전용: 세로 구분선 + zebra */
+table.master-grid th, table.master-grid td { border-right: 1px solid var(--line-2); padding: 8px 10px; }
+table.master-grid th:last-child, table.master-grid td:last-child { border-right: none; }
+table.master-grid th { background: #FAFBFC; color: var(--text-2); border-bottom: 1px solid var(--line); }
+table.master-grid tbody tr:nth-child(even) > td { background: #FCFCFD; }
+table.master-grid tbody tr:hover > td { background: var(--primary-weak); }
+
+/* ── 뱃지 ── */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 2px; font-size: 11px; font-weight: 600; }
+.badge-gray { background: #EBECF0; color: var(--text-2); }
+.badge-blue { background: var(--primary-weak); color: var(--primary); }
+.badge-green { background: var(--ok-bg); color: var(--ok); }
+.badge-red { background: var(--danger-bg); color: var(--danger); }
+.badge-yellow { background: var(--warn-bg); color: #B65C00; }
+.badge-navy { background: var(--navy); color: #fff; }
+
+/* ── 견적 편집기 ── */
+.editor-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+.section-card { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.section-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #FAFBFC; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.section-head .field { min-width: 120px; }
+.section-head .grow { flex: 1; }
+.section-title { font-weight: 600; color: var(--text); }
+.section-body { padding: 0; }
+.item-row-negotiate { background: var(--warn-bg); }
+.add-section { width: 100%; height: 40px; border: 1px dashed var(--line); border-radius: var(--radius); background: #fff; color: var(--primary); font-weight: 600; }
+.add-section:hover { background: var(--primary-weak); border-color: var(--primary); }
+
+.summary { position: sticky; top: 0; }
+.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12.5px; }
+.summary-row.total { border-top: 2px solid var(--navy); margin-top: 6px; padding-top: 11px; font-size: 14px; font-weight: 700; }
+.summary-row .lbl { color: var(--text-2); }
+
+/* ── 상세 ── */
+.detail-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; }
+.meta-item .k { font-size: 11.5px; color: var(--text-3); margin-bottom: 2px; }
+.meta-item .v { font-size: 13.5px; font-weight: 600; color: var(--text); }
+
+/* ── 상태 표시 ── */
+.empty { text-align: center; padding: 44px 20px; color: var(--text-3); }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--primary-weak); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 모달 ── */
+.modal-back { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: #fff; border-radius: var(--radius); width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto; box-shadow: 0 8px 28px rgba(15,23,42,.24); }
+.modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+.modal-body { padding: 18px; }
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* 제목은 GNB 가 표시한다. 화면 안 page-title 은 중복이므로 숨기고
+   설명(page-sub)·액션(page-actions)만 남긴다. 화면 JS 는 건드리지 않는다. */
+.view .page-title { display: none; }
+.view .page-head { margin-bottom: 12px; }
+.view .page-head:empty, .view .page-head > div:empty { display: none; }
