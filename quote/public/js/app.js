@@ -11,6 +11,7 @@ import { renderMaster } from './views/master.js';
 import { renderLaborRates } from './views/labor-rates.js';
 import { renderTemplates } from './views/templates.js';
 import { renderQuoteBlock } from './views/quote-block.js';
+import { renderWizard } from './views/quote/wizard/index.js';
 import { renderSidebar, setActiveNav } from './layout/sidebar.js';
 import { setPage, setUser, PAGE_META } from './layout/gnb.js';
 
@@ -46,7 +47,8 @@ const viewEl = () => document.getElementById('view');
 
 const routes = [
   { re: /^#\/quotes\/new-template$/, view: () => renderQuoteBlock(viewEl()) },
-  { re: /^#\/quotes\/new$/, view: () => renderEditor(viewEl(), { mode: 'new' }) },
+  // #/quotes/new → 위저드. 레거시 editor.js 는 수정 경로(/edit)로만 남기며 작업 10 에서 폐기.
+  { re: /^#\/quotes\/new$/, view: () => renderWizard(viewEl()) },
   { re: /^#\/quotes\/(\d+)\/edit$/, view: (m) => renderEditor(viewEl(), { mode: 'edit', id: Number(m[1]) }) },
   { re: /^#\/quotes\/(\d+)$/, view: (m) => renderDetail(viewEl(), Number(m[1])) },
   { re: /^#\/quotes$/, view: () => renderList(viewEl()) },

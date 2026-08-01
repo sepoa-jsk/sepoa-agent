@@ -1,0 +1,118 @@
+// STEP② 유형 선택 — quote_type × deployment 조합을 카드로 제시하고 템플릿을 붙인다.
+// 조합은 임의로 만들지 않는다. sq_quote_templates 에 실제로 존재하는 것만 노출한다.
+import { api as http } from '../../../api.js';
+import { h } from '../../../ui.js';
+
+const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
+const DEP_LABEL = {
+  ONPREM_LUMP: '온프레미스 일시불', ONPREM_INSTALL: '온프레미스 분납',
+  SAAS: 'SaaS', PCLOUD: 'Private Cloud',
+};
+const DEP_DESC = {
+  ONPREM_LUMP: '솔루션 + 개발인건비. 특별DC 후 일시납',
+  ONPREM_INSTALL: '솔루션 무상 + 인건비 + 월사용료 분납',
+  SAAS: '셋업 + 월 서비스료. 건수 밴드 적용',
+  PCLOUD: '셋업 + 라이선스 + 월 서비스료',
+};
+
+let tplCache = null;
+async function loadTemplates() {
+  if (tplCache) return tplCache;
+  try {
+    const r = await http.templates({});
+    tplCache = r.templates || [];
+  } catch {
+    tplCache = [];
+  }
+  return tplCache;
+}
+
+function comboCards(combos, state, root, wiz) {
+  if (!combos.length) return [h('div', { class: 'empty' }, '등록된 템플릿이 없습니다.')];
+  return combos.map((c) => {
+    const on = state.type.quote_type === c.quote_type && state.type.deployment === c.deployment;
+    const card = h('div', { class: 'factor' + (on ? ' on' : ''), style: 'display:block' },
+      h('div', { class: 't' },
+        h('b', {}, DEP_LABEL[c.deployment] || c.deployment),
+        h('span', {}, DEP_DESC[c.deployment] || ''),
+        h('span', { class: 'src' }, `${TYPE_LABEL[c.quote_type] || c.quote_type} · 템플릿 ${c.count}종`)));
+    card.addEventListener('click', () => {
+      wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null } });
+      renderStep2(root, wiz.get(), wiz);
+    });
+    return card;
+  });
+}
+
+function tplCards(list, state, root, wiz) {
+  return list.map((tpl) => {
+    const on = state.type.template_code === tpl.code;
+    const card = h('div', { class: 'factor' + (on ? ' on' : '') },
+      h('div', { class: 't' },
+        h('b', {}, tpl.name),
+        h('span', {}, (tpl.block_codes || []).join(' + ') || '블록 미정'),
+        h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
+      tpl.has_labor_plan ? h('span', { class: 'badge badge-yellow' }, '인력투입계획') : null);
+    card.addEventListener('click', () => {
+      wiz.patch({ type: { template_code: tpl.code } });
+      renderStep2(root, wiz.get(), wiz);
+    });
+    return card;
+  });
+}
+
+export async function renderStep2(root, state, wiz) {
+  root.replaceChildren();
+  const all = await loadTemplates();
+
+  // 실제 존재하는 조합만 (템플릿 없는 조합은 선택 불가)
+  const combos = [];
+  for (const tpl of all) {
+    const key = `${tpl.quote_type}|${tpl.deployment}`;
+    let c = combos.find((x) => x.key === key);
+    if (!c) {
+      c = { key, quote_type: tpl.quote_type, deployment: tpl.deployment, count: 0 };
+      combos.push(c);
+    }
+    c.count++;
+  }
+
+  const typeCard = h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('div', { class: 'card-h' },
+      h('h2', {}, '견적 유형'),
+      h('span', { class: 'sub' }, '템플릿이 등록된 조합만 선택할 수 있습니다'),
+      h('span', { class: 'sp' }),
+      h('span', { class: 'badge badge-gray' }, '유지보수·추가개발은 Phase 6')),
+    h('div', {
+      class: 'card-b',
+      style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px',
+    }, ...comboCards(combos, state, root, wiz)));
+  root.appendChild(typeCard);
+
+  if (state.type.deployment) {
+    const list = all.filter((x) => x.quote_type === state.type.quote_type && x.deployment === state.type.deployment);
+    root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },
+      h('div', { class: 'card-h' },
+        h('h2', {}, '템플릿 선택'),
+        h('span', { class: 'sub' }, `${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종`)),
+      h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
+        ...tplCards(list, state, root, wiz))));
+  }
+
+  root.appendChild(h('div', { class: 'card' },
+    h('div', { class: 'card-h' },
+      h('h2', {}, '적용 정책 버전'),
+      h('span', { class: 'sub' }, '작업 13 마스터 재편 이후 연동')),
+    h('div', { class: 'card-b' },
+      h('div', { class: 'banner inf' },
+        h('div', {},
+          h('b', {}, '정책 버전 마스터가 아직 없습니다'),
+          '현재는 가격정책(sq_price_items)과 활성 임금단가 연도가 그대로 적용됩니다.')))));
+}
+
+// 다음 단계로 가기 전 확인
+export function validateStep2(state) {
+  if (!state.type.deployment) return '구축형태를 선택하세요.';
+  if (!state.type.template_code) return '템플릿을 선택하세요.';
+  return null;
+}
