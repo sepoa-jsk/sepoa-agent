@@ -67,6 +67,6 @@ node tools/db/seeddb.js quote/db/migrations/007_20260715_procure_onprem_seed.sql
 |---|---|---|
 | dotenv 경로 (13개) | `{ path: './quote/.env' }` (cwd 상대) | `path.join(__dirname, '../../quote/.env')` |
 | dotenv 경로 (`dbtest.js`) | `config()` — 경로 없음, 루트에 `.env` 가 없어 미로드 | 위와 동일하게 지정 |
-| `verify.js` 엔진 require | `./quote/lib/quote-engine` | `../../quote/lib/quote-engine` |
+| `verify.js` 엔진 require | `./quote/lib/quote-engine` | `../../quote/src/domain/pricing/engine` (작업 4 재조정) |
 | `initdb.js` 스키마 경로 | `__dirname + quote/sql/001_schema.sql` | `__dirname + ../../quote/db/migrations/001_...` |
 | `forceseed.js` 시드 경로 | `'./quote/sql/011_...'` (cwd 상대) | `path.join(__dirname, '../../quote/db/migrations/008_...')` + `path` import 추가 |

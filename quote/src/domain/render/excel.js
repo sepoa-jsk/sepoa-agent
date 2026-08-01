@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
 
-const ASSETS = path.join(__dirname, '..', 'assets');
+const ASSETS = path.join(__dirname, '..', '..', '..', 'assets');
 // ExcelJS 4.4.0 의 이미지 그리기(drawing) 삽입이 일부 Excel 에서 "복구된 레코드:
 // 그리기" 오류를 유발한다(앵커·이미지 크기 무관하게 재현). 그리기를 아예 만들지
 // 않도록 이미지 삽입을 끄고, 표지는 색상 밴드+텍스트로, 인감은 "(인)" 텍스트로

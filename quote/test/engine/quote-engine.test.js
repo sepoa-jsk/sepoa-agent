@@ -5,9 +5,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
-const { calcLine, calcTotals, resolveUnitPrice } = require('../lib/quote-engine');
+const { calcLine, calcTotals, resolveUnitPrice } = require('../../src/domain/pricing/engine');
 
-const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'db', 'seeds', 'pricing-seed.json'), 'utf8'));
+const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'db', 'seeds', 'pricing-seed.json'), 'utf8'));
 const byCode = new Map(seed.items.map((it) => [it.code, it]));
 
 function line(code, opts) {

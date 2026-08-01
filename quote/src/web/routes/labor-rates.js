@@ -2,8 +2,8 @@
 // 임금단가(개발인건비) 전용 관리 API — 연도별 이력 + active 지정 + 연도 복제.
 // 마운트: /api/labor-rates
 const express = require('express');
-const { query, pool } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/auth');
+const { query, pool } = require('../../infra/db');
+const { requireAuth, requireAdmin } = require('../../infra/auth');
 
 const router = express.Router();
 

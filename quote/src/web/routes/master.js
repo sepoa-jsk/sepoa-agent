@@ -2,8 +2,8 @@
 // 마스터 관리 라우트 — 제네릭 CRUD.
 // 8개 마스터를 화이트리스트(TABLES)로 정의하고 공통 핸들러로 처리.
 const express = require('express');
-const { query, pool } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/auth');
+const { query, pool } = require('../../infra/db');
+const { requireAuth, requireAdmin } = require('../../infra/auth');
 
 const router = express.Router();
 

@@ -1,8 +1,8 @@
 'use strict';
 // 설정 라우트 — 공급자 정보 등 key-value. 조회는 로그인, 수정은 ADMIN.
 const express = require('express');
-const { query } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/auth');
+const { query } = require('../../infra/db');
+const { requireAuth, requireAdmin } = require('../../infra/auth');
 
 const router = express.Router();
 

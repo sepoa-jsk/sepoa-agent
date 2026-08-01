@@ -2,8 +2,8 @@
 require('dotenv').config();
 const path = require('path');
 const express = require('express');
-const { sessionMiddleware, AUTH_MODE } = require('./lib/auth');
-const { pool } = require('./lib/db');
+const { sessionMiddleware, AUTH_MODE } = require('./src/infra/auth');
+const { mountRoutes } = require('./src/web/router');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3100;
@@ -18,30 +18,8 @@ app.use(sessionMiddleware());
 // 정적 프론트엔드 (Phase 3)
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 헬스체크
-app.get('/api/health', async (req, res) => {
-  try {
-    await pool.query('SELECT 1');
-    res.json({ ok: true, authMode: AUTH_MODE });
-  } catch (err) {
-    res.status(500).json({ ok: false, db: err.message });
-  }
-});
-
-// 라우트
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/master', require('./routes/master'));
-app.use('/api', require('./routes/pricing'));
-
-app.use('/api/quotes', require('./routes/quotes'));
-app.use('/api/settings', require('./routes/settings'));
-app.use('/api/labor-rates', require('./routes/labor-rates'));
-app.use('/api', require('./routes/templates'));
-
-// 404 (API)
-app.use('/api', (req, res) => {
-  res.status(404).json({ error: 'NOT_FOUND', message: `${req.method} ${req.originalUrl}` });
-});
+// 헬스체크 + 도메인 라우트 + /api 404 (등록은 src/web/router.js 가 담당)
+mountRoutes(app);
 
 // 에러 핸들러
 app.use((err, req, res, next) => {

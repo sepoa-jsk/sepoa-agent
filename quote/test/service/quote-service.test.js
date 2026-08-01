@@ -2,7 +2,7 @@
 // quote-service 순수 함수 테스트 (DB 불필요)
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { computeDiscountAmount, buildLine } = require('../lib/quote-service');
+const { computeDiscountAmount, buildLine } = require('../../src/domain/quote/service');
 
 test('할인 — AMOUNT는 값 그대로', () => {
   assert.equal(computeDiscountAmount({ type: 'AMOUNT', value: 500000 }, 10000000), 500000);

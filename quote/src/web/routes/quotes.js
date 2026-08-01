@@ -1,12 +1,12 @@
 'use strict';
 // 견적 라우트 — 계산 / CRUD(3계층) / 채번 / Excel
 const express = require('express');
-const { query, pool } = require('../lib/db');
-const { requireAuth, apiKeyOrAuth } = require('../lib/auth');
-const { calcQuote, computeDiscountAmount } = require('../lib/quote-service');
-const { calcQuoteBlocks } = require('../lib/quote-engine');
-const { nextQuoteNo } = require('../lib/numbering');
-const { buildQuoteWorkbook } = require('../lib/excel');
+const { query, pool } = require('../../infra/db');
+const { requireAuth, apiKeyOrAuth } = require('../../infra/auth');
+const { calcQuote, computeDiscountAmount } = require('../../domain/quote/service');
+const { calcQuoteBlocks } = require('../../domain/pricing/engine');
+const { nextQuoteNo } = require('../../domain/quote/numbering');
+const { buildQuoteWorkbook } = require('../../domain/render/excel');
 
 const router = express.Router();
 const STATUSES = ['DRAFT', 'SENT', 'WON', 'LOST'];
@@ -546,7 +546,7 @@ async function buildMasters(quote) {
     deploymentNames: Object.fromEntries(deps.map((d) => [d.code, d.name])),
   };
   try {
-    const { calcStandardRate } = require('../lib/labor-standard');
+    const { calcStandardRate } = require('../../domain/labor/standard');
     const wantYear = Number(String(quote.quote_date || '').slice(0, 4)) || null;
     const yrs = await query('SELECT DISTINCT year FROM sq_labor_standards ORDER BY year DESC');
     const useYear = (wantYear && yrs.some((y) => Number(y.year) === wantYear)) ? wantYear : (yrs[0] && Number(yrs[0].year));
@@ -651,8 +651,8 @@ router.get('/:id/excel', requireAuth, async (req, res, next) => {
 // ── PDF 다운로드 (HTML → 헤드리스 Chrome) ────────────────────
 router.get('/:id/pdf', requireAuth, async (req, res, next) => {
   try {
-    const { renderQuoteHtml } = require('../lib/quote-html');
-    const { htmlToPdf } = require('../lib/quote-pdf');
+    const { renderQuoteHtml } = require('../../domain/render/html');
+    const { htmlToPdf } = require('../../domain/render/pdf');
     const quote = await loadQuote(Number(req.params.id));
     if (!quote) return res.status(404).json({ error: 'NOT_FOUND' });
     const settings = await loadSettings();

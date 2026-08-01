@@ -1,8 +1,8 @@
 'use strict';
 // 블록/견적조건/템플릿 조회 + 템플릿 관리(ADMIN). 마운트: /api
 const express = require('express');
-const { query, pool } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/auth');
+const { query, pool } = require('../../infra/db');
+const { requireAuth, requireAdmin } = require('../../infra/auth');
 
 const router = express.Router();
 

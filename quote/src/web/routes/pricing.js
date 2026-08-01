@@ -1,8 +1,8 @@
 'use strict';
 // 마스터/가격정책 라우트
 const express = require('express');
-const { query, pool } = require('../lib/db');
-const { requireAuth, requireAdmin } = require('../lib/auth');
+const { query, pool } = require('../../infra/db');
+const { requireAuth, requireAdmin } = require('../../infra/auth');
 
 const router = express.Router();
 const PRICING_TYPES = ['DISCOUNT', 'BAND', 'FIXED', 'MM'];

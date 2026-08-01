@@ -4,7 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ASSETS = path.join(__dirname, '..', 'assets');
+const ASSETS = path.join(__dirname, '..', '..', '..', 'assets');
 function dataUri(file) {
   try { return 'data:image/png;base64,' + fs.readFileSync(path.join(ASSETS, file)).toString('base64'); }
   catch { return null; }

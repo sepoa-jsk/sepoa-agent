@@ -1,8 +1,8 @@
 'use strict';
 // 견적 계산 서비스 — /calculate 와 견적 저장(create/update)이 공유하는 계산 경로.
 // 저장 시 이 결과를 단가 스냅샷으로 그대로 영속화한다.
-const { query } = require('./db');
-const { calcLine } = require('./quote-engine');
+const { query } = require('../../infra/db');
+const { calcLine } = require('../pricing/engine');
 
 function computeDiscountAmount(discount, supply) {
   if (!discount || !discount.type) return 0;

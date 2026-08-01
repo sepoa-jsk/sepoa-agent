@@ -7,7 +7,7 @@ const {
   provisionUser,
   verifyGoogleIdToken,
   requireAuth,
-} = require('../lib/auth');
+} = require('../../infra/auth');
 
 const router = express.Router();
 

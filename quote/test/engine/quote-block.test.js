@@ -7,7 +7,7 @@
 //                                             → 일시납 100,000,000 / 월 1,275,000
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calcQuoteBlocks, calcBlock, computeDiscount, floorTo, validateMonthAlloc } = require('../lib/quote-engine');
+const { calcQuoteBlocks, calcBlock, computeDiscount, floorTo, validateMonthAlloc } = require('../../src/domain/pricing/engine');
 
 // ── 실측 1: 솔브레인 전자계약 (온프레미스 일시불) ──────────────
 // 솔루션 소계 50,000,000 + 인건비 소계 36,600,000 = Total 86,600,000 → 특별DC → 60,000,000

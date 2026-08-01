@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const ExcelJS = require('exceljs');
-const { buildQuoteWorkbook } = require('../lib/excel');
+const { buildQuoteWorkbook } = require('../../src/domain/render/excel');
 
 const quote = {
   quote_no: 'S20260707001',

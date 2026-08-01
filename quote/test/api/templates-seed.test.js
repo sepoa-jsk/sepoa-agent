@@ -4,8 +4,8 @@
 //       가리키는 템플릿이 투입되는 것을 막는다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const seed = require('../db/seeds/templates-seed.json');
-const laborSeed = require('../db/seeds/labor-rates-seed.json');
+const seed = require('../../db/seeds/templates-seed.json');
+const laborSeed = require('../../db/seeds/labor-rates-seed.json');
 
 const BLOCK_ITEM_KEY = {
   SOLUTION: 'default_items', SETUP: 'setup_default', LICENSE: 'license_default',
