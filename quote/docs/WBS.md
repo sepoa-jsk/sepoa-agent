@@ -20,7 +20,7 @@ Phase 5-A~5-D는 사실상 완료 상태입니다. **엔진과 PDF는 실측 재
 | PDF 렌더러 | `lib/quote-pdf.js` + `quote-html.js` (415줄) | 헤드리스 Chrome, 실측 3종 레이아웃 대조 통과 |
 | 임금단가 마스터 | `sq_labor_rate_years` / `_lines` | 연도 복제·활성 토글 동작 |
 | 템플릿 체계 | `sq_quote_templates` 외 3종 | BUILD 8종 시드 완료 |
-| 실측 테스트 | `test/quote-block.test.js` (271줄) | 17종 재현. **개편 중 회귀 방어선** |
+| 실측 테스트 | `test/quote-block.test.js` (271줄) | 20종 재현. **개편 중 회귀 방어선** |
 
 ### 0.2 개편이 필요한 문제
 
@@ -44,7 +44,7 @@ Phase 5-A~5-D는 사실상 완료 상태입니다. **엔진과 PDF는 실측 재
 
 ## 1. 개편 원칙
 
-1. **엔진과 PDF는 건드리지 않는다** — 이동만 하고 로직 변경 금지. `test/quote-block.test.js` 17종이 STEP마다 전부 통과해야 한다.
+1. **엔진과 PDF는 건드리지 않는다** — 이동만 하고 로직 변경 금지. `test/quote-block.test.js` 20종이 STEP마다 전부 통과해야 한다.
 2. **한 STEP = 한 커밋 = 한 관심사** — 이동과 수정을 같은 커밋에 섞지 않는다. 이동 커밋은 `git mv`로 diff가 rename으로 잡히게 한다.
 3. **비파괴 마이그레이션** — 레거시 테이블은 STEP 8에서 사용처가 0임을 확인한 뒤에만 드롭한다.
 4. **화면은 시안 우선** — `견적자동화_화면시안.html`이 UI 정본. 임의 변형 금지.
@@ -204,9 +204,12 @@ sepoa-agent/
 - [ ] `npm test` 전체 통과 확인 → **기준선 로그를 `docs/baseline-test.log`로 저장**
 - [ ] 실측 PDF 3종(하겐다즈·솔브레인·SK이터닉스) 생성 → `docs/baseline-pdf/`에 보관
 - [ ] DB 스키마 덤프 → `docs/baseline-schema.sql`
-- [ ] 운영 DB 백업 (5-C 때와 달리 이번엔 파괴적 변경 있음 — 생략 금지)
 
 **DoD** 기준선 3종(테스트 로그·PDF·스키마)이 보관되고, 이후 모든 STEP에서 비교 가능하다.
+
+> STEP 0~2는 비파괴다(조회·이동·스타일). 운영 DB 백업은 기존 데이터가 있는 테이블을
+> 실제로 변경하는 **STEP 3 진입 전**으로 옮겼다. `baseline-schema.sql` 은 구조 덤프이며
+> 데이터 백업을 대체하지 않는다.
 
 ---
 
@@ -257,6 +260,8 @@ sepoa-agent/
 
 `editor.js`(레거시 섹션형)를 폐기하고 `quote-block.js` 로직을 5단계 위저드로 분해합니다.
 
+- [ ] **운영 DB 백업 (1차) — 생략 금지.** 작업 10 은 `sq_quote_seq`, 작업 17 은 `sq_users` ALTER 로
+      기존 데이터가 있는 테이블을 변경한다.
 - [ ] `public/js/views/quote/wizard/` 신설, `step1~step5.js` 생성
 - [ ] `quote-block.js` 389줄을 STEP③(구성)·STEP④(인건비)로 분해
 - [ ] STEP① 기본정보 — 고객사 선택 시 기업구분 자동 로드, 회사정보 읽기전용 블록
@@ -285,7 +290,7 @@ sepoa-agent/
 - [ ] `engine.js`는 모델 디스패처로만 남기고 계산은 모델 파일로 위임
 - [ ] 실측 딜 5건(K뱅크·삼정·삼성생명·한화투자증권·교보생명) 테스트 케이스 추가
 
-**DoD** 기존 17종 + 신규 5종 = 22종 실측 재현 통과.
+**DoD** 기존 20종 + 신규 5종 = 25종 실측 재현 통과.
 **커밋** `feat(pricing): GRADE·RATE·MD 모델 및 리스크 계수 엔진 추가`
 
 ---
@@ -346,6 +351,8 @@ sepoa-agent/
 
 ### STEP 8 — 레거시 정리 (0.5일)
 
+- [ ] **운영 DB 백업 (2차) — 생략 금지.** 이 STEP 은 테이블을 실제로 DROP 한다
+      (`sq_labor_rates` 6행 · `sq_quote_sections` 15행 · `sq_nego_rates` 20행, 기준선 시점).
 - [ ] `sq_labor_rates` 사용처 grep → 0건 확인 후 DROP
 - [ ] `sq_quote_sections` 사용처 확인 후 DROP (`sq_quote_items.section_id` 처리 포함)
 - [ ] `sq_nego_rates` 존치 여부 판단
@@ -393,4 +400,4 @@ sepoa-agent/
 - STEP 완료 시: DoD 체크 + `npm test` + 변경 요약 보고 → 사용자 승인 → 다음 STEP
 - STEP 1은 **로직 수정 절대 금지**. 이동 중 발견한 버그는 이슈로만 기록하고 STEP 8에서 처리
 - STEP 3·5·7 진입 전 커밋 + DB 백업 태그
-- 매 STEP에서 `test/engine/quote-block.test.js` 17종이 회귀 방어선. 하나라도 깨지면 진행 중단
+- 매 STEP에서 `test/engine/quote-block.test.js` 20종이 회귀 방어선. 하나라도 깨지면 진행 중단
