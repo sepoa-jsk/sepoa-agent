@@ -1,7 +1,7 @@
 'use strict';
 // 시드 로더: seed/pricing-seed.json → sq_ 테이블 투입.
 // 재실행 안전: 기존 가격정책 데이터가 있으면 skip. --force 시 기존 데이터 삭제 후 재투입.
-// 사용: node seed/seed.js [--force]
+// 사용: node db/seeds/seed.js [--force]
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');

@@ -1,13 +1,13 @@
 'use strict';
 // 견적 계산 엔진 단위 테스트 (Phase 1 완료 기준)
-// 실제 시드 데이터(seed/pricing-seed.json)로 엔진을 검증한다. DB 불필요.
+// 실제 시드 데이터(db/seeds/pricing-seed.json)로 엔진을 검증한다. DB 불필요.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const { calcLine, calcTotals, resolveUnitPrice } = require('../lib/quote-engine');
 
-const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'seed', 'pricing-seed.json'), 'utf8'));
+const seed = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'db', 'seeds', 'pricing-seed.json'), 'utf8'));
 const byCode = new Map(seed.items.map((it) => [it.code, it]));
 
 function line(code, opts) {

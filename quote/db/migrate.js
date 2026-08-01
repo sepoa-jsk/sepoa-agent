@@ -1,6 +1,10 @@
 'use strict';
-// 마이그레이션 러너: sql/ 하위 NNN_*.sql 파일을 번호순으로 실행한다.
+// 마이그레이션 러너: db/migrations/ 하위 NNN_YYYYMMDD_설명.sql 을 번호순으로 실행한다.
 // 각 파일을 세미콜론 기준으로 분리해 순차 실행 (mysql2는 기본 단일 statement).
+//
+// ⚠️ 적용 이력을 기록하지 않는다. 매 실행마다 전 파일을 다시 돌린다.
+//    따라서 모든 구문이 멱등이어야 한다(CREATE TABLE IF NOT EXISTS / ADD COLUMN
+//    IF NOT EXISTS / WHERE ... IS NULL 백필 등). 새 파일도 같은 규칙을 지킬 것.
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -18,10 +22,11 @@ function splitStatements(sql) {
 }
 
 async function main() {
-  const dir = __dirname;
+  const dir = path.join(__dirname, 'migrations');
+  // NNN_YYYYMMDD_설명.sql — NNN 이 실행 순서를 정한다(날짜는 정보용).
   const files = fs
     .readdirSync(dir)
-    .filter((f) => /^\d+_.*\.sql$/.test(f))
+    .filter((f) => /^\d{3}_\d{8}_.*\.sql$/.test(f))
     .sort();
 
   if (files.length === 0) {

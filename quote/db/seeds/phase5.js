@@ -3,7 +3,7 @@
 //   labor-rates-seed.json  → sq_labor_rate_years / sq_labor_rate_lines
 //   templates-seed.json     → sq_blocks, sq_condition_sets/lines, sq_quote_templates(+blocks/items/labor)
 // 섹션별 멱등: 각 테이블이 비어 있을 때만 투입(부분 재실행 안전). --force 시 재투입.
-// 사용: node seed/phase5.js [--force[=labor,blocks,conditions,templates]]
+// 사용: node db/seeds/phase5.js [--force[=labor,blocks,conditions,templates]]
 //   --force              전 섹션 재투입
 //   --force=labor,blocks 지정 섹션만 재투입 (나머지는 손대지 않음)
 // blocks/conditions 는 외부 FK(sq_template_blocks.block_code, sq_quote_templates.condition_set)가

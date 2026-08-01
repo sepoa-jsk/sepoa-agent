@@ -127,19 +127,22 @@ Playwright/Puppeteer는 **쓰지 않는다.** Chromium 150MB 다운로드가 폐
 ## 8. 자주 쓰는 명령
 
 ```bash
-npm start            # 서버 실행 (3100)
-npm run dev          # --watch
-npm test             # 전체 테스트
-npm run migrate      # sql/NNN_*.sql 순차 적용 (전부 멱등이어야 함)
-node seed/phase5.js  # 마스터 시드 (존재 시 skip)
-node seed/phase5.js --force=labor,blocks,conditions,modules,templates   # 섹션 지정 재투입
+npm start                 # 서버 실행 (3100)
+npm run dev               # --watch
+npm test                  # 전체 테스트
+npm run migrate           # db/migrations/NNN_YYYYMMDD_*.sql 순차 적용 (전부 멱등이어야 함)
+npm run seed:phase5       # 마스터 시드 (존재 시 skip)
+node db/seeds/phase5.js --force=labor,blocks,conditions,modules,templates   # 섹션 지정 재투입
 ```
 
+- 마이그레이션 파일명은 `NNN_YYYYMMDD_설명.sql`. **NNN 이 실행 순서**이고 날짜는 정보용이다.
+  구번호 대조표는 `db/migrations/README.md`.
 - 마이그레이션 파일은 **항상 멱등**으로 쓴다 (`ADD COLUMN IF NOT EXISTS`, `NOT EXISTS` 가드,
-  `WHERE ... IS NULL` 백필). 러너가 매번 전체 파일을 다시 실행한다.
+  `WHERE ... IS NULL` 백필). 러너는 **적용 이력을 남기지 않고 매번 전 파일을 다시 실행한다.**
 - 기존 마이그레이션 파일은 수정하지 말고 새 번호 파일을 추가한다.
-- **알려진 이슈**: `020_master_schema.sql` 이 `DELIMITER` 구문 때문에 러너에서 실패한다.
-  해당 테이블은 이미 존재해 현재는 무해하나, **신규 환경 배포 시 걸린다.**
+- **알려진 이슈**: `009_20260715_master_schema.sql` 이 `DELIMITER` 구문 때문에 러너에서 실패하며,
+  **여기서 멈춰 010 이후가 실행되지 않는다.** 해당 테이블은 이미 존재해 현재는 무해하나,
+  **신규 환경 배포 시 걸린다.**
 
 ---
 

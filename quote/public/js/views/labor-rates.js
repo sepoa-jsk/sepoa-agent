@@ -48,7 +48,7 @@ export async function renderLaborRates(root) {
     root.appendChild(tabs);
 
     if (!cur || !cur.year) {
-      root.appendChild(h('div', { class: 'empty' }, '등록된 임금단가 연도가 없습니다. seed/phase5.js 로 시드하세요.'));
+      root.appendChild(h('div', { class: 'empty' }, '등록된 임금단가 연도가 없습니다. db/seeds/phase5.js 로 시드하세요.'));
       return;
     }
 

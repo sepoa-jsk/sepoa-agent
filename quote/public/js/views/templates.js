@@ -38,7 +38,7 @@ export async function renderTemplates(root) {
   let curCode = null;
   function renderList() {
     clear(listCol);
-    if (!templates.length) { listCol.appendChild(h('div', { class: 'empty' }, '템플릿이 없습니다. seed/phase5.js 로 시드하세요.')); return; }
+    if (!templates.length) { listCol.appendChild(h('div', { class: 'empty' }, '템플릿이 없습니다. db/seeds/phase5.js 로 시드하세요.')); return; }
     for (const [sol, list] of Object.entries(bySol)) {
       listCol.appendChild(h('div', { class: 'page-sub', style: 'font-weight:700;margin:10px 4px 6px;color:var(--text-sub)' }, solName(sol)));
       for (const t of list) {

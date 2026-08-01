@@ -9,7 +9,7 @@
 
 ```bash
 node tools/check/checkdata.js
-node tools/db/seeddb.js quote/sql/010_procure_onprem_seed.sql
+node tools/db/seeddb.js quote/db/migrations/007_20260715_procure_onprem_seed.sql
 ```
 
 ## 위험도
@@ -41,10 +41,10 @@ node tools/db/seeddb.js quote/sql/010_procure_onprem_seed.sql
 
 | 스크립트 | 용도 | 위험도 |
 |---|---|---|
-| `initdb.js` | `quote/sql/001_schema.sql` 을 적용해 초기 스키마 생성 | **주의** |
-| `applyschema.js` | 인자로 받은 SQL 파일 적용 (기본 `quote/sql/020_master_schema.sql`) | **주의** |
+| `initdb.js` | `quote/db/migrations/001_20260707_schema.sql` 을 적용해 초기 스키마 생성 | **주의** |
+| `applyschema.js` | 인자로 받은 SQL 파일 적용 (기본 `quote/db/migrations/009_20260715_master_schema.sql`) | **주의** |
 | `seeddb.js` | 인자로 받은 SQL 파일을 다중 구문으로 적용 — `node tools/db/seeddb.js <경로>` | **주의** |
-| `forceseed.js` | `quote/sql/011_procure_saas_seed.sql` 강제 재투입 | **주의** |
+| `forceseed.js` | `quote/db/migrations/008_20260715_procure_saas_seed.sql` 강제 재투입 | **주의** |
 
 > 정규 마이그레이션 경로는 `quote/` 에서 `npm run migrate` 다.
 > 이 폴더의 스크립트는 개발 중 부분 적용용이며, 상시 사용하지 않는다.
@@ -68,5 +68,5 @@ node tools/db/seeddb.js quote/sql/010_procure_onprem_seed.sql
 | dotenv 경로 (13개) | `{ path: './quote/.env' }` (cwd 상대) | `path.join(__dirname, '../../quote/.env')` |
 | dotenv 경로 (`dbtest.js`) | `config()` — 경로 없음, 루트에 `.env` 가 없어 미로드 | 위와 동일하게 지정 |
 | `verify.js` 엔진 require | `./quote/lib/quote-engine` | `../../quote/lib/quote-engine` |
-| `initdb.js` 스키마 경로 | `__dirname + quote/sql/001_schema.sql` | `__dirname + ../../quote/sql/...` |
-| `forceseed.js` 시드 경로 | `'./quote/sql/011_...'` (cwd 상대) | `path.join(__dirname, '../../quote/sql/...')` + `path` import 추가 |
+| `initdb.js` 스키마 경로 | `__dirname + quote/sql/001_schema.sql` | `__dirname + ../../quote/db/migrations/001_...` |
+| `forceseed.js` 시드 경로 | `'./quote/sql/011_...'` (cwd 상대) | `path.join(__dirname, '../../quote/db/migrations/008_...')` + `path` import 추가 |

@@ -8,7 +8,7 @@
 // 중간값을 반올림하지 않고 누적한 뒤 마지막에 반올림하므로 표기값과 ±1 오차를 허용한다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const seed = require('../seed/labor-rates-seed.json');
+const seed = require('../db/seeds/labor-rates-seed.json');
 
 const y2026 = seed.labor_rate_years.find((y) => y.year === 2026);
 const byRole = (code) => y2026.rates.find((r) => r.role_code === code);

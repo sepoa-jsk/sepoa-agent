@@ -7,10 +7,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "migrate": "node sql/migrate.js",
-    "seed": "node seed/seed.js",
+    "migrate": "node db/migrate.js",
+    "seed": "node db/seeds/seed.js",
     "test": "node --test",
-    "seed:phase5": "node seed/phase5.js"
+    "seed:phase5": "node db/seeds/phase5.js"
   },
   "engines": {
     "node": ">=18"
