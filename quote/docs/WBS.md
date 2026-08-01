@@ -50,6 +50,25 @@ Phase 5-A~5-D는 사실상 완료 상태입니다. **엔진과 PDF는 실측 재
 4. **화면은 시안 우선** — `견적자동화_화면시안.html`이 UI 정본. 임의 변형 금지.
 5. **STEP 3까지는 기능 동등** — 구조만 바꾸고 동작은 그대로. 신규 기능은 STEP 4부터.
 
+### 1.1 DB 백업 정책 (확정)
+
+| 차수 | 시점 | 범위 | 목적 |
+|---|---|---|---|
+| 1차 | 작업 10 이전 | 전체 | 개편 전 원본 |
+| 2차 | 작업 14 완료 직후 | 전체 | 마스터 시드 확보 상태 (정책·등급정가·코드·문구·템플릿) |
+| 3차 | 작업 17 착수 시 | `sq_users` 만 | ALTER 직전 스냅샷 |
+| 4차 | 작업 20 이전 | 전체 | DROP 직전 |
+
+3차는 테이블 복사로 갈음한다.
+
+```sql
+CREATE TABLE sq_users_bak_YYYYMMDD AS SELECT * FROM sq_users;
+```
+
+**근거** — 백업 지점은 위험한 작업 직전이 아니라 잃으면 아까운 상태 직후에 둔다.
+작업 17 실패 시 실질적 손실은 `sq_users` 5개 컬럼이 아니라 작업 13~14의 마스터 시드다.
+작업 11~16 중 기존 테이블을 변경하는 작업은 없다(13~14는 신규 테이블 생성·시드로 additive).
+
 ---
 
 ## 2. 목표 디렉토리 구조
@@ -207,9 +226,8 @@ sepoa-agent/
 
 **DoD** 기준선 3종(테스트 로그·PDF·스키마)이 보관되고, 이후 모든 STEP에서 비교 가능하다.
 
-> STEP 0~2는 비파괴다(조회·이동·스타일). 운영 DB 백업은 기존 데이터가 있는 테이블을
-> 실제로 변경하는 **STEP 3 진입 전**으로 옮겼다. `baseline-schema.sql` 은 구조 덤프이며
-> 데이터 백업을 대체하지 않는다.
+> STEP 0~2는 비파괴다(조회·이동·스타일). 운영 DB 백업은 **§1.1 백업 정책**의 4개 지점에서
+> 수행한다. `baseline-schema.sql` 은 구조 덤프이며 데이터 백업을 대체하지 않는다.
 
 ---
 
@@ -260,8 +278,8 @@ sepoa-agent/
 
 `editor.js`(레거시 섹션형)를 폐기하고 `quote-block.js` 로직을 5단계 위저드로 분해합니다.
 
-- [ ] **운영 DB 백업 (1차) — 생략 금지.** 작업 10 은 `sq_quote_seq`, 작업 17 은 `sq_users` ALTER 로
-      기존 데이터가 있는 테이블을 변경한다.
+- [ ] **운영 DB 백업 (1차, 전체) — 생략 금지.** 개편 전 원본. 작업 10 이 `sq_quote_seq`(채번)를
+      변경한다. → §1.1
 - [ ] `public/js/views/quote/wizard/` 신설, `step1~step5.js` 생성
 - [ ] `quote-block.js` 389줄을 STEP③(구성)·STEP④(인건비)로 분해
 - [ ] STEP① 기본정보 — 고객사 선택 시 기업구분 자동 로드, 회사정보 읽기전용 블록
@@ -306,6 +324,8 @@ sepoa-agent/
 - [ ] `sq_mst_term_template` 시드 — 유형별 필수/조건부 문구, 치환변수 포함
 - [ ] `sq_mst_mail_template` 시드 — 발송 4종
 - [ ] `sq_mst_doc_template` 시드 — 유형별 섹션 구성 5종
+- [ ] **운영 DB 백업 (2차, 전체) — 작업 14 완료 직후.** 마스터 시드를 확보한 상태를 남긴다.
+      이후 작업에서 잃으면 가장 아까운 자산이다. → §1.1
 - [ ] `src/master/*` CRUD 서비스 + `src/web/routes/master/*`
 - [ ] 화면: `#/master/policy` `#/master/code` `#/master/term` `#/master/risk` `#/master/doc-template`
 - [ ] 정책 버전 전환 시 작성중 견적에 "반영하시겠습니까?" 프롬프트
@@ -332,6 +352,8 @@ sepoa-agent/
 
 ### STEP 7 — 권한·승인·발송 (2일)
 
+- [ ] **`sq_users` 백업 (3차) — 작업 17 착수 시.** 전체 백업이 아니라 테이블 복사로 갈음한다. → §1.1
+      `CREATE TABLE sq_users_bak_YYYYMMDD AS SELECT * FROM sq_users;`
 - [ ] `sq_mst_dept` / `_role` / `_role_menu` / `_role_limit` DDL + 시드(6역할)
 - [ ] `sq_users` 확장 및 기존 ADMIN/USER → 신규 역할 매핑
 - [ ] `src/web/middleware/permission.js` — 메뉴 권한 + 발행 한도 + 배율 상한
@@ -351,8 +373,8 @@ sepoa-agent/
 
 ### STEP 8 — 레거시 정리 (0.5일)
 
-- [ ] **운영 DB 백업 (2차) — 생략 금지.** 이 STEP 은 테이블을 실제로 DROP 한다
-      (`sq_labor_rates` 6행 · `sq_quote_sections` 15행 · `sq_nego_rates` 20행, 기준선 시점).
+- [ ] **운영 DB 백업 (4차, 전체) — 생략 금지.** 이 STEP 은 테이블을 실제로 DROP 한다
+      (`sq_labor_rates` 6행 · `sq_quote_sections` 15행 · `sq_nego_rates` 20행, 기준선 시점). → §1.1
 - [ ] `sq_labor_rates` 사용처 grep → 0건 확인 후 DROP
 - [ ] `sq_quote_sections` 사용처 확인 후 DROP (`sq_quote_items.section_id` 처리 포함)
 - [ ] `sq_nego_rates` 존치 여부 판단
