@@ -1,36 +1,10 @@
-/* ── SingleSuite 디자인 토큰 (네이비 / Pretendard) ── */
-:root {
-  --navy: #1e2d4e;
-  --navy-700: #26365c;
-  --navy-600: #33456e;
-  --accent: #1a56aa;
-  --accent-600: #164a90;
-  --bg: #f4f6fa;
-  --panel: #ffffff;
-  --line: #e2e7f0;
-  --line-strong: #cbd3e2;
-  --text: #1c2434;
-  --text-sub: #5b6577;
-  --muted: #8a93a5;
-  --gray: #8a93a5;
-  --blue: #1a56aa;
-  --green: #1a8a4a;
-  --red: #c0392b;
-  --yellow: #b7791f;
-  --radius: 8px;
-  --radius-sm: 6px;
-  --shadow: 0 1px 3px rgba(20,30,60,.08), 0 1px 2px rgba(20,30,60,.04);
-  --shadow-lg: 0 8px 28px rgba(20,30,60,.16);
-  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; }
-body { background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-.hidden { display: none !important; }
-a { color: inherit; text-decoration: none; }
-button { font-family: inherit; cursor: pointer; }
-input, select, textarea { font-family: inherit; font-size: 13px; }
+/* ── 잔여 스타일 (작업 6 에서 토큰·리셋 분리 후 남은 부분) ──
+   토큰   → css/tokens.css      (구 :root 블록은 여기서 제거됨)
+   리셋   → css/base.css
+   컴포넌트 → css/components.css
+   이 파일은 아직 화면 9종이 의존하는 레이아웃·컴포넌트 정의를 담고 있으며,
+   사용처를 신 토큰/컴포넌트로 옮기는 작업 7 종료 시 제거한다.
+   ※ 로드 순서상 이 파일이 마지막이므로 여기 정의가 components.css 를 이긴다. */
 
 /* ── 버튼 ── */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: #fff; color: var(--text); font-size: 13px; font-weight: 500; transition: .12s; }

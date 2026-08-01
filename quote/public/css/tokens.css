@@ -1,0 +1,81 @@
+/* ══════════════════════════════════════════════════════════════
+   SingleSuite 디자인 토큰 — 단일 출처
+   정본: docs/ui-mockup.html 의 :root 블록. 값을 임의로 만들지 말 것.
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --primary: #0747A6;
+  --primary-weak: #E8F0FB;
+  --primary-hover: #063A87;
+
+  --navy: #0F172A;
+  --navy-2: #1E293B;
+  --navy-3: #334155;
+
+  --line: #DFE1E6;
+  --line-2: #EBECF0;
+
+  --text: #172B4D;
+  --text-2: #5E6C84;
+  --text-3: #8993A4;
+
+  --bg: #F4F5F7;
+  --white: #fff;
+
+  --danger: #DE350B;
+  --danger-bg: #FFEBE6;
+  --warn: #FF8B00;
+  --warn-bg: #FFFAE6;
+  --ok: #00875A;
+  --ok-bg: #E3FCEF;
+
+  --gnb-h: 56px;
+  --side-w: 224px;
+
+  /* ERP 지향 저곡률 — 구 8px 에서 3px 로 */
+  --radius: 3px;
+  --radius-sm: 3px;
+
+  font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ── 레거시 별칭 (작업 7 에서 정리) ─────────────────────────────
+   기존 화면 9종이 구 변수명을 그대로 쓴다. 이번 커밋의 변경 범위를
+   CSS 로 한정하기 위해 별칭으로 흡수하고, 사용처 치환은 작업 7 에서 한다.
+
+   구 변수        → 신 변수            비고
+   --accent       → --primary          #1a56aa → #0747A6
+   --accent-600   → --primary-hover
+   --navy-700     → --navy-2           #1e2d4e → #0F172A 계열
+   --navy-600     → --navy-3
+   --panel        → --white
+   --line-strong  → --line             구 --line 은 --line-2 로 (상대 대비 보존)
+   --text-sub     → --text-2
+   --muted/--gray → --text-3
+   --blue         → --primary
+   --green        → --ok
+   --red          → --danger
+   --yellow       → --warn
+   --shadow/-lg   : 목업에 대응 토큰 없음 — 값 유지(그림자는 시안도 사용 안 함)
+   ────────────────────────────────────────────────────────────── */
+:root {
+  --accent: var(--primary);
+  --accent-600: var(--primary-hover);
+  --navy-700: var(--navy-2);
+  --navy-600: var(--navy-3);
+  --panel: var(--white);
+  --line-strong: var(--line);
+  --text-sub: var(--text-2);
+  --muted: var(--text-3);
+  --gray: var(--text-3);
+  --blue: var(--primary);
+  --green: var(--ok);
+  --red: var(--danger);
+  --yellow: var(--warn);
+  --shadow: 0 1px 3px rgba(20, 30, 60, .08), 0 1px 2px rgba(20, 30, 60, .04);
+  --shadow-lg: 0 8px 28px rgba(20, 30, 60, .16);
+}
+
+/* 구 --line(연한 구분선) 자리는 --line-2 가 맡는다.
+   app.css 가 --line 을 패널 테두리로 쓰므로, 별칭이 아니라
+   app.css 쪽 사용처를 작업 7 에서 --line-2 로 옮긴다. */
