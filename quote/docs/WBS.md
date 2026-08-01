@@ -201,6 +201,7 @@ sepoa-agent/
 |---|---|---|
 | 정책 | `sq_mst_policy` · `sq_mst_grade_price` · `sq_mst_rule` · `sq_mst_risk_factor` | STEP 5-a (작업 13) |
 | 코드 | `sq_mst_code` · `sq_mst_code_item` | STEP 5-a (작업 13) |
+| 고객사 | `sq_mst_customer` — 사명 · 수신처 · 담당자 · 결제조건 · 기업구분 · 채널(직거래\|에이전시) | STEP 5-a (작업 13) |
 | 문구·템플릿 | `sq_mst_term_template` · `sq_mst_mail_template` · `sq_mst_doc_template` | STEP 5-b (작업 14) |
 | 조직·권한 | `sq_mst_dept` · `sq_mst_role` · `sq_mst_role_menu` · `sq_mst_role_limit` · `sq_users` 확장 | STEP 7-a (작업 17) |
 | 승인·버전 | `sq_quote_approval` · `sq_quote_version` | STEP 7-b (작업 18) |
@@ -210,6 +211,10 @@ sepoa-agent/
 
 > 분담 기준 — 그 테이블 없이 앞 작업이 완결되는가로 나눈다. 마스터 재편은 권한 없이 완결되나,
 > 권한 체계는 마스터가 있어야 수정 범위를 정할 수 있다.
+>
+> `sq_mst_customer` 는 기획서 6.4 에 있었으나 **WBS 이관 시 누락**되었다. 작업 8 조사에서
+> "고객사 선택 → 기업구분 자동 로드"를 구현하려다 고객사 테이블 자체가 없음을 발견해 추가한다.
+> (2026-08-01 보정. 인벤토리 17 → 18종, 5-a 담당 6 → 7종)
 
 ### 4.2 정리 대상 (STEP 8)
 
@@ -321,9 +326,16 @@ sepoa-agent/
 
 ### STEP 5 — 마스터 재편 (2일)
 
-- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **5-a 인 6종**
+- [ ] `db/migrations/` 신규 DDL — §4.1 중 담당 STEP 이 **5-a 인 7종**
       (`sq_mst_policy` · `sq_mst_grade_price` · `sq_mst_rule` · `sq_mst_risk_factor` ·
-       `sq_mst_code` · `sq_mst_code_item`)
+       `sq_mst_code` · `sq_mst_code_item` · `sq_mst_customer`)
+- [ ] **고객사 마스터 신설** — `sq_mst_customer`(사명·수신처·담당자·결제조건·기업구분·
+      채널). 현재는 테이블 자체가 없고 `sq_quotes.customer_name`/`customer_contact` 가
+      자유 텍스트다
+- [ ] **`sq_quotes.customer_name` 자유텍스트 이관** — 기존 견적의 고객사명을
+      `sq_mst_customer` 로 뽑아 올리고 `sq_quotes` 에 `customer_id` 를 붙인다.
+      기존 값은 남겨 두어 미매칭 건을 추적한다(비파괴)
+- [ ] 위저드 STEP① 의 고객사·기업구분·채널 필드 활성화 (작업 8 에서 비활성으로 배치해 둠)
 - [ ] `sq_mst_policy` 시드 — 기존안/신규안/2026년안 3버전, 2026년안만 활성
 - [ ] `sq_mst_grade_price` 시드 — 등급별 정가 + 툴킷
 - [ ] `sq_mst_rule` 시드 — 이중화 0.5 / 계열사 0.25 / 유지보수 0.15 / PC유지보수 0.5
