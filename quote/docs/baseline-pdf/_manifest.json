@@ -1,0 +1,340 @@
+[
+ {
+  "key": "hagendazs-saas",
+  "name": "하겐다즈 SaaS",
+  "src": "assets/인장/전자인장_SaaS.pdf (QT20260415_002)",
+  "header": {
+   "quote_type": "BUILD",
+   "deployment": "SAAS",
+   "template_code": "ESEAL_SAAS",
+   "solution": "SEAL",
+   "customer_name": "한국하겐다즈㈜[기준선]",
+   "quote_date": "2026-04-15",
+   "memo": "[견적용도] 한국하겐다즈㈜ 전자인장관리 시스템 견적_SaaS"
+  },
+  "discount": {
+   "type": "TARGET",
+   "value": 0
+  },
+  "monthly_discount": {
+   "type": "TARGET",
+   "value": 100000
+  },
+  "blocks": [
+   {
+    "block_code": "SETUP",
+    "name": "셋업비용",
+    "recurring": 0,
+    "items": [
+     {
+      "item_code": "ESEAL_SAAS_SETUP",
+      "category": "전자인장관리솔루션(Easy Seal™)",
+      "name": "SaaS 셋업",
+      "spec": "독립 시스템 도메인 / 디자인(CI적용) / 운영환경 SETUP (별도 커스터마이징 없음)",
+      "qty": 0.4,
+      "unit": "MM",
+      "base_price": 10000000,
+      "proposed_price": 5000000
+     }
+    ]
+   },
+   {
+    "block_code": "SERVICE",
+    "name": "서비스 이용료 년 360건 기준",
+    "recurring": 1,
+    "items": [
+     {
+      "item_code": "ESEAL_SAAS_BASE",
+      "category": "전자인장관리솔루션(Easy Seal™)",
+      "name": "전자인장 서비스 이용료",
+      "spec": "인감날인관리 / PDF 문서변환 / 결재함관리 / 조직·사용자·권한관리",
+      "qty": 1,
+      "base_price": 500000,
+      "proposed_price": 300000
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "onetime": 0,
+   "monthly": 100000,
+   "subs": [
+    2000000,
+    300000
+   ]
+  },
+  "id": 44,
+  "quote_no": "S20260415005",
+  "onetime": 0,
+  "monthly": 100000,
+  "subs": [
+   2000000,
+   300000
+  ],
+  "file": "hagendazs-saas.pdf",
+  "pages": 2,
+  "size": 327088
+ },
+ {
+  "key": "solbrain-onprem",
+  "name": "솔브레인 온프레미스",
+  "src": "assets/인장/전자인장_온프레미스.pdf (QT20260728_001)",
+  "header": {
+   "quote_type": "BUILD",
+   "deployment": "ONPREM_LUMP",
+   "template_code": "ESEAL_ONPREM_LUMP",
+   "solution": "SEAL",
+   "customer_name": "솔브레인[기준선]",
+   "quote_date": "2026-07-28",
+   "memo": "[견적용도] 솔브레인 전자계약관리 시스템 견적_구축형"
+  },
+  "discount": {
+   "type": "TARGET",
+   "value": 60000000
+  },
+  "blocks": [
+   {
+    "block_code": "SOLUTION",
+    "name": "솔루션 견적",
+    "recurring": 0,
+    "items": [
+     {
+      "item_code": "POA_ECONTRACT",
+      "category": "전자인장관리솔루션",
+      "name": "Poa Contract™",
+      "spec": "전자계약, 서명관리",
+      "qty": 1,
+      "base_price": 100000000,
+      "proposed_price": 40000000
+     },
+     {
+      "item_code": "POA_DOCSCV_ES",
+      "category": "전자인장관리솔루션",
+      "name": "Poa DocsCV™",
+      "spec": "pdf 문서변환, 뷰어",
+      "qty": 0,
+      "base_price": 0,
+      "proposed_price": 0
+     },
+     {
+      "item_code": "POA_COMMON_ES",
+      "category": "전자인장관리솔루션",
+      "name": "Poa Common™",
+      "spec": "조직,사용자,메뉴,권한,시스템관리",
+      "qty": 0,
+      "base_price": 0,
+      "proposed_price": 0
+     },
+     {
+      "item_code": "POA_APPROVAL_ES",
+      "category": "전자인장관리솔루션",
+      "name": "Poa Approval™",
+      "spec": "결재함관리, 결재 워크플로우 관리",
+      "qty": 0,
+      "base_price": 0,
+      "proposed_price": 0
+     },
+     {
+      "item_code": "WEB_GRID_ES",
+      "category": "전자인장관리솔루션",
+      "name": "Web Grid & Chart",
+      "spec": "DHTML GRID & Chart",
+      "qty": 0,
+      "base_price": 0,
+      "proposed_price": 0
+     },
+     {
+      "item_code": "ESEAL_PKI",
+      "category": "응용소프트웨어",
+      "name": "전자계약 공인인증",
+      "spec": "PKI Tool Kit(전자서명)",
+      "qty": 1,
+      "base_price": 15000000,
+      "proposed_price": 10000000
+     }
+    ]
+   },
+   {
+    "block_code": "LABOR",
+    "name": "시스템 구축 견적",
+    "recurring": 0,
+    "labor": [
+     {
+      "role_code": "PM",
+      "role_label": "PM",
+      "grade": "고급",
+      "task": "프로젝트 총괄(PM), 분석, 설계",
+      "mm": 1,
+      "base_price": 25418735,
+      "proposed_price": 13500000,
+      "month_alloc": {
+       "M": 0.25,
+       "M1": 0.25,
+       "M2": 0.25,
+       "M3": 0.25
+      }
+     },
+     {
+      "role_code": "DEV",
+      "role_label": "개발",
+      "grade": "중급",
+      "task": "커스터마이징, 인터페이스, 안정화",
+      "mm": 2,
+      "base_price": 25418735,
+      "proposed_price": 10500000,
+      "month_alloc": {
+       "M1": 1,
+       "M2": 0.5,
+       "M3": 0.5
+      }
+     },
+     {
+      "role_code": "SUPPORT",
+      "role_label": "기술지원",
+      "grade": "고급",
+      "task": "서버확인, 보안점검",
+      "mm": 0.2,
+      "base_price": 25418735,
+      "proposed_price": 10500000,
+      "month_alloc": {
+       "M1": 0.2
+      }
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "onetime": 60000000,
+   "monthly": 0,
+   "subs": [
+    50000000,
+    36600000
+   ]
+  },
+  "id": 45,
+  "quote_no": "S20260728009",
+  "onetime": 60000000,
+  "monthly": 0,
+  "subs": [
+   50000000,
+   36600000
+  ],
+  "file": "solbrain-onprem.pdf",
+  "pages": 4,
+  "size": 384851
+ },
+ {
+  "key": "sk-pcloud",
+  "name": "SK이터닉스 PCloud",
+  "src": "assets/인장/전자인장_프라이빗클라우드.pdf (QT20260506_001)",
+  "header": {
+   "quote_type": "BUILD",
+   "deployment": "PCLOUD",
+   "template_code": "ESEAL_PCLOUD",
+   "solution": "SEAL",
+   "customer_name": "SK이터닉스[기준선]",
+   "quote_date": "2026-05-06",
+   "memo": "[견적용도] SK이터닉스 전자인장시스템 구축 견적_Private Cloud"
+  },
+  "discount": {
+   "type": "TARGET",
+   "value": 100000000
+  },
+  "blocks": [
+   {
+    "block_code": "SETUP",
+    "name": "셋업비용",
+    "recurring": 0,
+    "items": [
+     {
+      "item_code": "ESEAL_PC_SETUP",
+      "category": "전자인장시스템",
+      "name": "클라우드 셋업",
+      "spec": "독립 시스템 도메인 / 디자인(CI) / 운영환경 SETUP / 커스터마이징(1MM)",
+      "qty": 3.7,
+      "unit": "MM",
+      "base_price": 19540395,
+      "proposed_price": 12000000
+     },
+     {
+      "item_code": "ESEAL_PC_PKI",
+      "category": "응용소프트웨어",
+      "name": "전자계약 공인인증",
+      "spec": "PKI Tool Kit(전자서명), Non-ActiveX용",
+      "qty": 0,
+      "base_price": 20000000,
+      "proposed_price": 15000000
+     }
+    ]
+   },
+   {
+    "block_code": "LICENSE",
+    "name": "라이선스비용",
+    "recurring": 0,
+    "items": [
+     {
+      "item_code": "ESEAL_PC_LICENSE",
+      "category": "전자인장시스템",
+      "name": "솔루션 라이선스",
+      "spec": "전자인장시스템 라이선스",
+      "qty": 1,
+      "base_price": 100000000,
+      "proposed_price": 60000000
+     }
+    ]
+   },
+   {
+    "block_code": "SERVICE",
+    "name": "서비스 이용료",
+    "recurring": 1,
+    "items": [
+     {
+      "item_code": "ESEAL_PC_API",
+      "category": "전자인장시스템",
+      "name": "연동 API 사용료",
+      "qty": 1,
+      "base_price": 200000,
+      "proposed_price": 200000
+     },
+     {
+      "item_code": "ESEAL_PC_SERVER",
+      "category": "전자인장시스템",
+      "name": "Private Server 사용료",
+      "qty": 1,
+      "base_price": 700000,
+      "proposed_price": 700000
+     },
+     {
+      "item_code": "ESEAL_PC_MAINT",
+      "category": "전자인장시스템",
+      "name": "유지보수",
+      "qty": 1,
+      "base_price": 750000,
+      "proposed_price": 375000
+     }
+    ]
+   }
+  ],
+  "expect": {
+   "onetime": 100000000,
+   "monthly": 1275000,
+   "subs": [
+    44400000,
+    60000000,
+    1275000
+   ]
+  },
+  "id": 46,
+  "quote_no": "S20260506009",
+  "onetime": 100000000,
+  "monthly": 1275000,
+  "subs": [
+   44400000,
+   60000000,
+   1275000
+  ],
+  "file": "sk-pcloud.pdf",
+  "pages": 2,
+  "size": 330611
+ }
+]
