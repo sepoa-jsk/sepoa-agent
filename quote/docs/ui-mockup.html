@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>견적자동화 시스템 화면시안 | 세포아소프트</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{
+  --primary:#0747A6; --primary-weak:#E8F0FB; --primary-hover:#063A87;
+  --navy:#0F172A; --navy-2:#1E293B; --navy-3:#334155;
+  --line:#DFE1E6; --line-2:#EBECF0;
+  --text:#172B4D; --text-2:#5E6C84; --text-3:#8993A4;
+  --bg:#F4F5F7; --white:#fff;
+  --danger:#DE350B; --danger-bg:#FFEBE6;
+  --warn:#FF8B00; --warn-bg:#FFFAE6;
+  --ok:#00875A; --ok-bg:#E3FCEF;
+  --gnb-h:56px; --side-w:224px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Pretendard Variable',Pretendard,-apple-system,sans-serif;font-size:13px;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,select{font-family:inherit;font-size:13px;color:var(--text)}
+table{border-collapse:collapse;width:100%}
+
+/* ===== 시안 전환 탭 ===== */
+.demo-bar{position:sticky;top:0;z-index:100;background:var(--navy);border-bottom:1px solid #000;padding:0 16px;display:flex;align-items:center;gap:4px;height:44px}
+.demo-bar .lbl{color:#8993A4;font-size:11px;letter-spacing:.06em;font-weight:600;margin-right:12px}
+.demo-bar button{color:#B3BAC5;font-size:12px;padding:6px 12px;border-radius:3px}
+.demo-bar button:hover{background:var(--navy-2);color:#fff}
+.demo-bar button.on{background:var(--primary);color:#fff;font-weight:600}
+
+/* ===== 앱 셸 ===== */
+.app{display:flex;min-height:calc(100vh - 44px)}
+.side{width:var(--side-w);background:var(--navy);flex-shrink:0;display:flex;flex-direction:column}
+.side .brand{height:var(--gnb-h);display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--navy-2)}
+.side .brand .logo{width:22px;height:22px;background:var(--primary);border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;margin-right:8px}
+.side .brand span{color:#fff;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.side nav{padding:12px 0}
+.side .grp{color:#5E6C84;font-size:10px;font-weight:600;letter-spacing:.08em;padding:12px 16px 6px}
+.side a{display:flex;align-items:center;gap:9px;padding:8px 16px;color:#B3BAC5;text-decoration:none;font-size:13px;border-left:2px solid transparent}
+.side a:hover{background:var(--navy-2);color:#fff}
+.side a.on{background:var(--navy-2);color:#fff;border-left-color:var(--primary);font-weight:600}
+.side svg{width:16px;height:16px;flex-shrink:0;stroke-width:1.8}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.gnb{height:var(--gnb-h);background:var(--white);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0}
+.gnb h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.gnb .path{color:var(--text-3);font-size:12px}
+.gnb .sp{flex:1}
+.gnb .user{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-2)}
+.gnb .avatar{width:26px;height:26px;border-radius:50%;background:var(--primary-weak);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600}
+
+.body{flex:1;padding:16px 20px 40px;overflow:auto}
+
+/* ===== 공통 컴포넌트 ===== */
+.card{background:var(--white);border:1px solid var(--line);border-radius:3px}
+.card-h{height:38px;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--line-2);gap:8px}
+.card-h h2{font-size:13px;font-weight:600}
+.card-h .sub{font-size:11px;color:var(--text-3)}
+.card-h .sp{flex:1}
+.card-b{padding:14px}
+
+.btn{height:30px;padding:0 13px;border-radius:3px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line)}
+.btn:hover{background:var(--bg)}
+.btn.pri{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn.pri:hover{background:var(--primary-hover)}
+.btn.pri:disabled{background:#C1C7D0;border-color:#C1C7D0;cursor:not-allowed}
+.btn.sm{height:26px;padding:0 9px;font-size:11.5px;font-weight:500}
+.btn svg{width:14px;height:14px;stroke-width:2}
+
+table.grid{font-size:12.5px}
+table.grid thead th{background:#FAFBFC;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;font-weight:600;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+table.grid tbody td{border-bottom:1px solid var(--line-2);padding:8px 10px;vertical-align:middle}
+table.grid tbody tr:hover{background:#FAFBFC}
+table.grid .num{text-align:right;font-variant-numeric:tabular-nums}
+table.grid .ctr{text-align:center}
+table.grid tfoot td{background:#FAFBFC;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 10px;font-weight:600}
+
+.tag{display:inline-block;padding:2px 7px;border-radius:2px;font-size:11px;font-weight:600;line-height:1.5}
+.tag.draft{background:#EBECF0;color:var(--text-2)}
+.tag.issued{background:var(--primary-weak);color:var(--primary)}
+.tag.sent{background:var(--warn-bg);color:#B65C00}
+.tag.won{background:var(--ok-bg);color:var(--ok)}
+.tag.lost{background:var(--danger-bg);color:var(--danger)}
+.tag.ln{background:transparent;border:1px solid var(--line);color:var(--text-2);font-weight:500}
+
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:11.5px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+.fld input,.fld select{width:100%;height:32px;padding:0 9px;border:1px solid var(--line);border-radius:3px;background:#FAFBFC}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--primary);background:#fff;box-shadow:0 0 0 2px var(--primary-weak)}
+.fld .hint{font-size:11px;color:var(--text-3);margin-top:4px}
+.fld input[readonly]{background:#EBECF0;color:var(--text-2)}
+
+/* 위저드 스텝 */
+.steps{display:flex;background:var(--white);border:1px solid var(--line);border-radius:3px;margin-bottom:14px;overflow:hidden}
+.steps div{flex:1;padding:10px 14px;font-size:12px;color:var(--text-3);border-right:1px solid var(--line-2);display:flex;align-items:center;gap:8px}
+.steps div:last-child{border-right:none}
+.steps .n{width:19px;height:19px;border-radius:50%;background:#EBECF0;color:var(--text-3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.steps .done{color:var(--text-2)}
+.steps .done .n{background:var(--ok-bg);color:var(--ok)}
+.steps .on{color:var(--text);font-weight:600;background:var(--primary-weak)}
+.steps .on .n{background:var(--primary);color:#fff}
+
+/* 배너 */
+.banner{border-radius:3px;padding:11px 14px;margin-bottom:14px;display:flex;gap:11px;align-items:flex-start;font-size:12.5px}
+.banner svg{width:17px;height:17px;flex-shrink:0;margin-top:1px;stroke-width:2}
+.banner.err{background:var(--danger-bg);border:1px solid #FFBDAD;color:#BF2600}
+.banner.wrn{background:var(--warn-bg);border:1px solid #FFE380;color:#974F0C}
+.banner.inf{background:var(--primary-weak);border:1px solid #B3D4FF;color:var(--primary)}
+.banner b{display:block;margin-bottom:4px;font-size:12.5px}
+.banner ul{margin:0;padding-left:15px;line-height:1.75}
+.banner .lk{text-decoration:underline;cursor:pointer;font-weight:600}
+
+/* 체크 팩터 */
+.factor{border:1px solid var(--line);border-radius:3px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.factor:hover{border-color:#B3D4FF;background:#FAFBFC}
+.factor.on{border-color:var(--primary);background:var(--primary-weak)}
+.factor input{margin-top:2px;accent-color:var(--primary);width:14px;height:14px;flex-shrink:0}
+.factor .t{flex:1;min-width:0}
+.factor .t b{font-size:12.5px;font-weight:600;display:block}
+.factor .t span{font-size:11px;color:var(--text-2);display:block;margin-top:2px;line-height:1.5}
+.factor .co{font-size:12px;font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;flex-shrink:0}
+.factor .src{font-size:10.5px;color:var(--text-3);margin-top:3px;display:block}
+
+/* 산출 박스 */
+.calc{background:#FAFBFC;border:1px solid var(--line);border-radius:3px;padding:12px}
+.calc .row{display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--line-2)}
+.calc .row:last-of-type{border-bottom:none}
+.calc .row span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+.calc .tot{display:flex;justify-content:space-between;padding:11px 0 3px;margin-top:6px;border-top:2px solid var(--navy);font-size:14px;font-weight:700}
+.calc .tot span:last-child{font-variant-numeric:tabular-nums}
+.mult{margin-top:11px;padding:10px;border-radius:3px;font-size:12px;line-height:1.6}
+.mult.ok{background:var(--ok-bg);color:#006644}
+.mult.wrn{background:var(--warn-bg);color:#974F0C}
+.mult b{font-size:15px;font-variant-numeric:tabular-nums}
+
+/* 미리보기 */
+.pv{background:#fff;border:1px solid var(--line);padding:16px;font-size:11px}
+.pv .doc-h{border-bottom:2px solid var(--navy);padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}
+.pv .doc-h .ttl{font-size:16px;font-weight:700;letter-spacing:.04em}
+.pv .doc-h .no{font-size:10.5px;color:var(--text-2);text-align:right;line-height:1.6}
+.pv table{font-size:10.5px;margin-bottom:9px}
+.pv table th{background:#E3EDDA;border:1px solid #C1C7D0;padding:4px 6px;font-weight:600;font-size:10px}
+.pv table td{border:1px solid #DFE1E6;padding:4px 6px}
+.pv table .num{text-align:right;font-variant-numeric:tabular-nums}
+.pv table tr.sum td{background:#E3EDDA;font-weight:700}
+.pv .sec{font-size:11px;font-weight:700;margin:10px 0 5px}
+.pv .fin td{background:#DFF0D8;font-weight:700}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.split3{display:grid;grid-template-columns:300px 1fr 288px;gap:14px}
+.mb{margin-bottom:14px}
+.stack>*+*{margin-top:14px}
+@media(max-width:1500px){.split3{grid-template-columns:1fr}.split{grid-template-columns:1fr}}
+
+.scr{display:none}
+.scr.on{display:block}
+
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.stat .c{background:#fff;border:1px solid var(--line);border-radius:3px;padding:12px 14px}
+.stat .c .k{font-size:11.5px;color:var(--text-2);margin-bottom:6px}
+.stat .c .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .c .d{font-size:11px;color:var(--text-3);margin-top:3px}
+.stat .c.al .v{color:var(--danger)}
+
+.filter{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.filter select,.filter input{height:29px;border:1px solid var(--line);border-radius:3px;padding:0 9px;background:#fff}
+.filter .sp{flex:1}
+
+.ai{border:1px solid #B3D4FF;background:#F7FAFF;border-radius:3px}
+.ai .h{padding:9px 12px;border-bottom:1px solid #DCE8FA;display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--primary)}
+.ai .h svg{width:15px;height:15px;stroke-width:2}
+.ai .b{padding:12px}
+.ai .ref{border-bottom:1px solid #E4EDF9;padding:9px 0}
+.ai .ref:last-child{border-bottom:none}
+.ai .ref .r1{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.ai .ref .nm{font-size:12px;font-weight:600}
+.ai .ref .am{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.ai .ref .r2{font-size:10.5px;color:var(--text-2);line-height:1.5}
+.ai .concl{margin-top:11px;padding:10px;background:#fff;border:1px solid #B3D4FF;border-radius:3px;font-size:11.5px;line-height:1.65}
+.ai .concl b{color:var(--primary)}
+.ai .dis{font-size:10.5px;color:var(--text-3);margin-top:9px;line-height:1.5}
+
+.note{font-size:11px;color:var(--text-3);line-height:1.6;margin-top:8px}
+.chk{display:flex;gap:9px;padding:7px 0;font-size:12.5px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
+.chk:last-child{border-bottom:none}
+.chk svg{width:15px;height:15px;flex-shrink:0;margin-top:1px;stroke-width:2.2}
+.chk .pass{color:var(--ok)}
+.chk .fail{color:var(--danger)}
+.chk .warn{color:var(--warn)}
+.chk .tx{flex:1}
+.chk .tx b{display:block;font-weight:600;margin-bottom:2px}
+.chk .tx span{font-size:11px;color:var(--text-2);line-height:1.55}
+.chk .code{font-size:10.5px;color:var(--text-3);font-weight:600;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+  <span class="lbl">화면시안</span>
+  <button class="on" data-s="s1">견적 목록</button>
+  <button data-s="s4">위저드 ① 기본정보</button>
+  <button data-s="s5">위저드 ③ 구성</button>
+  <button data-s="s2">위저드 ④ 인건비 산정</button>
+  <button data-s="s3">위저드 ⑤ 검토·발행</button>
+  <button data-s="s6">가격정책 마스터</button>
+  <button data-s="s7">발송·열람 현황</button>
+  <button data-s="s8">TCO 비교</button>
+  <button data-s="s9">사용자·권한</button>
+  <button data-s="s10">공통코드·문구</button>
+  <button data-s="s11">메일·문서 템플릿</button>
+</div>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo">S</div><span>SingleSuite</span></div>
+    <nav>
+      <div class="grp">견적관리</div>
+      <a href="#" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>견적 목록</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>견적 작성</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v12H5.2L4 18z"/></svg>승인 요청함</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 9v11"/></svg>발송·열람 현황</a>
+      <div class="grp">시뮬레이션</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>TCO 비교</a>
+      <div class="grp">기준정보</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l9 4.5v11L12 22l-9-4.5v-11z"/></svg>가격정책 마스터</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M17 8h5M17 12h5"/></svg>고객사 관리</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 7h-9M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>리스크 계수</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/></svg>노임단가</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 6h16M4 12h16M4 18h10"/></svg>공통코드</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 4h16v14H8l-4 3z"/></svg>견적조건 문구</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>메일·문서 템플릿</a>
+      <div class="grp">시스템관리</div>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>사용자 관리</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>역할·권한</a>
+      <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2l9 4.5v11L12 22l-9-4.5v-11z"/><path d="M12 8v8M8 12h8"/></svg>조직 관리</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+
+    <!-- ══════════ 화면 1 : 견적 목록 ══════════ -->
+    <div class="scr on" id="s1">
+      <div class="gnb">
+        <h1>견적 목록</h1><span class="path">견적관리 / 견적 목록</span>
+        <div class="sp"></div>
+        <button class="btn pri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>견적 작성</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="stat">
+          <div class="c"><div class="k">이번 달 발행</div><div class="v">14</div><div class="d">전월 9건</div></div>
+          <div class="c"><div class="k">검토 대기 (열람됨)</div><div class="v">5</div><div class="d">평균 열람 2.4회</div></div>
+          <div class="c"><div class="k">승인 대기</div><div class="v">2</div><div class="d">인건비 배율 초과</div></div>
+          <div class="c al"><div class="k">유효일 임박</div><div class="v">3</div><div class="d">7일 이내 만료</div></div>
+        </div>
+
+        <div class="card">
+          <div class="filter">
+            <select><option>전체 유형</option><option>온프레미스</option><option>프라이빗클라우드</option><option>SaaS</option><option>유지보수</option><option>추가개발</option></select>
+            <select><option>전체 상태</option><option>작성중</option><option>승인대기</option><option>발행</option><option>발송</option><option>수주</option><option>실주</option></select>
+            <select><option>전체 기업구분</option><option>대기업군</option><option>공공</option><option>중견/중소</option></select>
+            <input type="text" placeholder="고객사 · 견적번호 검색" style="width:220px">
+            <div class="sp"></div>
+            <span style="font-size:11.5px;color:var(--text-3)">2026-05-01 ~ 2026-08-01</span>
+          </div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:132px">견적번호</th><th>고객사</th><th style="width:88px">기업구분</th>
+              <th style="width:106px">유형</th><th class="num" style="width:118px">총액 (원)</th>
+              <th class="ctr" style="width:76px">인건비 배율</th><th class="ctr" style="width:80px">상태</th>
+              <th class="ctr" style="width:88px">열람</th><th style="width:92px">유효일</th><th style="width:70px">담당</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>QT20260728_002</td><td>솔브레인</td><td>중견/중소</td><td>온프레미스</td>
+                <td class="num">80,000,000</td><td class="ctr" style="color:var(--warn);font-weight:600">0.27x</td>
+                <td class="ctr"><span class="tag sent">발송</span></td><td class="ctr">3회</td><td>2026-08-27</td><td>김종무</td></tr>
+              <tr><td>QT20260728_001</td><td>솔브레인</td><td>중견/중소</td><td>온프레미스</td>
+                <td class="num">60,000,000</td><td class="ctr" style="color:var(--warn);font-weight:600">0.27x</td>
+                <td class="ctr"><span class="tag sent">발송</span></td><td class="ctr">3회</td><td>2026-08-27</td><td>김종무</td></tr>
+              <tr style="background:#FFFAE6"><td>QT20260801_001</td><td>한화투자증권</td><td>대기업군</td><td>온프레미스</td>
+                <td class="num">240,000,000</td><td class="ctr" style="color:var(--danger);font-weight:600">6.25x</td>
+                <td class="ctr"><span class="tag draft">승인대기</span></td><td class="ctr">—</td><td>2026-08-31</td><td>김종무</td></tr>
+              <tr><td>QT20260624_001</td><td>강원랜드 <span class="tag ln">에스넷시스템</span></td><td>공공</td><td>유지보수</td>
+                <td class="num">7,425,000</td><td class="ctr">—</td>
+                <td class="ctr"><span class="tag won">수주</span></td><td class="ctr">5회</td><td>2026-07-24</td><td>김종무</td></tr>
+              <tr><td>QT20260520_002</td><td>교보AXA자산운용 <span class="tag ln">코비젼</span></td><td>대기업군</td><td>추가개발</td>
+                <td class="num">12,000,000</td><td class="ctr">—</td>
+                <td class="ctr"><span class="tag issued">발행</span></td><td class="ctr">1회</td><td>2026-06-19</td><td>김종무</td></tr>
+              <tr><td>QT20260506_001</td><td>SK이터닉스</td><td>대기업군</td><td>프라이빗클라우드</td>
+                <td class="num">100,000,000</td><td class="ctr" style="font-weight:600">0.90x</td>
+                <td class="ctr"><span class="tag won">수주</span></td><td class="ctr">4회</td><td>2026-06-05</td><td>김종무</td></tr>
+              <tr><td>QT20260415_002</td><td>한국하겐다즈</td><td>중견/중소</td><td>SaaS</td>
+                <td class="num">1,200,000</td><td class="ctr">—</td>
+                <td class="ctr"><span class="tag lost">실주</span></td><td class="ctr">1회</td><td>2026-05-15</td><td>김종무</td></tr>
+            </tbody>
+            <tfoot><tr><td colspan="4">7건</td><td class="num">500,625,000</td><td colspan="5"></td></tr></tfoot>
+          </table>
+        </div>
+
+        <p class="note">인건비 배율은 표준 공수 대비 실제 산정 비율입니다. 0.5x 미만 또는 2.0x 초과 시 색상으로 표시되며, 승인 대상입니다.</p>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 2 : 위저드 ④ 인건비 ══════════ -->
+    <div class="scr" id="s2">
+      <div class="gnb">
+        <h1>견적 작성</h1><span class="path">QT20260801_001 · 한화투자증권 · 온프레미스</span>
+        <div class="sp"></div>
+        <button class="btn">임시저장</button>
+        <button class="btn pri">다음 단계</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="steps">
+          <div class="done"><span class="n">✓</span>기본정보</div>
+          <div class="done"><span class="n">✓</span>유형 선택</div>
+          <div class="done"><span class="n">✓</span>구성</div>
+          <div class="on"><span class="n">4</span>인건비 산정</div>
+          <div><span class="n">5</span>검토·발행</div>
+        </div>
+
+        <div class="banner inf">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+          <div><b>RFP 문서에서 5개 항목을 자동 인식했습니다</b>
+          <span>한화투자증권_전자인장_요구사항.pdf — 원격 접속 제한, 부분 상주, 인터페이스 3종(SSO·기준정보·결재연동), 금융권 보안 심사. 아래 체크가 자동 반영되어 있으니 확인 후 조정하세요.</span></div>
+        </div>
+
+        <div class="split3">
+
+          <!-- 좌 : 리스크 팩터 -->
+          <div class="card">
+            <div class="card-h"><h2>리스크 팩터</h2><div class="sp"></div><span class="sub">4개 적용</span></div>
+            <div class="card-b">
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>원격 접속 불가</b><span>부분 상주 협의 중</span>
+                <span class="src">RFP p.12 "외부망 접속 불가, 상주 개발 원칙"</span></div>
+                <div class="co">×1.8</div></label>
+
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>금융권 보안 요건</b><span>보안성 심의, 취약점 진단 대응</span>
+                <span class="src">기업구분: 대기업군 / 업종: 금융</span></div>
+                <div class="co">×1.4</div></label>
+
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>인터페이스 3종</b><span>SSO · 기준정보 · 결재연동</span>
+                <span class="src">RFP p.8 연동 요건</span></div>
+                <div class="co">+1.5 MM</div></label>
+
+              <label class="factor"><input type="checkbox">
+                <div class="t"><b>데이터 마이그레이션</b><span>기존 인감대장 이관</span></div>
+                <div class="co">+0.5 MM</div></label>
+
+              <label class="factor"><input type="checkbox">
+                <div class="t"><b>전자계약·임직원계약 포함</b><span>커스터마이징 범위 확대</span></div>
+                <div class="co">+1.0 MM</div></label>
+
+              <label class="factor"><input type="checkbox">
+                <div class="t"><b>기존 고객 재구축</b><span>도메인 이해도 확보</span></div>
+                <div class="co">×0.7</div></label>
+
+              <p class="note">계수는 기준정보 &gt; 리스크 계수에서 관리합니다. 실제 수주 결과가 쌓이면 분기별로 보정됩니다.</p>
+            </div>
+          </div>
+
+          <!-- 중 : 공수 산출 -->
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>역할별 공수</h2><div class="sp"></div><span class="sub">2026년 SW산업협회 노임단가 · 적용률 65%</span></div>
+              <table class="grid">
+                <thead><tr><th>역할</th><th class="ctr" style="width:64px">표준 MM</th><th class="ctr" style="width:64px">적용 MM</th>
+                  <th class="num" style="width:104px">등급단가</th><th class="num" style="width:104px">제안단가</th><th class="num" style="width:116px">금액 (원)</th></tr></thead>
+                <tbody>
+                  <tr><td>PM</td><td class="ctr">1.0</td><td class="ctr" style="font-weight:600">2.5</td>
+                    <td class="num">25,418,735</td><td class="num">16,522,178</td><td class="num">41,305,445</td></tr>
+                  <tr><td>개발</td><td class="ctr">2.0</td><td class="ctr" style="font-weight:600">6.5</td>
+                    <td class="num">19,540,395</td><td class="num">12,701,257</td><td class="num">82,558,170</td></tr>
+                  <tr><td>기술지원</td><td class="ctr">0.2</td><td class="ctr" style="font-weight:600">1.8</td>
+                    <td class="num">25,418,735</td><td class="num">14,520,000</td><td class="num">26,136,000</td></tr>
+                </tbody>
+                <tfoot><tr><td>합계</td><td class="ctr">3.2</td><td class="ctr">10.8</td><td colspan="2"></td><td class="num">149,999,615</td></tr></tfoot>
+              </table>
+            </div>
+
+            <div class="split">
+              <div class="card">
+                <div class="card-h"><h2>산출 내역</h2></div>
+                <div class="card-b">
+                  <div class="calc">
+                    <div class="row"><span>표준 공수</span><span>3.2 MM</span></div>
+                    <div class="row"><span>원격 불가 ×1.8</span><span>5.8 MM</span></div>
+                    <div class="row"><span>금융권 보안 ×1.4</span><span>8.1 MM</span></div>
+                    <div class="row"><span>인터페이스 3종 +1.5</span><span>9.6 MM</span></div>
+                    <div class="row"><span>반올림 조정</span><span>10.8 MM</span></div>
+                    <div class="tot"><span>인건비</span><span>150,000,000</span></div>
+                  </div>
+                  <div class="mult wrn">
+                    정책 기준(24,000,000) 대비 <b>6.25배</b><br>
+                    임계치 2.0배 초과 — 발행 시 팀장 승인이 필요합니다.
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card-h"><h2>견적 총액</h2><div class="sp"></div><span class="sub">부가세 별도</span></div>
+                <div class="card-b">
+                  <div class="calc">
+                    <div class="row"><span>솔루션 (대기업군 40% DC)</span><span>60,000,000</span></div>
+                    <div class="row"><span>서버 이중화 (솔루션가 50%)</span><span>30,000,000</span></div>
+                    <div class="row"><span>공동인증 툴킷</span><span>—</span></div>
+                    <div class="row"><span>인건비</span><span>150,000,000</span></div>
+                    <div class="tot"><span>총 견적가</span><span>240,000,000</span></div>
+                  </div>
+                  <div class="mult ok">
+                    솔루션 구성은 <b>정책 정합</b><br>
+                    등급별 정가 및 이중화 계수가 정책과 일치합니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 우 : 유사 견적 -->
+          <div class="ai">
+            <div class="h"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1z"/></svg>유사 견적 참조</div>
+            <div class="b">
+              <p style="font-size:11px;color:var(--text-2);line-height:1.6;margin-bottom:9px">
+                금융권 · 원격불가 · 인터페이스 3종 · 이중화 조건의 과거 견적 3건</p>
+
+              <div class="ref"><div class="r1"><span class="nm">한화투자증권</span><span class="am" style="color:var(--danger)">150,000,000</span></div>
+                <div class="r2">2026-02 · 실주 · 인터페이스 3종<br>총액 240,000,000 / 경쟁사 대비 고가 피드백</div></div>
+
+              <div class="ref"><div class="r1"><span class="nm">삼성생명</span><span class="am">90,000,000</span></div>
+                <div class="r2">2026-03 · 진행중 · 인터페이스 3종(KNOX)<br>총액 200,000,000</div></div>
+
+              <div class="ref"><div class="r1"><span class="nm">K뱅크</span><span class="am" style="color:var(--ok)">85,000,000</span></div>
+                <div class="r2">2026-01 · 수주 · 인터페이스 3종<br>총액 250,000,000 / 6MM 산정</div></div>
+
+              <div class="concl">
+                수주 이력이 있는 구간은 <b>85,000,000 ~ 90,000,000</b>입니다.
+                현재 산정액 150,000,000은 동일 고객사에서 <b>실주한 금액과 같습니다.</b>
+                재제안이라면 공수 재검토를 권장합니다.
+              </div>
+              <p class="dis">과거 견적 이력에 근거한 참고 정보입니다. 금액 결정은 담당자가 합니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 3 : 위저드 ⑤ 검토·발행 ══════════ -->
+    <div class="scr" id="s3">
+      <div class="gnb">
+        <h1>견적 작성</h1><span class="path">QT20260415_002 · 한국하겐다즈 · SaaS</span>
+        <div class="sp"></div>
+        <button class="btn">이전</button>
+        <button class="btn">승인 요청</button>
+        <button class="btn pri" disabled>발행</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="steps">
+          <div class="done"><span class="n">✓</span>기본정보</div>
+          <div class="done"><span class="n">✓</span>유형 선택</div>
+          <div class="done"><span class="n">✓</span>구성</div>
+          <div class="done"><span class="n">✓</span>인건비 산정</div>
+          <div class="on"><span class="n">5</span>검토·발행</div>
+        </div>
+
+        <div class="banner err">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          <div><b>오류 2건 — 수정해야 발행할 수 있습니다</b>
+            <ul>
+              <li>셋업비가 0원입니다. SaaS 정책상 2,000,000원이 책정되어 있습니다. <span class="lk">③ 구성으로 이동</span></li>
+              <li>월 30건은 정책 최소 밴드(100건) 미만입니다. 특별 가격정책 승인이 필요합니다. <span class="lk">③ 구성으로 이동</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="banner wrn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div><b>확인 필요 1건</b>
+            <ul><li>적용된 밴드 테이블이 유효 정책 버전(2026년안)이 아닌 SaaS Cloud 3안입니다. 정책을 개정하거나 유효 버전 밴드를 적용하세요.</li></ul>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>검증 결과</h2><div class="sp"></div>
+                <span class="sub" style="color:var(--danger);font-weight:600">오류 2</span>
+                <span class="sub" style="color:var(--warn);font-weight:600">확인 1</span>
+                <span class="sub" style="color:var(--ok);font-weight:600">통과 12</span></div>
+              <div class="card-b" style="padding:4px 14px">
+                <div class="chk"><svg class="fail" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+                  <div class="tx"><b>셋업비 0원 발행</b><span>SaaS 정책상 초기셋업비 2,000,000원. 무상 처리 시 승인 필요</span></div><span class="code">R-10</span></div>
+                <div class="chk"><svg class="fail" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+                  <div class="tx"><b>최소 밴드 미달</b><span>월 30건 &lt; 정책 최소 100건</span></div><span class="code">R-11</span></div>
+                <div class="chk"><svg class="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+                  <div class="tx"><b>정책 버전 불일치</b><span>유효 버전이 아닌 밴드 테이블 적용</span></div><span class="code">R-14</span></div>
+                <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="tx"><b>소계·합계 정합</b></div><span class="code">R-01</span></div>
+                <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="tx"><b>월 금액 × 12 = 연 금액</b></div><span class="code">R-02</span></div>
+                <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="tx"><b>컬럼 기간단위와 값 일치</b></div><span class="code">R-05</span></div>
+                <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="tx"><b>부가세 표기와 산정 기준 일치</b></div><span class="code">R-06</span></div>
+                <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div class="tx"><b>회사정보 마스터 주입</b><span>구로구 아티스포럼 · 02-6242-3094 · 이희림</span></div><span class="code">R-16</span></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>산출물</h2></div>
+              <div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn sm">견적서 PDF</button>
+                <button class="btn sm">내부 검토용 Excel</button>
+                <button class="btn sm">TCO 비교표</button>
+                <button class="btn sm">인력투입계획</button>
+                <button class="btn sm">노임단가 부록</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>미리보기</h2><div class="sp"></div><span class="sub">1 / 2</span></div>
+            <div class="card-b" style="background:var(--bg)">
+              <div class="pv">
+                <div class="doc-h">
+                  <div class="ttl">Quotation</div>
+                  <div class="no">견적번호 QT20260415_002<br>견적일자 2026년 04월 15일<br>㈜세포아소프트 · 이 희 림</div>
+                </div>
+                <table>
+                  <tr><th style="width:70px">수　신</th><td colspan="3">한국하겐다즈㈜ 귀중</td></tr>
+                  <tr><th>견적용도</th><td colspan="3">전자인장관리 시스템 견적_SaaS</td></tr>
+                  <tr><th>총 견적가</th><td colspan="3"><b>100,000</b> 클라우드서비스 월사용료 (단위: 원, 부가세 별도)</td></tr>
+                </table>
+
+                <div class="sec">▣ 셋업비용</div>
+                <table>
+                  <tr><th>구분</th><th>세부기능</th><th style="width:46px">수량</th><th style="width:62px">제안단가</th><th style="width:62px">제안금액</th></tr>
+                  <tr><td>전자인장관리솔루션<br>(Easy Seal™)</td><td>독립 도메인 · CI 적용 · 운영환경 SETUP</td>
+                    <td class="num">0.4 MM</td><td class="num">5,000,000</td><td class="num">2,000,000</td></tr>
+                  <tr class="sum"><td colspan="4">셋업비용 소계</td><td class="num" style="background:#FFEBE6;color:#BF2600">0</td></tr>
+                </table>
+
+                <div class="sec">▣ 서비스 이용료 <span style="font-weight:400;color:#5E6C84">년 360건 기준</span></div>
+                <table>
+                  <tr><th>구분</th><th>세부기능</th><th style="width:46px">수량</th><th style="width:62px">제안단가</th><th style="width:62px">금액(월)</th></tr>
+                  <tr><td>전자인장관리솔루션<br>(Easy Seal™)</td>
+                    <td>인감날인관리, 인감사용관리, 인감관리대장<br>PDF 문서변환, 결재 워크플로우 관리</td>
+                    <td class="num">1</td><td class="num">300,000</td><td class="num">300,000</td></tr>
+                  <tr class="sum"><td colspan="4">솔루션 소계 (특별 DC)</td><td class="num">100,000</td></tr>
+                </table>
+
+                <div class="sec">▣ 견적조건</div>
+                <table><tr><td style="line-height:1.8">
+                  -. 사용료는 시스템 개시일부터 월별 과금됩니다.<br>
+                  -. 월 사용료에는 기본 솔루션유지보수가 포함됩니다.<br>
+                  -. 고객사 시스템 연계 및 추가 커스터마이징 필요 시 추가비용이 발생됩니다.<br>
+                  -. 문서변환은 MS제품(워드, 엑셀, 파워포인트) 및 한글파일을 지원합니다.<br>
+                  -. 누적 용량 100G 추가시 월 5만원 비용 추가
+                </td></tr></table>
+              </div>
+              <p class="note">붉게 표시된 항목이 검증에서 걸린 값입니다. 발행 전까지 미리보기에 그대로 반영됩니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 4 : 위저드 ① 기본정보 ══════════ -->
+    <div class="scr" id="s4">
+      <div class="gnb">
+        <h1>견적 작성</h1><span class="path">신규 견적</span>
+        <div class="sp"></div>
+        <button class="btn">임시저장</button>
+        <button class="btn pri">다음 단계</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+        <div class="steps">
+          <div class="on"><span class="n">1</span>기본정보</div>
+          <div><span class="n">2</span>유형 선택</div>
+          <div><span class="n">3</span>구성</div>
+          <div><span class="n">4</span>인건비 산정</div>
+          <div><span class="n">5</span>검토·발행</div>
+        </div>
+
+        <div class="split">
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>고객사</h2></div>
+              <div class="card-b">
+                <div class="fld"><label>고객사</label>
+                  <select><option>한화투자증권</option><option>솔브레인</option><option>SK이터닉스</option><option>+ 신규 고객사 등록</option></select></div>
+                <div class="split" style="gap:10px">
+                  <div class="fld"><label>기업구분</label><input value="대기업군 (금융)" readonly>
+                    <div class="hint">고객사 마스터에서 자동 적용 · 솔루션 정가 60,000,000</div></div>
+                  <div class="fld"><label>채널</label><input value="직거래" readonly></div>
+                </div>
+                <div class="fld"><label>수신처</label><input value="한화투자증권 귀중">
+                  <div class="hint">에이전시 경유 시 수신처를 별도 입력합니다 (예: 에스넷시스템)</div></div>
+                <div class="fld"><label>견적용도</label><input value="한화투자증권 전자인장관리 시스템 견적_구축형"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>요구사항 문서</h2><div class="sp"></div><span class="sub">선택</span></div>
+              <div class="card-b">
+                <div style="border:1px dashed var(--line);border-radius:3px;padding:18px;text-align:center;background:#FAFBFC">
+                  <p style="font-size:12.5px;font-weight:600;margin-bottom:4px">RFP · 요건 정리 문서를 올리면 구성과 리스크 팩터를 미리 채웁니다</p>
+                  <p style="font-size:11px;color:var(--text-2);margin-bottom:11px">PDF · DOCX · HWP · 이메일 본문</p>
+                  <button class="btn sm">파일 선택</button>
+                </div>
+                <div style="margin-top:10px;display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:3px">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" style="width:16px;height:16px;stroke-width:1.8;flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:12px;font-weight:600">한화투자증권_전자인장_요구사항.pdf</div>
+                    <div style="font-size:11px;color:var(--text-2)">분석 완료 · 5개 항목 인식</div>
+                  </div>
+                  <span class="tag issued">분석됨</span>
+                </div>
+                <p class="note">문서는 견적 발행 후 90일간 보관되며 이후 자동 삭제됩니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>견적 정보</h2></div>
+              <div class="card-b">
+                <div class="split" style="gap:10px">
+                  <div class="fld"><label>견적번호</label><input value="QT20260801_001" readonly>
+                    <div class="hint">발행 시점에 확정됩니다</div></div>
+                  <div class="fld"><label>견적일자</label><input value="2026-08-01"></div>
+                </div>
+                <div class="split" style="gap:10px">
+                  <div class="fld"><label>견적유효일</label><input value="2026-08-31" readonly>
+                    <div class="hint">견적일 + 30일</div></div>
+                  <div class="fld"><label>결제조건</label><input value="고객사 결제조건"></div>
+                </div>
+                <div class="fld"><label>설치완료</label><input value="협의된 프로젝트 기간"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>자동 적용 항목</h2><div class="sp"></div><span class="sub">수정 불가</span></div>
+              <table class="grid">
+                <tbody>
+                  <tr><td style="width:96px;color:var(--text-2)">상호</td><td>㈜세포아소프트</td></tr>
+                  <tr><td style="color:var(--text-2)">주소</td><td>서울특별시 구로구 디지털로31길 62, 아티스포럼 714~717호</td></tr>
+                  <tr><td style="color:var(--text-2)">연락처</td><td>02-6242-3094</td></tr>
+                  <tr><td style="color:var(--text-2)">대표이사</td><td>이 희 림</td></tr>
+                  <tr><td style="color:var(--text-2)">정책 버전</td><td>2026년안 <span class="tag issued">유효</span></td></tr>
+                  <tr><td style="color:var(--text-2)">노임단가</td><td>2026년 적용분 (한국SW산업협회)</td></tr>
+                </tbody>
+              </table>
+              <div class="card-b" style="border-top:1px solid var(--line-2)">
+                <p class="note" style="margin:0">회사정보는 기준정보 마스터에서만 변경할 수 있습니다. 견적서마다 다르게 입력되는 것을 막기 위한 조치입니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 5 : 위저드 ③ 구성 ══════════ -->
+    <div class="scr" id="s5">
+      <div class="gnb">
+        <h1>견적 작성</h1><span class="path">QT20260801_001 · 한화투자증권 · 온프레미스</span>
+        <div class="sp"></div>
+        <button class="btn">이전</button>
+        <button class="btn pri">다음 단계</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+        <div class="steps">
+          <div class="done"><span class="n">✓</span>기본정보</div>
+          <div class="done"><span class="n">✓</span>유형 선택</div>
+          <div class="on"><span class="n">3</span>구성</div>
+          <div><span class="n">4</span>인건비 산정</div>
+          <div><span class="n">5</span>검토·발행</div>
+        </div>
+
+        <div class="split">
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>솔루션</h2><div class="sp"></div><span class="sub">대기업군 · 40% DC</span></div>
+              <div class="card-b">
+                <label class="factor on"><input type="checkbox" checked>
+                  <div class="t"><b>Poa Seal™</b><span>인감날인·사용·관리대장 · PDF 문서변환 · 결재 워크플로우 · 조직/사용자/권한<br>전자계약·임직원계약 기본 포함 (2026년안)</span></div>
+                  <div class="co">60,000,000</div></label>
+                <label class="factor"><input type="checkbox">
+                  <div class="t"><b>공동인증 툴킷</b><span>PKI Tool Kit 전자서명</span></div>
+                  <div class="co">10,000,000</div></label>
+                <label class="factor"><input type="checkbox">
+                  <div class="t"><b>공동인증 툴킷 (간편인증 추가)</b><span>간편인증 수단 포함</span></div>
+                  <div class="co">15,000,000</div></label>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>구성 옵션</h2><div class="sp"></div><span class="sub">선택 시 라인 자동 생성</span></div>
+              <div class="card-b">
+                <label class="factor on"><input type="checkbox" checked>
+                  <div class="t"><b>서버 이중화</b><span>솔루션 제안가의 50%</span>
+                  <span class="src">RFP p.15 "이중화 구성 필수"</span></div>
+                  <div class="co">30,000,000</div></label>
+                <label class="factor"><input type="checkbox">
+                  <div class="t"><b>계열사 추가</b><span>솔루션 제안가의 25% · 매출 50% 이하 계열사는 10% 수준</span></div>
+                  <div class="co">15,000,000</div></label>
+                <div class="fld" style="margin-top:12px;margin-bottom:0"><label>서버 운영체제</label>
+                  <select><option>Windows Server (권장)</option><option>Linux — 한글 컨버팅 서버 필요</option></select>
+                  <div class="hint">MS-Office 및 한글 라이선스가 별도로 필요합니다</div></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>파생 견적</h2></div>
+              <div class="card-b">
+                <label class="factor on"><input type="checkbox" checked>
+                  <div class="t"><b>유지보수 견적 함께 생성</b><span>솔루션 공급가의 15% · 검수 후 12개월 무상 이후 기산<br>60,000,000 × 15% = 9,000,000 / 년</span></div>
+                  <div class="co">자동</div></label>
+                <label class="factor on"><input type="checkbox" checked>
+                  <div class="t"><b>TCO 비교표 첨부</b><span>구축형 · 분납형 · Private Cloud · SaaS 5년/10년 비교</span></div>
+                  <div class="co">자동</div></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>미리보기</h2><div class="sp"></div><span class="sub">입력과 동시에 반영</span></div>
+            <div class="card-b" style="background:var(--bg)">
+              <div class="pv">
+                <div class="doc-h">
+                  <div class="ttl">Quotation</div>
+                  <div class="no">견적번호 QT20260801_001<br>견적일자 2026년 08월 01일<br>㈜세포아소프트 · 이 희 림</div>
+                </div>
+                <table>
+                  <tr><th style="width:70px">수　신</th><td colspan="3">한화투자증권 귀중</td></tr>
+                  <tr><th>견적용도</th><td colspan="3">전자인장관리 시스템 견적_구축형</td></tr>
+                  <tr><th>총 견적가</th><td colspan="3"><b>240,000,000</b> (단위: 원, 부가세 별도)</td></tr>
+                </table>
+
+                <div class="sec">▣ 솔루션 견적</div>
+                <table>
+                  <tr><th>구분</th><th>세부기능</th><th style="width:40px">수량</th><th style="width:66px">기준단가</th><th style="width:66px">제안단가</th><th style="width:70px">제안금액</th></tr>
+                  <tr><td rowspan="2">전자인장관리<br>솔루션</td><td>인감날인관리, 전자계약, 문서변환,<br>결재 워크플로우, 시스템관리</td>
+                    <td class="num">1</td><td class="num">100,000,000</td><td class="num">60,000,000</td><td class="num">60,000,000</td></tr>
+                  <tr><td>서버 이중화 (솔루션가 50%)</td><td class="num">1</td><td class="num">—</td><td class="num">30,000,000</td><td class="num">30,000,000</td></tr>
+                  <tr class="sum"><td colspan="5">솔루션 소계</td><td class="num">90,000,000</td></tr>
+                </table>
+
+                <div class="sec">▣ 시스템 구축 견적</div>
+                <table>
+                  <tr><th>구분</th><th>역할</th><th style="width:52px">공수(MM)</th><th style="width:70px">제안단가</th><th style="width:74px">제안금액</th></tr>
+                  <tr><td rowspan="3">시스템구축<br>개발인건비</td><td>PM</td><td class="num">2.5</td><td class="num">16,522,178</td><td class="num">41,305,445</td></tr>
+                  <tr><td>개발</td><td class="num">6.5</td><td class="num">12,701,257</td><td class="num">82,558,170</td></tr>
+                  <tr><td>기술지원</td><td class="num">1.8</td><td class="num">14,520,000</td><td class="num">26,136,000</td></tr>
+                  <tr class="sum"><td colspan="2">인건비 소계</td><td class="num">10.8</td><td></td><td class="num">150,000,000</td></tr>
+                </table>
+                <table>
+                  <tr class="fin"><td>최종견적금액</td><td class="num" style="width:96px">240,000,000</td></tr>
+                </table>
+              </div>
+              <p class="note">이중화 라인은 옵션 선택으로 자동 생성되었습니다. 금액을 직접 수정할 수 없습니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 6 : 가격정책 마스터 ══════════ -->
+    <div class="scr" id="s6">
+      <div class="gnb">
+        <h1>가격정책 마스터</h1><span class="path">기준정보 / 가격정책</span>
+        <div class="sp"></div>
+        <button class="btn">개정 이력</button>
+        <button class="btn pri">새 버전 만들기</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="banner wrn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div><b>정책 버전 3종이 등록되어 있습니다</b>
+            <span>기존안·신규안·2026년안 중 유효 버전은 하나만 지정할 수 있습니다. 계열사 할증(20% vs 25%)과 유지보수 요율(20/18% vs 18/15%)이 버전별로 다르니 확인 후 확정하세요.</span></div>
+        </div>
+
+        <div class="card mb">
+          <div class="card-h"><h2>정책 버전</h2></div>
+          <table class="grid">
+            <thead><tr><th style="width:130px">버전</th><th style="width:110px">적용 시작</th><th style="width:110px">적용 종료</th>
+              <th>주요 차이</th><th class="ctr" style="width:80px">상태</th><th class="ctr" style="width:88px">사용 견적</th></tr></thead>
+            <tbody>
+              <tr><td>2026년안</td><td>2026-04-15</td><td>—</td>
+                <td>유지보수 18%/15%, 계열사 25%, 전자계약 솔루션 기본 포함, SaaS 셋업비 2,000,000</td>
+                <td class="ctr"><span class="tag won">유효</span></td><td class="ctr">4건</td></tr>
+              <tr><td>신규안</td><td>2025-11-01</td><td>2026-04-14</td>
+                <td>대기업군 40% DC 신설, 엔터프라이즈/금융을 대기업군에 통합</td>
+                <td class="ctr"><span class="tag draft">종료</span></td><td class="ctr">11건</td></tr>
+              <tr><td>기존안</td><td>2025-01-01</td><td>2025-10-31</td>
+                <td>유지보수 20%/18%, 계열사 20%, 전자계약 별도 청구, 엔터프라이즈 등급 분리</td>
+                <td class="ctr"><span class="tag draft">종료</span></td><td class="ctr">23건</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="split mb">
+          <div class="card">
+            <div class="card-h"><h2>등급별 솔루션 정가</h2><div class="sp"></div><span class="sub">2026년안 · 단위 원</span></div>
+            <table class="grid">
+              <thead><tr><th>기업구분</th><th class="ctr" style="width:60px">할인</th><th class="num" style="width:104px">List Price</th><th class="num" style="width:104px">제안가</th></tr></thead>
+              <tbody>
+                <tr><td>대기업군 (엔터프라이즈·금융 포함)</td><td class="ctr">40%</td><td class="num">100,000,000</td><td class="num">60,000,000</td></tr>
+                <tr><td>공공 (조달청가격)</td><td class="ctr">—</td><td class="num">100,000,000</td><td class="num">45,000,000</td></tr>
+                <tr><td>중견/중소기업</td><td class="ctr">60%</td><td class="num">100,000,000</td><td class="num">40,000,000</td></tr>
+                <tr><td>공동인증 툴킷</td><td class="ctr">—</td><td class="num">15,000,000</td><td class="num">10,000,000</td></tr>
+                <tr><td>공동인증 툴킷 (간편인증)</td><td class="ctr">—</td><td class="num">20,000,000</td><td class="num">15,000,000</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>파생 규칙</h2><div class="sp"></div><span class="sub">자동 적용</span></div>
+            <table class="grid">
+              <thead><tr><th style="width:150px">규칙</th><th class="ctr" style="width:70px">계수</th><th>기준</th></tr></thead>
+              <tbody>
+                <tr><td>서버 이중화</td><td class="ctr">50%</td><td>솔루션 제안가</td></tr>
+                <tr><td>계열사 추가</td><td class="ctr">25%</td><td>솔루션 제안가 (매출 50% 이하 시 10%)</td></tr>
+                <tr><td>솔루션 유지보수</td><td class="ctr">15%</td><td>솔루션 공급가 (정책 18%)</td></tr>
+                <tr><td>PC 유지보수</td><td class="ctr">50%</td><td>구축형 유지보수액</td></tr>
+                <tr><td>개발 인건비 적용률</td><td class="ctr">60~70%</td><td>SW산업협회 노임단가</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>SaaS 밴드</h2><div class="sp"></div>
+            <span class="sub" style="color:var(--danger);font-weight:600">밴드 테이블 2종이 병존합니다 — 유효본 지정 필요</span></div>
+          <div class="card-b">
+            <div class="split" style="gap:14px">
+              <div>
+                <p style="font-size:12px;font-weight:600;margin-bottom:7px">2026년안 밴드 <span class="tag issued">유효</span></p>
+                <table class="grid">
+                  <thead><tr><th class="ctr">월 건수</th><th class="ctr">년 건수</th><th class="num">월 사용료</th><th class="num">건당비용</th></tr></thead>
+                  <tbody>
+                    <tr><td class="ctr">50</td><td class="ctr">600</td><td class="num">250,000</td><td class="num">5,000</td></tr>
+                    <tr><td class="ctr">100</td><td class="ctr">1,200</td><td class="num">300,000</td><td class="num">3,000</td></tr>
+                    <tr><td class="ctr">200</td><td class="ctr">2,400</td><td class="num">500,000</td><td class="num">2,500</td></tr>
+                    <tr><td class="ctr">400</td><td class="ctr">4,800</td><td class="num">700,000</td><td class="num">1,750</td></tr>
+                    <tr><td class="ctr">800</td><td class="ctr">9,600</td><td class="num">1,000,000</td><td class="num">1,250</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <p style="font-size:12px;font-weight:600;margin-bottom:7px">SaaS Cloud 3안 <span class="tag lost">미지정</span></p>
+                <table class="grid">
+                  <thead><tr><th class="ctr">월 건수</th><th class="ctr">년 건수</th><th class="num">월 사용료</th><th style="width:90px">사용 견적</th></tr></thead>
+                  <tbody>
+                    <tr style="background:#FFEBE6"><td class="ctr">30</td><td class="ctr">360</td><td class="num">100,000</td><td>하겐다즈</td></tr>
+                    <tr><td class="ctr">40</td><td class="ctr">480</td><td class="num">150,000</td><td></td></tr>
+                    <tr><td class="ctr">50</td><td class="ctr">600</td><td class="num">200,000</td><td></td></tr>
+                    <tr><td class="ctr">100</td><td class="ctr">1,200</td><td class="num">300,000</td><td></td></tr>
+                    <tr><td class="ctr">200</td><td class="ctr">2,400</td><td class="num">500,000</td><td></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <p class="note">하겐다즈 건이 미지정 밴드로 발행되었습니다. 30~50건 구간을 정식 밴드로 편입하거나, 최소 100건 정책을 유지하고 예외 승인으로 처리할지 결정이 필요합니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 7 : 발송·열람 현황 ══════════ -->
+    <div class="scr" id="s7">
+      <div class="gnb">
+        <h1>발송·열람 현황</h1><span class="path">견적관리 / 발송·열람 현황</span>
+        <div class="sp"></div>
+        <button class="btn">리마인드 설정</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="stat">
+          <div class="c"><div class="k">발송</div><div class="v">14</div><div class="d">최근 30일</div></div>
+          <div class="c"><div class="k">열람</div><div class="v">11</div><div class="d">열람률 79%</div></div>
+          <div class="c"><div class="k">평균 첫 열람</div><div class="v">4.2<span style="font-size:13px;font-weight:500">시간</span></div><div class="d">발송 후</div></div>
+          <div class="c al"><div class="k">미열람 7일 경과</div><div class="v">2</div><div class="d">리마인드 대상</div></div>
+        </div>
+
+        <div class="banner inf">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+          <div><b>솔브레인이 견적서를 3번째 열람했습니다 — 2시간 전</b>
+            <span>재열람은 내부 검토가 진행 중이라는 신호입니다. 연락 타이밍으로 활용하세요.</span></div>
+        </div>
+
+        <div class="card mb">
+          <div class="card-h"><h2>발송 이력</h2></div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:132px">견적번호</th><th>고객사</th><th style="width:170px">수신</th>
+              <th style="width:120px">발송일시</th><th class="ctr" style="width:66px">열람</th>
+              <th style="width:120px">최근 열람</th><th style="width:112px">경과</th><th class="ctr" style="width:78px">상태</th>
+            </tr></thead>
+            <tbody>
+              <tr style="background:var(--primary-weak)"><td>QT20260728_002</td><td>솔브레인</td><td>구매팀</td>
+                <td>07-28 14:20</td><td class="ctr" style="font-weight:700;color:var(--primary)">3회</td>
+                <td>08-01 09:12</td><td>2시간 전</td><td class="ctr"><span class="tag sent">검토중</span></td></tr>
+              <tr><td>QT20260728_001</td><td>솔브레인</td><td>구매팀</td>
+                <td>07-28 14:20</td><td class="ctr" style="font-weight:700;color:var(--primary)">3회</td>
+                <td>08-01 09:14</td><td>2시간 전</td><td class="ctr"><span class="tag sent">검토중</span></td></tr>
+              <tr><td>QT20260624_001</td><td>강원랜드</td><td>에스넷시스템 담당</td>
+                <td>06-24 11:05</td><td class="ctr">5회</td><td>07-02 16:40</td><td>30일 전</td>
+                <td class="ctr"><span class="tag won">수주</span></td></tr>
+              <tr><td>QT20260506_001</td><td>SK이터닉스</td><td>정보시스템팀</td>
+                <td>05-06 10:30</td><td class="ctr">4회</td><td>05-19 13:22</td><td>74일 전</td>
+                <td class="ctr"><span class="tag won">수주</span></td></tr>
+              <tr style="background:#FFFAE6"><td>QT20260520_002</td><td>교보AXA자산운용</td><td>코비젼 담당</td>
+                <td>05-20 16:45</td><td class="ctr">1회</td><td>05-21 09:03</td><td>72일 전</td>
+                <td class="ctr"><span class="tag draft">무응답</span></td></tr>
+              <tr style="background:#FFEBE6"><td>QT20260415_002</td><td>한국하겐다즈</td><td>총무팀</td>
+                <td>04-15 09:50</td><td class="ctr" style="color:var(--danger)">미열람</td><td>—</td><td>108일 전</td>
+                <td class="ctr"><span class="tag lost">실주</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <div class="card-h"><h2>열람 타임라인</h2><div class="sp"></div><span class="sub">QT20260728_002 · 솔브레인</span></div>
+            <div class="card-b" style="padding:4px 14px">
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 6l-10 7L2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+                <div class="tx"><b>발송</b><span>07-28 14:20 · 구매팀 담당자 외 1인</span></div></div>
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <div class="tx"><b>1차 열람</b><span>07-28 17:40 · 발송 후 3시간 20분</span></div></div>
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <div class="tx"><b>2차 열람</b><span>07-30 10:15 · 체류 6분</span></div></div>
+              <div class="chk"><svg class="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <div class="tx"><b>3차 열람</b><span>08-01 09:12 · 체류 14분 · 두 견적을 연달아 열람</span></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>자동 리마인드</h2></div>
+            <div class="card-b">
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>발송 후 7일 미열람</b><span>담당자에게 알림</span></div><div class="co">2건</div></label>
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>유효일 5일 전 미회신</b><span>담당자에게 알림</span></div><div class="co">3건</div></label>
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>2회 이상 재열람</b><span>즉시 알림 · 내부 검토 신호</span></div><div class="co">2건</div></label>
+              <p class="note">열람 추적은 링크 클릭 기준입니다. 이미지 픽셀 방식보다 오탐이 적지만, 고객사 메일 보안 정책에 따라 실제 열람과 차이가 날 수 있습니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 8 : TCO 비교 ══════════ -->
+    <div class="scr" id="s8">
+      <div class="gnb">
+        <h1>TCO 비교</h1><span class="path">시뮬레이션 / TCO 비교</span>
+        <div class="sp"></div>
+        <button class="btn">견적서에 첨부</button>
+        <button class="btn pri">PDF 내보내기</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="card mb">
+          <div class="filter">
+            <span style="font-size:11.5px;font-weight:600;color:var(--text-2)">기업구분</span>
+            <select><option>중견/중소</option><option>대기업군</option><option>공공</option></select>
+            <span style="font-size:11.5px;font-weight:600;color:var(--text-2)">월 날인건수</span>
+            <select><option>200건</option><option>100건</option><option>400건</option><option>800건</option></select>
+            <span style="font-size:11.5px;font-weight:600;color:var(--text-2)">개발 공수</span>
+            <select><option>3.2 MM</option><option>6.0 MM</option><option>10.8 MM</option></select>
+            <span style="font-size:11.5px;font-weight:600;color:var(--text-2)">고객사 부담</span>
+            <select><option>포함</option><option>제외</option></select>
+            <div class="sp"></div>
+            <span style="font-size:11.5px;color:var(--text-3)">단위: 원, 부가세 별도</span>
+          </div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:180px">구분</th>
+              <th class="num">일시불형<br><span style="font-weight:400;color:var(--text-3)">구축형</span></th>
+              <th class="num">부분납+분납형<br><span style="font-weight:400;color:var(--text-3)">5년, 월 140만</span></th>
+              <th class="num">Private Cloud<br><span style="font-weight:400;color:var(--text-3)">5년, 월 180만</span></th>
+              <th class="num">Advanced SaaS<br><span style="font-weight:400;color:var(--text-3)">1년단위, 월 70만</span></th>
+              <th class="num">일반 SaaS<br><span style="font-weight:400;color:var(--text-3)">1년단위, 월 50만</span></th>
+            </tr></thead>
+            <tbody>
+              <tr><td>일시불 (솔루션+인건비)</td><td class="num">80,000,000</td><td class="num">30,000,000</td>
+                <td class="num">30,000,000</td><td class="num">20,000,000</td><td class="num">2,000,000</td></tr>
+              <tr><td>월비용 (5년차까지)</td><td class="num">625,000</td><td class="num">1,400,000</td>
+                <td class="num">1,800,000</td><td class="num">700,000</td><td class="num">500,000</td></tr>
+              <tr><td>월비용 (6년차부터)</td><td class="num">625,000</td><td class="num">625,000</td>
+                <td class="num">1,000,000</td><td class="num">700,000</td><td class="num">500,000</td></tr>
+              <tr><td>일시불 H/W·S/W <span class="tag ln">고객사 부담</span></td><td class="num">50,000,000</td><td class="num">50,000,000</td>
+                <td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+              <tr><td>인프라관리비 (월) <span class="tag ln">고객사 부담</span></td><td class="num">1,000,000</td><td class="num">1,000,000</td>
+                <td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+            </tbody>
+            <tfoot>
+              <tr><td>5년간 TCO</td><td class="num">220,000,000</td><td class="num">224,000,000</td>
+                <td class="num">138,000,000</td><td class="num">62,000,000</td><td class="num" style="color:var(--ok)">32,000,000</td></tr>
+              <tr><td>10년간 TCO</td><td class="num">317,500,000</td><td class="num">321,500,000</td>
+                <td class="num">198,000,000</td><td class="num">104,000,000</td><td class="num" style="color:var(--ok)">62,000,000</td></tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <div class="card-h"><h2>5년 누적 추이</h2><div class="sp"></div><span class="sub">고객사 부담 포함</span></div>
+            <div class="card-b">
+              <table class="grid">
+                <thead><tr><th style="width:56px">연차</th><th class="num">구축형</th><th class="num">Private Cloud</th><th class="num">일반 SaaS</th></tr></thead>
+                <tbody>
+                  <tr><td>개발비</td><td class="num">80,000,000</td><td class="num">30,000,000</td><td class="num">2,000,000</td></tr>
+                  <tr><td>1년</td><td class="num">80,000,000</td><td class="num">54,000,000</td><td class="num">8,000,000</td></tr>
+                  <tr><td>2년</td><td class="num">87,500,000</td><td class="num">78,000,000</td><td class="num">14,000,000</td></tr>
+                  <tr><td>3년</td><td class="num">95,000,000</td><td class="num">102,000,000</td><td class="num">20,000,000</td></tr>
+                  <tr><td>4년</td><td class="num">102,500,000</td><td class="num">126,000,000</td><td class="num">26,000,000</td></tr>
+                  <tr><td>5년</td><td class="num">110,000,000</td><td class="num">150,000,000</td><td class="num">32,000,000</td></tr>
+                </tbody>
+              </table>
+              <p class="note">위 표는 고객사 부담분(H/W 50,000,000, 인프라관리비 월 1,000,000)을 제외한 세포아소프트 청구액 기준입니다. 상단 표의 5년 TCO는 고객사 부담을 포함한 금액입니다.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>산정 기준</h2></div>
+            <div class="card-b" style="padding:4px 14px">
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                <div class="tx"><b>일시불형</b><span>솔루션유지보수는 1년 무상하자 후 진행 · 연간 공급가의 15% (7,500,000/년)</span></div></div>
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                <div class="tx"><b>분납형</b><span>인건비 일시납 · 5년 계약 월 1,400,000 (유지보수 포함) · 6년차부터 유지보수만</span></div></div>
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                <div class="tx"><b>Private Cloud</b><span>솔루션 월 800,000(5년) · 연동 API 200,000 · 서버 500,000 · 유지보수 300,000 (구축형 50%)</span></div></div>
+              <div class="chk"><svg class="pass" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                <div class="tx"><b>SaaS</b><span>월 200건 기준 500,000 · Advanced는 연동 API 200,000 추가 · 사용량 증가 시 밴드 재적용</span></div></div>
+              <div class="chk"><svg class="warn" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+                <div class="tx"><b>고객사 부담 가정</b><span>H/W·S/W 50,000,000, 인프라관리비 월 1,000,000은 추정치입니다. 고객사 환경에 따라 달라집니다</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 9 : 사용자·권한 관리 ══════════ -->
+    <div class="scr" id="s9">
+      <div class="gnb">
+        <h1>사용자 관리</h1><span class="path">시스템관리 / 사용자 관리</span>
+        <div class="sp"></div>
+        <button class="btn">권한 매트릭스</button>
+        <button class="btn pri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>사용자 등록</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="banner inf">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>
+          <div><b>계정은 Google SSO로 인증합니다</b>
+            <span>sepoasoft.co.kr 도메인 계정만 접근할 수 있으며, 비밀번호는 이 시스템에서 관리하지 않습니다. 여기서는 부서·역할·한도만 지정합니다.</span></div>
+        </div>
+
+        <div class="card mb">
+          <div class="filter">
+            <select><option>전체 부서</option><option>영업팀</option><option>기획팀</option><option>개발팀</option><option>경영지원</option></select>
+            <select><option>전체 역할</option><option>영업담당</option><option>영업팀장</option><option>임원</option><option>기획</option><option>관리자</option><option>조회전용</option></select>
+            <select><option>사용중</option><option>전체</option><option>중지</option></select>
+            <input type="text" placeholder="성명 · 계정 검색" style="width:200px">
+            <div class="sp"></div>
+            <span style="font-size:11.5px;color:var(--text-3)">사용중 12명 / 전체 14명</span>
+          </div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:70px">성명</th><th style="width:190px">계정</th><th style="width:88px">부서</th>
+              <th style="width:70px">직위</th><th style="width:88px">역할</th>
+              <th class="num" style="width:96px">발행 한도</th><th class="ctr" style="width:80px">배율 상한</th>
+              <th style="width:110px">최종접속</th><th class="ctr" style="width:66px">상태</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>김종무</td><td>kjm400@sepoasoft.co.kr</td><td>영업팀</td><td>프로</td>
+                <td><span class="tag issued">영업담당</span></td><td class="num">100,000,000</td>
+                <td class="ctr">2.0x</td><td>08-01 09:22</td><td class="ctr"><span class="tag won">사용</span></td></tr>
+              <tr><td>이희림</td><td>ceo@sepoasoft.co.kr</td><td>경영지원</td><td>대표이사</td>
+                <td><span class="tag ln">임원</span></td><td class="num">제한 없음</td>
+                <td class="ctr">제한 없음</td><td>07-31 18:05</td><td class="ctr"><span class="tag won">사용</span></td></tr>
+              <tr><td>박○○</td><td>sales.lead@sepoasoft.co.kr</td><td>영업팀</td><td>팀장</td>
+                <td><span class="tag sent">영업팀장</span></td><td class="num">300,000,000</td>
+                <td class="ctr">4.0x</td><td>08-01 08:40</td><td class="ctr"><span class="tag won">사용</span></td></tr>
+              <tr><td>정○○</td><td>plan1@sepoasoft.co.kr</td><td>기획팀</td><td>프로</td>
+                <td><span class="tag ln">기획</span></td><td class="num">100,000,000</td>
+                <td class="ctr">2.0x</td><td>07-31 14:12</td><td class="ctr"><span class="tag won">사용</span></td></tr>
+              <tr><td>최○○</td><td>admin@sepoasoft.co.kr</td><td>개발팀</td><td>프로</td>
+                <td><span class="tag draft">관리자</span></td><td class="num">—</td>
+                <td class="ctr">—</td><td>08-01 10:03</td><td class="ctr"><span class="tag won">사용</span></td></tr>
+              <tr style="color:var(--text-3)"><td>한○○</td><td>former@sepoasoft.co.kr</td><td>영업팀</td><td>프로</td>
+                <td><span class="tag ln">조회전용</span></td><td class="num">—</td>
+                <td class="ctr">—</td><td>2026-03-14</td><td class="ctr"><span class="tag lost">중지</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>역할별 메뉴 권한</h2><div class="sp"></div>
+            <span class="sub">조회 R · 등록 C · 수정 U · 삭제 D · 승인 A</span>
+            <button class="btn sm">저장</button></div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:170px">메뉴</th>
+              <th class="ctr">영업담당</th><th class="ctr">영업팀장</th><th class="ctr">임원</th>
+              <th class="ctr">기획</th><th class="ctr">관리자</th><th class="ctr">조회전용</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>견적 목록</td><td class="ctr">R C U D</td><td class="ctr">R C U D</td><td class="ctr">R</td>
+                <td class="ctr">R C U D</td><td class="ctr">R C U D</td><td class="ctr">R</td></tr>
+              <tr><td>견적 작성·발행</td><td class="ctr">R C U</td><td class="ctr">R C U</td><td class="ctr">R</td>
+                <td class="ctr">R C U</td><td class="ctr">R C U</td><td class="ctr">—</td></tr>
+              <tr><td>승인 요청함</td><td class="ctr">R</td><td class="ctr" style="font-weight:700;color:var(--primary)">R A</td>
+                <td class="ctr" style="font-weight:700;color:var(--primary)">R A</td><td class="ctr">R</td><td class="ctr">R</td><td class="ctr">—</td></tr>
+              <tr><td>발송·열람 현황</td><td class="ctr">R</td><td class="ctr">R</td><td class="ctr">R</td>
+                <td class="ctr">R</td><td class="ctr">R</td><td class="ctr">R</td></tr>
+              <tr><td>TCO 비교</td><td class="ctr">R C</td><td class="ctr">R C</td><td class="ctr">R</td>
+                <td class="ctr">R C</td><td class="ctr">R C</td><td class="ctr">R</td></tr>
+              <tr style="background:#FAFBFC"><td>가격정책 마스터</td><td class="ctr">R</td><td class="ctr">R</td><td class="ctr">R</td>
+                <td class="ctr" style="font-weight:700;color:var(--primary)">R C U</td><td class="ctr" style="font-weight:700;color:var(--primary)">R C U D</td><td class="ctr">—</td></tr>
+              <tr style="background:#FAFBFC"><td>리스크 계수</td><td class="ctr">R</td>
+                <td class="ctr" style="font-weight:700;color:var(--primary)">R U</td><td class="ctr">R</td>
+                <td class="ctr">R U</td><td class="ctr">R C U D</td><td class="ctr">—</td></tr>
+              <tr style="background:#FAFBFC"><td>공통코드·문구</td><td class="ctr">—</td><td class="ctr">R</td><td class="ctr">—</td>
+                <td class="ctr" style="font-weight:700;color:var(--primary)">R C U</td><td class="ctr">R C U D</td><td class="ctr">—</td></tr>
+              <tr style="background:#FAFBFC"><td>메일·문서 템플릿</td><td class="ctr">—</td><td class="ctr">R</td><td class="ctr">—</td>
+                <td class="ctr">R C U</td><td class="ctr">R C U D</td><td class="ctr">—</td></tr>
+              <tr style="background:#FAFBFC"><td>사용자·역할·조직</td><td class="ctr">—</td><td class="ctr">R</td><td class="ctr">R</td>
+                <td class="ctr">—</td><td class="ctr" style="font-weight:700;color:var(--primary)">R C U D</td><td class="ctr">—</td></tr>
+            </tbody>
+          </table>
+          <div class="card-b" style="border-top:1px solid var(--line-2)">
+            <p class="note" style="margin:0">발행 한도액과 인건비 배율 상한을 넘는 견적은 저장은 되지만 발행 시 상위 역할의 승인을 요구합니다. 3.2에서 확인된 6.25배 같은 건이 담당자 선에서 그대로 나가는 것을 막습니다.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 10 : 공통코드·견적조건 문구 ══════════ -->
+    <div class="scr" id="s10">
+      <div class="gnb">
+        <h1>공통코드·문구</h1><span class="path">기준정보 / 공통코드</span>
+        <div class="sp"></div>
+        <button class="btn">사용처 조회</button>
+        <button class="btn pri">저장</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="split3" style="grid-template-columns:250px 1fr">
+          <div class="card">
+            <div class="card-h"><h2>코드 그룹</h2><div class="sp"></div><button class="btn sm">추가</button></div>
+            <table class="grid">
+              <tbody>
+                <tr style="background:var(--primary-weak)"><td style="font-weight:600">기업구분</td><td class="ctr" style="width:52px;color:var(--text-3)">3</td></tr>
+                <tr><td>견적유형</td><td class="ctr" style="color:var(--text-3)">5</td></tr>
+                <tr><td>견적상태 <span class="tag ln">시스템</span></td><td class="ctr" style="color:var(--text-3)">8</td></tr>
+                <tr><td>채널</td><td class="ctr" style="color:var(--text-3)">2</td></tr>
+                <tr><td>역할등급</td><td class="ctr" style="color:var(--text-3)">4</td></tr>
+                <tr><td>리스크 팩터</td><td class="ctr" style="color:var(--text-3)">6</td></tr>
+                <tr><td>결제조건</td><td class="ctr" style="color:var(--text-3)">4</td></tr>
+                <tr><td>부가세 구분 <span class="tag ln">시스템</span></td><td class="ctr" style="color:var(--text-3)">2</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="stack">
+            <div class="card">
+              <div class="card-h"><h2>기업구분</h2><div class="sp"></div>
+                <span class="sub">속성1 = 정가 마스터 키</span><button class="btn sm">행 추가</button></div>
+              <table class="grid">
+                <thead><tr><th style="width:44px">순서</th><th style="width:110px">코드</th><th>코드명</th>
+                  <th style="width:150px">속성1 (정가 키)</th><th class="num" style="width:104px">제안가</th><th class="ctr" style="width:66px">사용</th></tr></thead>
+                <tbody>
+                  <tr><td class="ctr">1</td><td>GR_ENT</td><td>대기업군 (엔터프라이즈·금융 포함)</td><td>PRICE_ENT</td><td class="num">60,000,000</td><td class="ctr">Y</td></tr>
+                  <tr><td class="ctr">2</td><td>GR_PUB</td><td>공공 (조달청가격)</td><td>PRICE_PUB</td><td class="num">45,000,000</td><td class="ctr">Y</td></tr>
+                  <tr><td class="ctr">3</td><td>GR_SMB</td><td>중견/중소기업</td><td>PRICE_SMB</td><td class="num">40,000,000</td><td class="ctr">Y</td></tr>
+                </tbody>
+              </table>
+              <div class="card-b" style="border-top:1px solid var(--line-2)">
+                <p class="note" style="margin:0">시스템 플래그가 붙은 그룹(견적상태·부가세 구분)은 코드를 삭제할 수 없습니다. 프로그램 로직이 코드값을 직접 참조하기 때문입니다.</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-h"><h2>견적조건 문구</h2><div class="sp"></div>
+                <select style="height:26px;border:1px solid var(--line);border-radius:3px;padding:0 8px;font-size:11.5px">
+                  <option>온프레미스</option><option>프라이빗클라우드</option><option>SaaS</option><option>유지보수</option><option>추가개발</option></select>
+                <button class="btn sm">문구 추가</button></div>
+              <table class="grid">
+                <thead><tr><th style="width:44px">순서</th><th style="width:70px">구분</th><th>문구</th>
+                  <th style="width:170px">노출 조건</th><th class="ctr" style="width:56px">필수</th></tr></thead>
+                <tbody>
+                  <tr><td class="ctr">1</td><td><span class="tag issued">필수</span></td>
+                    <td>프로젝트 투입공수는 세부 업무요건에 따라 변경될 수 있습니다.</td><td>항상</td><td class="ctr">Y</td></tr>
+                  <tr><td class="ctr">2</td><td><span class="tag issued">필수</span></td>
+                    <td>개발단가는 한국SW산업협회 노임 단가 기준 <b style="color:var(--primary)">{적용률}</b>%를 적용하였습니다.</td><td>항상</td><td class="ctr">Y</td></tr>
+                  <tr><td class="ctr">3</td><td><span class="tag issued">필수</span></td>
+                    <td>솔루션 유지보수는 검수후 12개월간 하자에 대한 무상유지보수 이후 진행됩니다.<br>(솔루션유지보수 적용요율 → 솔루션 공급가의 <b style="color:var(--primary)">{유지보수요율}</b>%)</td><td>항상</td><td class="ctr">Y</td></tr>
+                  <tr><td class="ctr">4</td><td><span class="tag ln">조건부</span></td>
+                    <td>서버이중화 구성시 솔루션라이선스 50% 금액으로 산정합니다.<br>(계열사 추가시 솔루션라이선스 <b style="color:var(--primary)">{계열사요율}</b>% 금액으로 산정)</td>
+                    <td>이중화 옵션 선택</td><td class="ctr">—</td></tr>
+                  <tr><td class="ctr">5</td><td><span class="tag ln">조건부</span></td>
+                    <td>본 프로젝트는 부분 상주로 진행합니다. 업무분석, 테스트 등 필요시 방문 진행합니다.</td>
+                    <td>리스크 팩터 · 원격불가</td><td class="ctr">—</td></tr>
+                  <tr><td class="ctr">6</td><td><span class="tag ln">조건부</span></td>
+                    <td>본 견적은 <b style="color:var(--primary)">{수신처}</b>를 통해 제출됩니다.</td>
+                    <td>채널 · 에이전시 경유</td><td class="ctr">—</td></tr>
+                  <tr><td class="ctr">7</td><td><span class="tag issued">필수</span></td>
+                    <td>인프라 환경을 위한 별도의 하드웨어&amp;소프트웨어(AP서버, DB서버, DBMS, WAS 등)는 본 견적에서 제외됩니다.</td><td>항상</td><td class="ctr">Y</td></tr>
+                </tbody>
+              </table>
+              <div class="card-b" style="border-top:1px solid var(--line-2)">
+                <p class="note" style="margin:0">파란색 치환변수는 가격정책 마스터에서 값을 끌어옵니다. 유지보수 요율이 15%에서 바뀌면 모든 견적서 문구가 자동으로 따라옵니다. 필수 문구가 빠지면 발행 전 검증(R-15)에서 걸립니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 화면 11 : 메일·문서 템플릿 ══════════ -->
+    <div class="scr" id="s11">
+      <div class="gnb">
+        <h1>메일·문서 템플릿</h1><span class="path">기준정보 / 템플릿</span>
+        <div class="sp"></div>
+        <button class="btn">미리보기</button>
+        <button class="btn pri">저장</button>
+        <div class="user"><div class="avatar">김</div>김종무 프로</div>
+      </div>
+      <div class="body">
+
+        <div class="card mb">
+          <div class="card-h"><h2>문서 템플릿</h2><div class="sp"></div><span class="sub">견적유형별 섹션 구성</span></div>
+          <table class="grid">
+            <thead><tr>
+              <th style="width:150px">견적유형</th><th class="ctr" style="width:56px">표지</th>
+              <th style="width:230px">금액 섹션</th><th class="ctr" style="width:76px">결제방안</th>
+              <th>부록</th><th class="ctr" style="width:60px">기본</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>온프레미스</td><td class="ctr">O</td><td>솔루션 + 시스템구축</td><td class="ctr">—</td>
+                <td>인력투입계획 · 노임단가 · TCO</td><td class="ctr">Y</td></tr>
+              <tr><td>프라이빗클라우드</td><td class="ctr">O</td><td>셋업 + 라이선스 + 서비스이용료</td><td class="ctr">O</td>
+                <td>인력투입계획 · 노임단가 · TCO</td><td class="ctr">Y</td></tr>
+              <tr><td>SaaS</td><td class="ctr">O</td><td>셋업 + 서비스이용료</td><td class="ctr">O</td>
+                <td>TCO</td><td class="ctr">Y</td></tr>
+              <tr><td>유지보수</td><td class="ctr">O</td><td>유지보수 + 상세내역</td><td class="ctr">—</td>
+                <td>—</td><td class="ctr">Y</td></tr>
+              <tr><td>추가개발</td><td class="ctr">—</td><td>추가개발 + 상세내역</td><td class="ctr">—</td>
+                <td>—</td><td class="ctr">Y</td></tr>
+              <tr style="color:var(--text-2)"><td>온프레미스 (간이)</td><td class="ctr">—</td><td>솔루션 + 시스템구축</td><td class="ctr">—</td>
+                <td>—</td><td class="ctr">—</td></tr>
+            </tbody>
+          </table>
+          <div class="card-b" style="border-top:1px solid var(--line-2)">
+            <p class="note" style="margin:0">같은 유형이라도 고객사에 따라 표지를 빼거나 TCO를 붙이는 변형이 필요합니다. 견적 작성 시 템플릿을 선택할 수 있고, 미선택 시 기본값이 적용됩니다.</p>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <div class="card-h"><h2>메일 템플릿</h2><div class="sp"></div><button class="btn sm">추가</button></div>
+            <table class="grid">
+              <thead><tr><th>발송 유형</th><th>제목</th><th class="ctr" style="width:60px">사용</th></tr></thead>
+              <tbody>
+                <tr style="background:var(--primary-weak)"><td style="font-weight:600">최초 발송</td>
+                  <td>[세포아소프트] {고객사} 전자인장 시스템 견적서 송부</td><td class="ctr">Y</td></tr>
+                <tr><td>수정 재발송</td><td>[세포아소프트] {고객사} 견적서 재송부 (rev.{버전})</td><td class="ctr">Y</td></tr>
+                <tr><td>미열람 리마인드</td><td>[세포아소프트] 견적서 확인 요청 — {견적번호}</td><td class="ctr">Y</td></tr>
+                <tr><td>유효일 임박</td><td>[세포아소프트] 견적 유효기간 안내 ({유효일}까지)</td><td class="ctr">Y</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <div class="card-h"><h2>본문 편집</h2><div class="sp"></div><span class="sub">최초 발송</span></div>
+            <div class="card-b">
+              <div class="fld"><label>제목</label>
+                <input value="[세포아소프트] {고객사} 전자인장 시스템 견적서 송부"></div>
+              <div class="fld"><label>본문</label>
+                <div style="border:1px solid var(--line);border-radius:3px;background:#FAFBFC;padding:11px;font-size:12.5px;line-height:1.85;min-height:180px">
+                  <b style="color:var(--primary)">{담당자}</b>님, 안녕하세요.<br>
+                  ㈜세포아소프트 <b style="color:var(--primary)">{발신담당자}</b>입니다.<br><br>
+                  요청주신 전자인장관리 시스템 견적서를 송부드립니다.<br><br>
+                  · 견적번호 : <b style="color:var(--primary)">{견적번호}</b><br>
+                  · 총 견적가 : <b style="color:var(--primary)">{총액}</b> 원 (부가세 별도)<br>
+                  · 유효기간 : <b style="color:var(--primary)">{유효일}</b>까지<br><br>
+                  아래 링크에서 견적서를 확인하실 수 있습니다.<br>
+                  <b style="color:var(--primary)">{열람링크}</b><br><br>
+                  문의사항은 회신 주시면 신속히 안내드리겠습니다.<br>
+                  감사합니다.
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn sm">{고객사}</button><button class="btn sm">{담당자}</button>
+                <button class="btn sm">{견적번호}</button><button class="btn sm">{총액}</button>
+                <button class="btn sm">{유효일}</button><button class="btn sm">{열람링크}</button>
+                <button class="btn sm">{발신담당자}</button>
+              </div>
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>견적서 PDF 첨부</b><span>링크와 함께 파일도 전송</span></div></label>
+              <label class="factor on"><input type="checkbox" checked>
+                <div class="t"><b>열람 추적 토큰 부착</b><span>{열람링크}에 자동 적용 · 클릭 기준 집계</span></div></label>
+              <p class="note">치환변수는 발송 시점의 견적 데이터로 채워집니다. 발신 도메인 인증(SPF/DKIM)이 설정되어야 링크가 스팸 처리되지 않습니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.demo-bar button').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.demo-bar button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+    document.getElementById(b.dataset.s).classList.add('on');
+    window.scrollTo(0,0);
+  });
+});
+document.querySelectorAll('.factor input').forEach(i=>{
+  i.addEventListener('change',()=>i.closest('.factor').classList.toggle('on',i.checked));
+});
+</script>
+</body>
+</html>
