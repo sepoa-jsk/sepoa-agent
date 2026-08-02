@@ -39,7 +39,8 @@
 | `tools/` | Node 전용. Java 쪽 대응 도구를 별도 판단 |
 | `editor.js` | 이식 안 함. 네고율만 Java 에서 새로 구현 |
 
-**Node 앱은 삭제하지 않습니다.** 전환 완료 후 일정 기간 롤백 대비로 유지하고, 병행 대조(4장)에도 사용합니다.
+> **2026-08-02 정정** — 초안은 "삭제하지 않습니다" 였으나 J0 에서 삭제로 뒤집혔고, J3 에서
+> 시점을 **J7 완료 후**로 확정했습니다. 그때까지는 참조 구현이자 병행 대조 대상입니다.
 
 ---
 
@@ -51,16 +52,18 @@
 > 빌드도구는 Gradle 이 아니라 **Maven(`pom.xml`)** 으로 확정했습니다.
 > Maven Wrapper(`mvnw`)를 커밋했으므로 Maven 별도 설치는 필요 없습니다.
 >
-> **`quote/` 는 J2 완료 후 삭제합니다.** 초안의 "삭제하지 않음" 은 J0 에서 뒤집혔습니다.
+> **`quote/` 는 J7 완료 후 삭제합니다.** 초안의 "삭제하지 않음" 은 J0 에서 뒤집혔고,
+> J0 의 "J2 완료 후" 는 J3 에서 다시 조정했습니다 — PDF·Excel·SQL·프론트·실측 원본이
+> J7 까지 필요합니다(PROGRESS.md "`quote/` 삭제 시점 재평가").
 > 그에 따라 문서도 참조가 아니라 `quote_automation/docs/` 로 **이동**합니다.
-> 4장의 병행 대조는 J2~J5 사이, `quote/` 가 살아 있는 동안에만 가능합니다.
+> 4장의 병행 대조는 `quote/` 가 살아 있는 J7 까지 가능하며, 도구는 `tools/compare-engines.js` 입니다.
 
 ```
 sepoa-agent/
 ├─ server.js                게이트웨이 — /quote → Node, /quote2 → Java(병행 대조용)
 ├─ tools/                   Node 전용 도구 (Node 삭제 시 함께 판단)
 ├─ blog-automation/         (변경 없음)
-├─ quote/                   Node 참조 구현 — ★J2 완료 후 삭제
+├─ quote/                   Node 참조 구현 — ★J7 완료 후 삭제
 │   ├─ docs/                WBS · PROGRESS · LESSONS · ui-mockup · baseline-pdf
 │   ├─ src/  public/  db/  test/
 └─ quote_automation/        ★신규
@@ -97,7 +100,7 @@ sepoa-agent/
 
 **문서는 한 곳에만 둡니다.** WBS·PROGRESS·이슈 로그·기준선 PDF 를 두 곳에 두면 반드시 어긋납니다.
 J2 까지는 `quote/docs/` 가 정본이고 `quote_automation/docs/README.md` 에 참조 경로만 둡니다.
-**J2 에서 `quote/` 를 지울 때 `quote_automation/docs/` 로 옮깁니다.**
+**`quote/` 를 지울 때(J7 완료 후) `quote_automation/docs/` 로 옮깁니다.**
 
 **픽스처도 단일 출처입니다.** J2 에서 `quote/test/engine/quote-block.test.js` 의 실측 20종을
 JSON 으로 분리하고 **Node 테스트도 같은 파일을 읽도록 고칩니다** — 두 구현이 같은 입력을
