@@ -3,9 +3,11 @@
 > 갱신 규칙: 각 작업 완료 시 Claude Code가 이 파일의 해당 행을 갱신한다.
 > 상태값 `대기` → `진행중` → `완료` / `보류`. 완료 시 커밋 해시와 날짜를 기록한다.
 
-**현재 위치** — **STEP 3 완료 — STEP 4 착수 대기**
-(작성 경로는 위저드로 일원화. **편집 경로는 미일원화 상태로 남았다** — 아래 STEP 3 종료 요약 참조)
+**현재 위치** — **Node 개편 중단 · Java 이식 J0 진행중**
+(2026-08-02 결정. STEP 3 까지 완료한 시점에서 서버를 Java/Spring Boot 로 이식하기로 했다.
+STEP 4~8 은 착수하지 않고 Java J10~J14 에서 구현한다. 실행계획 정본은 `docs/WBS-java.md`)
 **작업 브랜치** — `refactor/restructure`
+**Node 자산 동결 태그** — `v-node-final`
 
 ---
 
@@ -25,16 +27,189 @@
 | 9 | 위저드 STEP③④⑤ | 3-b | 완료 | (본 커밋) | 2026-08-02 | 미리보기는 render/html.js 재사용 · 블록 인건비 판정 정정 |
 | 10 | 레거시 에디터 폐기 + 견적번호 QT 전환 | 3-c | 완료 | (본 커밋) | 2026-08-02 | **STEP 3 종료 · 중단 지점 — 배포 가능** · `quote-block.js` 폐기, `editor.js` 는 편집 전용 존치(가드) |
 | 10.5 | 마이그레이션 이력 테이블 + 010~024 적용 | 3-d | 완료 | (본 커밋) | 2026-08-02 | 이슈 로그 '작업 3 migrate' 해소 · `sq_migrations` 도입 · 006 손상 3건 추가 복구 |
-| 11 | 산정 모델 분리 + GRADE·RATE·MD | 4-a | 대기 | | | |
-| 12 | 리스크 계수 엔진 | 4-b | 대기 | | | 계수 억지 조정 금지 |
-| 13 | 마스터 DDL·시드 | 5-a | 대기 | | | **정책 확정 선결** |
-| 14 | 문구·템플릿 마스터 | 5-b | 대기 | | | 완료 직후 백업 2차 |
-| 15 | 마스터 화면 | 5-c | 대기 | | | |
-| 16 | 검증 엔진 R-01~R-16 | 6 | 대기 | | | 서버 측 강제 |
-| 17 | 조직·사용자·권한 | 7-a | 대기 | | | 착수 시 `sq_users` 백업 3차 |
-| 18 | 승인 워크플로우 + 버전 스냅샷 | 7-b | 대기 | | | |
-| 19 | 발송·열람 추적 | 7-c | 대기 | | | SPF/DKIM 확인 필요 |
-| 20 | 레거시 정리 | 8 | 대기 | | | **착수 전 백업 4차 필수** |
+| ~~11~~ | ~~산정 모델 분리 + GRADE·RATE·MD~~ | 4-a | **중단** | | | → Java **J10** |
+| ~~12~~ | ~~리스크 계수 엔진~~ | 4-b | **중단** | | | → Java **J10** |
+| ~~13~~ | ~~마스터 DDL·시드~~ | 5-a | **중단** | | | → Java **J11** |
+| ~~14~~ | ~~문구·템플릿 마스터~~ | 5-b | **중단** | | | → Java **J11** |
+| ~~15~~ | ~~마스터 화면~~ | 5-c | **중단** | | | → Java **J11** |
+| ~~16~~ | ~~검증 엔진 R-01~R-16~~ | 6 | **중단** | | | → Java **J12** |
+| ~~17~~ | ~~조직·사용자·권한~~ | 7-a | **중단** | | | → Java **J13** |
+| ~~18~~ | ~~승인 워크플로우 + 버전 스냅샷~~ | 7-b | **중단** | | | → Java **J13** |
+| ~~19~~ | ~~발송·열람 추적~~ | 7-c | **중단** | | | → Java **J13** |
+| ~~20~~ | ~~레거시 정리~~ | 8 | **중단** | | | Node 삭제로 소멸 |
+
+### Java 이식 (정본 — `docs/WBS-java.md`)
+
+| # | 작업 | 상태 | 커밋 | 완료일 | 비고 |
+|---|---|---|---|---|---|
+| J0 | 착수 준비 — 자산 동결·반출 목록·이슈 재분류 | 진행중 | | | |
+| J1 | 프로젝트 스캐폴딩 | 대기 | | | |
+| J2 | 테스트 픽스처와 JUnit 명세 | 대기 | | | **완료 후 `quote/` 삭제** |
+| J3 | 계산 엔진 | 대기 | | | 실측 20종이 DoD |
+| J4 | Flyway 및 데이터 계층 | 대기 | | | 013·015 문제 해소 지점 |
+| J5 | API 컨트롤러 | 대기 | | | 엔드포인트 39개 |
+| J6 | 프론트엔드 이관 | 대기 | | | 변경 파일은 `api.js` 하나 |
+| J7 | PDF · Excel | 대기 | | | |
+| J8 | 인증 · 세션 | 대기 | | | |
+| J9 | Jenkins 파이프라인 및 전환 | 대기 | | | 리눅스 배포는 여기서 |
+| J10~J14 | 신규 기능 (구 STEP 4~8) | 대기 | | | 위 중단분 |
+
+---
+
+## Node 자산 동결 (J0, 2026-08-02)
+
+**방침** — Node 구현은 **J2(테스트 픽스처 추출) 완료 후 삭제**한다. J0 에서는 자산만 추출·보존한다.
+
+### 태그
+
+| 항목 | 값 |
+|---|---|
+| 태그 | `v-node-final` (annotated) |
+| 브랜치 | `refactor/restructure` |
+| 커밋 | `ac1ca2b` (fix(db): 마이그레이션 이력 테이블 도입 및 010~024 적용) |
+| 메시지 | `Node 구현 최종 — Java 이식 전 참조 기준선` |
+| 로컬 태그 | **생성됨** (2026-08-02) |
+| origin 푸시 | **미완** — 하네스 `deny` 규칙 차단. 아래 [결정 기록](#결정-기록-j0-2026-08-02) 참조 |
+
+삭제 후에도 `git show v-node-final:<경로>` 로 원본을 꺼낼 수 있게 하는 것이 태그의 목적이다.
+
+> **로컬 태그만으로는 이 목적이 달성되지 않는다.** 태그가 origin 에 없으면 이 머신의
+> `.git` 이 유일한 사본이다. J2 에서 `quote/` 를 삭제하기 **전에** 푸시가 반드시 끝나야 한다.
+
+### 태그 시점 검증 수치
+
+| 항목 | 값 |
+|---|---|
+| `npm test` | **70 통과 / 0 실패** |
+| 실측 재현 (`test/engine/quote-block.test.js`) | 20 통과 |
+| `sq_migrations` | 25건 (실행 14 / 미실행 등록 11) |
+
+실측 3종 PDF SHA-256 — 이 해시가 Java J7 의 대조 기준이다.
+
+| 파일 | 크기 | SHA-256 |
+|---|---:|---|
+| `docs/baseline-pdf/hagendazs-saas.pdf` | 327,088 B | `4a56af5a2be4532dc887d2578dff1b6fbde1be8d8ed3413f948253bf1cc9b82b` |
+| `docs/baseline-pdf/sk-pcloud.pdf` | 330,611 B | `d0ae4f94d40d67dc9662de37e3f0da51521d93ab47f1f7b38158dc5b58973409` |
+| `docs/baseline-pdf/solbrain-onprem.pdf` | 384,851 B | `20e9600b18243b61ed39e9a0419bd66e882bc812b67e19c38e95c75b84ad2cf3` |
+
+> PDF 는 생성 시각·견적번호가 매번 달라 **재생성본과 바이트 비교가 불가능하다.**
+> 이 해시는 `docs/baseline-pdf/` 에 커밋된 파일 자체의 무결성 확인용이다.
+> 산출물 대조는 종전대로 **금액·페이지수·이미지 임베드 개수**로 한다.
+
+### 반출 목록 — `quote/` 삭제 시 함께 사라지면 안 되는 것
+
+실제 반출은 **J2** 에서 한다. 여기서는 대상과 이관 위치를 확정한다.
+
+| # | 반출 대상 | 현재 위치 | 이관 위치 | 단계 | 비고 |
+|---|---|---|---|---|---|
+| 1 | 실측 재현 20종의 입력·기대값 | `test/engine/quote-block.test.js` (271줄) | `quote-java/src/test/resources/fixtures/*.json` | **J2** | Node 테스트도 같은 픽스처를 읽도록 먼저 고친다 — 두 구현이 같은 입력을 공유해야 대조가 성립 |
+| 2 | 계산 엔진 | `src/domain/pricing/engine.js` (171줄) | `domain/pricing/PricingEngine.java` | J3 | `BigDecimal` + 반올림 모드 명시. JS `Number` 와 결과가 갈릴 수 있다 |
+| 3 | PDF 본문 HTML | `src/domain/render/html.js` (359줄) | `resources/templates/quote/*.html` (Thymeleaf) | **J7** | 실측 3종을 재현하는 레이아웃이 이미 검증돼 있다. **다시 만들지 말 것** |
+| 4 | Excel 생성 | `src/domain/render/excel.js` (480줄) | `domain/render/ExcelRenderer.java` (POI) | J7 | 표지·견적서 2시트 + 인감 텍스트 |
+| 5 | SQL 문자열 전량 | `src/web/routes/*.js` (1,454줄) · `src/domain/quote/service.js` (139줄) | `domain/*/​*Repository.java` | J4/J5 | 바인딩 표기와 `RowMapper` 만 추가하고 SQL 은 그대로 옮긴다 |
+| 6 | 프론트엔드 | `public/` (파일 24개 · JS 20개) | `quote-java/src/main/resources/static/` | J6 | 변경 파일은 `api.js` 하나여야 한다 |
+| 7 | 문서 일체 | `docs/{WBS.md, WBS-java.md, PROGRESS.md, ui-mockup.html, baseline-pdf/, archive/}` | `quote-java/docs/` | **J2** | `quote/` 삭제 방침에 따라 참조가 아니라 **이동**이다 |
+| 8 | 마이그레이션 25개 | `db/migrations/` | Flyway `V1__baseline.sql` 산출 근거로 보존 | J4 | `README.md` 의 미실행 등록 사유·006 탐지 쿼리가 함께 가야 한다 |
+| 9 | 환경변수 키 16종 | `.env.example` | `application.yml` 매핑표 | J1 | 아래 표 |
+| 10 | 견적번호 채번 | `src/domain/quote/numbering.js` (75줄) | `domain/quote/QuoteNumbering.java` | J4 | `QT{YYYYMMDD}_{NNN}` · `sq_quote_seq` 일자 카운터 |
+| 11 | 인건비 표준단가 산출 | `src/domain/labor/standard.js` (30줄) | `domain/labor/LaborCalculator.java` | J3 | 평균임금×제경비×기술료. `editor.js` 가 유일한 UI 였다 |
+| 12 | 실측 원본 PDF 5종 | `assets/인장/*.pdf` | 그대로 유지 (레포 루트 이동) | J2 | **기준선의 근거.** 기준선 PDF 는 우리 렌더러 산출물일 뿐 실측 정답이 아니다 |
+| 13 | 로고·직인·밴드 이미지 | `assets/{logo,seal,band_top,band_bottom}.png` | `quote-java/src/main/resources/static/assets/` | J7 | base64 임베드 4개가 PDF 검증 항목 |
+
+**환경변수 → `application.yml` 매핑표** (16종, `.env.example` 기준)
+
+| Node | Java | 비고 |
+|---|---|---|
+| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` `DB_PASSWORD` | `spring.datasource.*` | JDBC URL 로 합성 |
+| `DB_CONNECTION_LIMIT` | `spring.datasource.hikari.maximum-pool-size` | |
+| `PORT` | `server.port` | WAR 배포 시 Tomcat 이 결정 |
+| `NODE_ENV` | `spring.profiles.active` | `dev` / `prod` |
+| `GOOGLE_CLIENT_ID` | `spring.security.oauth2.client.registration.google.client-id` | client-secret 은 신규 필요 |
+| `ALLOWED_EMAIL_DOMAINS` | 커스텀 — `app.auth.allowed-domains` | `sepoasoft.co.kr` |
+| `ADMIN_EMAILS` | 커스텀 — `app.auth.admin-emails` | |
+| `AUTH_MODE` | 커스텀 — `app.auth.mode` | **`dev` 우회 로그인을 prod 프로파일에 남기지 말 것** |
+| `SESSION_SECRET` | Spring Session JDBC | 세션 저장소가 대체 |
+| `COOKIE_SECURE` | `server.servlet.session.cookie.secure` | |
+| `TRUST_PROXY` | `server.forward-headers-strategy=framework` | |
+| `API_KEY` | 커스텀 — `app.api-key` | |
+
+> `CHROME_PATH` 는 `.env.example` 에 없지만 `render/pdf.js` 가 읽는다. J7 `ChromeRunner` 에 필요하다.
+
+---
+
+## 결정 기록 (J0, 2026-08-02)
+
+### ① 레포 공개 상태 — **미정. 결정 필요**
+
+레포 `sepoa-jsk/sepoa-agent` 는 현재 **public** 이다 (GitHub API `"private": false`, 2026-08-02 확인).
+
+| 구분 | 대상 | 상태 |
+|---|---|---|
+| **이미 공개됨** | `quote/assets/인장/` 실측 견적서 5종, `무전표·전자구매_온프레미스.pdf` | `origin/main` 에 존재 |
+| **푸시하면 공개됨** | `docs/WBS.md` — 등급별 정가(대기업군 60,000,000 / 공공 45,000,000 / 중견중소 40,000,000), 실측 딜 5건 **고객사 실명**(K뱅크·삼정·삼성생명·한화투자증권·교보생명) | `origin` 에 `docs/` 자체가 없음 |
+| 〃 | `docs/PROGRESS.md` · `baseline-schema.sql` — 내부 DB 호스트 `devmariadb.sepoa.co.kr`, 스키마·계정명, 견적 금액 | 〃 |
+| 〃 | `docs/baseline-pdf/` 실측 재현 견적서 3종 | 〃 |
+| **유출 없음** | 자격증명 | `.env` 미추적 (`.env.example` 만 커밋됨) |
+
+**결정이 필요한 이유** — `refactor/restructure` 푸시는 `quote/docs/` 전체를 처음으로 공개한다.
+푸시는 사실상 되돌릴 수 없다(캐시·포크·인덱싱). 그러므로 **푸시 전에 결정해야 한다.**
+
+private 로 전환해도 **이미 공개된 견적서 5종은 되돌아오지 않는다** — 전환 시점 이후
+신규 접근만 차단된다. 완전한 제거는 이력 재작성이 필요하고, 그것도 이미 받아 간 사본에는
+효력이 없다.
+
+> **미결 상태이므로 푸시를 진행하지 않았다.** 아래 ④ 의 차단 사유와는 별개다.
+
+### ② Node 개편 STEP 4~8 중단 → Java J10~J14 이관 — **확정**
+
+STEP 3 까지 완료한 시점에서 서버를 Java/Spring Boot 로 이식하기로 했다.
+STEP 4~8(작업 11~20)은 **착수하지 않는다.** 해당 설계는 Java 에서 구현한다.
+
+진행표에 반영 완료 — 작업 11~20 행에 취소선 + `중단` + 이관 J 단계를 표기했다.
+
+| 구 작업 | 내용 | 이관 |
+|---|---|---|
+| 11 · 12 | 산정 모델 GRADE·RATE·MD / 리스크 계수 | **J10** |
+| 13 · 14 · 15 | 마스터 DDL·시드 / 문구·템플릿 / 마스터 화면 | **J11** |
+| 16 | 검증 엔진 R-01~R-16 | **J12** |
+| 17 · 18 · 19 | 조직·권한 / 승인 워크플로우 / 발송·열람추적 | **J13** |
+| 20 | 레거시 정리 | Node 삭제로 소멸 |
+
+설계 정본은 `docs/WBS.md` §5 (STEP 4~8) 를 그대로 쓴다. **이 문서를 지우지 말 것** —
+`docs/WBS-java.md` 의 J10~J14 가 여기를 참조한다.
+
+### ③ 작업 10.6 (리눅스 배포 준비) — **취소**
+
+Node 앱을 리눅스에 배포하지 않는다. 배포는 **J9(Jenkins · 외부 Tomcat)** 에서 한 번만 한다.
+Java 전환까지는 로컬 개발만 한다. Node 배포 설정을 만들어도 J9 에서 버려진다.
+
+**단, 폰트·Chrome 경로 이슈는 J7 로 이관한다.** 리눅스 헤드리스 Chrome 에서
+`Noto Sans CJK KR` 미설치 시 PDF 전체가 두부(□)로 나오며, **금액·페이지수 검증으로는
+잡히지 않는다.** `docs/LESSONS.md` 부록에 기재했다.
+
+### ④ `v-node-final` origin 푸시 — **차단됨 (하네스 규칙)**
+
+로컬 태그는 생성했으나 푸시하지 못했다. **GitHub 인증 문제가 아니다.**
+
+| 확인 항목 | 결과 |
+|---|---|
+| 차단 지점 | `.claude/settings.json` 의 `permissions.deny` 에 **`Bash(git push*)`** |
+| 오류 원문 | `Permission to use Bash with command git push origin v-node-final has been denied.` |
+| → 판정 | 하네스가 차단했고 **git/GitHub 에는 도달하지 않았다** |
+| 원격 접근 | `git ls-remote origin` 성공 — remote URL·네트워크 정상 |
+| GitHub 인증 | **미확인.** 레포가 public 이라 `ls-remote` 는 익명으로도 성공한다. 푸시 자격증명 유효성은 실제 푸시 전에는 알 수 없다. `credential.helper = manager` 설정은 되어 있다 |
+| origin 브랜치 | `refs/heads/main` **하나뿐** — `refactor/restructure` 는 원격에 없다 |
+| origin 태그 | **없음** |
+| upstream | `refactor/restructure` **미설정** (`branch.*.remote` / `.merge` 둘 다 비어 있음). `main` 은 `origin/main` 추적 중이며 `ahead 2` |
+
+**해소 방법** — `deny` 에서 `Bash(git push*)` 를 제거하거나, 사용자가 직접 실행:
+
+```bash
+git push -u origin refactor/restructure
+git push origin v-node-final
+```
+
+**단, 위 ① 이 미결이므로 푸시 전에 공개 상태를 먼저 정할 것.**
 
 ---
 
@@ -220,9 +395,95 @@ CREATE TABLE sq_users_bak_YYYYMMDD AS SELECT * FROM sq_users;
 
 ---
 
+## 이슈 로그 — Java 이식 재분류 (J0, 2026-08-02)
+
+아래 이슈 로그 **51건 전수**를 Java 이식 기준으로 재분류했다.
+`quote/` 는 J2 완료 후 삭제되므로, 여기서 [이식]·[보류] 로 표시되지 않은 항목은 소멸한다.
+
+| 분류 | 뜻 | 건수 |
+|---|---|---:|
+| **[이식]** | Java 에서 해결해야 한다. J 단계를 함께 적었다 | 24 |
+| **[해소]** | 이식으로 자동 해결. 확인만 하고 넘어간다 | 7 |
+| **[폐기]** | Node 삭제로 소멸. 되살릴 필요 없다 | 19 |
+| **[보류]** | 판단 유예 | 1 |
+
+### [이식] — Java 에서 해결 (24건)
+
+| # | 발견 | 항목 | 이관 | 사유 |
+|---|---|---|---|---|
+| 1 | 작업 1 | 기준선 견적 3건(44·45·46)을 DB 에 유지 | **J7** | Node 를 지워도 DB 에 남는다. PDF 대조 기준이므로 삭제 금지 대상을 Java 쪽에 다시 명시해야 한다 |
+| 2 | 작업 2 | 접속 DB 가 개발용(`devmariadb` / `test_01`)이라는 사실 | **J1** | Java 도 같은 DB 를 공유한다. 운영 반영 시 백업 정책 재검토가 그대로 유효 |
+| 3 | 작업 4 | `dataUri()` 가 파일 읽기 실패를 삼켜 이미지 없는 PDF 를 정상처럼 낸다 | **J7** | 같은 구조를 Java 로 옮기면 결함까지 옮긴다. 예외로 표면화할 것 — `LESSONS.md` 참조 |
+| 4 | 작업 6 | CSS 결함은 `npm test` 가 못 잡는다. 헤드리스 캡처 + DOM 측정으로 검증 | **J6** | 프론트를 그대로 옮기므로 검증 방법도 그대로 필요하다 |
+| 5 | 작업 6 | `public/js/api.js` 의 `const BASE = '/quote'` 고정 — 직접 접속 불가 | **J6** | **J6 에서 고칠 유일한 파일이 이것이다.** 다른 파일을 고쳐야 하면 J5 응답 형태가 어긋난 것 |
+| 6 | 작업 7 | `₩` 가 `render/html.js`(PDF) 2곳에 남아 있다 (화면은 0건) | **J7** | Thymeleaf 이식 시 실측 양식 유지 / CLAUDE.md §5 적용 중 택일이 필요 |
+| 7 | 작업 7 | 각 화면의 액션 버튼을 GNB 로 올리는 작업 미완 | **J6** | 프론트가 그대로 가므로 미완 상태도 그대로 간다 |
+| 8 | 작업 8 | **고객사 마스터가 없다.** `sq_quotes.customer_name` 자유 텍스트가 전부 | **J11** | "고객사 선택 → 기업구분 자동 로드" 가 현재 데이터로 불가능 |
+| 9 | 작업 8 | **`sq_company_classes` 성격 재정의** — 기업 속성이 아니라 `solution × deployment` 가격 밴드 16종 | **J11** | 선택지 3안이 이슈 로그에 있다. J10 의 GRADE 모델과 개념이 겹치므로 J11 DDL 확정 전 결정 |
+| 10 | 작업 8 | 자사 정보 3건이 비어 있고 PDF 가 하드코딩 폴백을 쓴다 | **J7 + J12** | 폴백이 남아 있으면 R-16(발행 전 필수정보 확인)이 실효를 못 갖는다. 폴백 제거와 설정 입력이 함께 가야 한다 |
+| 11 | 작업 8 | 견적 생성 API 필수 필드가 `blocks` 하나뿐 — API 직접 호출로 우회 가능 | **J12** | 서버 측 강제. 화면 검증만으로는 못 막는다 |
+| 12 | 작업 8 | 사이드바 18개 항목이 1000px 뷰포트에서 하단 2개 밀림 | **J6** | 메뉴가 더 늘면 재검토 |
+| 13 | 작업 9 | 비-LABOR 블록의 인건비는 **인력투입계획 부록 전용**이라는 규칙 | **J3 + J7** | 엔진(`isLabor`)과 렌더러 양쪽에 명시돼 있다. `blockCode == "LABOR"` 만으로 판정할 것 — `LESSONS.md` 참조 |
+| 14 | 작업 9 | 위저드 `recalcBlocks`(클라이언트)도 같은 판정을 쓴다 | **J3** | 프론트가 그대로 가므로 **서버(Java)와 판정이 일치해야** 미리보기와 PDF 금액이 안 어긋난다 |
+| 15 | 작업 9 | SK이터닉스가 위저드 3페이지 vs 기준선 2페이지 — 회귀 아닌 입력 차이 | **J7** | 실측 원본은 4페이지. 대조 시 페이지수 기준을 무엇으로 둘지 결정 필요 |
+| 16 | 작업 9 | 실측 인력투입계획은 4행(3.70MM)인데 템플릿 `setup_labor_default` 는 `DEV` 1행 | **J11** | 부록 표 모양이 실측과 다르다 |
+| 17 | 작업 10 | **기준선 PDF 는 "실측 정답"이 아니라 "회귀 방어선"일 뿐이다** | **J7** | 렌더러가 아직 못 만드는 부분은 기준선에도 없다. 실측 5종과 페이지 단위 정면 대조가 별도로 필요 |
+| 18 | 작업 10 | **블록형 견적 PUT 왕복 불가** — `GET` 결과를 그대로 `PUT` 하면 500 | **J5** | `solution` 이 `sq_quote_sections` 의 NOT NULL 인데 `loadQuote` 가 헤더에 노출하지 않는다. 편집 모드의 선결 조건 |
+| 19 | 작업 10 | **위저드 편집 모드** — 기존 견적 로드 + `updateQuote` | **J5 + J6** | 위저드는 신규 작성 전용이다. 블록형 견적을 편집할 유일한 경로 |
+| 20 | 작업 10 | **네고율(`applyRate`) 산정** — `sq_nego_rates` 20행이 살아 있고 `editor.js` 가 유일한 UI | **J10** | `editor.js` 는 이식하지 않으므로 **Java 에서 새로 구현**한다. J10 의 GRADE·RATE·MD 는 전자인장 가격정책용이라 대체물이 아니다 |
+| 21 | 작업 10 | 모듈 선택 모달(`pickModal`) — 마스터에서 골라 넣는 UI | **J6** | 위저드는 엑셀 붙여넣기·직접 추가만 있다 |
+| 22 | 작업 10 | 직접입력 정액(1식) 항목(`addBundle`) | **J6** | 위저드 "+ 항목 추가" 에 정액 단위 의미가 없다 |
+| 23 | 작업 10 | **자동 견적조건 치환** — `sq_settings.quote_condition_templates` 토큰 2건 | **J11** | 조건 마스터가 `sq_condition_lines` 와 이원화돼 있다. 일원화가 진짜 과제 |
+| 24 | 작업 10 | `sq_labor_rate_lines.apply_price` 빈 4행 (2025년 4직군) | **J11** | 참조 0건인 잔여물. 구 작업 20(정리)이 폐기됐으므로 J11 로 옮긴다 |
+
+### [해소] — 이식으로 자동 해결 (7건)
+
+| # | 발견 | 항목 | 사유 |
+|---|---|---|---|
+| 1 | 작업 3 | migrate 러너가 적용 이력을 남기지 않는다 | 작업 10.5 에서 `sq_migrations` 로 해소했고, **J4 에서 Flyway 가 러너 자체를 대체**한다 |
+| 2 | 작업 3 | `009` `DELIMITER` 로 010 이후 미실행 | 작업 10.5 에서 해소. Flyway `V1__baseline.sql` 로 스냅샷하면 재발 여지가 없다 |
+| 3 | 작업 3 | 번호 중복(`002`·`042`) | Flyway 버전 체계로 재부여된다 |
+| 4 | 작업 9 | `006` 백필이 견적 44 를 매 실행마다 손상 | 작업 10.5 에서 복구·조건 수정. **교훈은 `LESSONS.md` 로 이관** |
+| 5 | 작업 10.5 | `006` 손상 3건 추가 발견(견적 1·4·14) | `025` 로 복구 완료. 탐지 쿼리는 `db/migrations/README.md` 와 `LESSONS.md` 양쪽에 있다 |
+| 6 | 작업 10.5 | `021` 에도 같은 `DELIMITER` 결함 | 작업 10.5 에서 치환. Flyway 로 프로시저 문제 자체가 사라진다 |
+| 7 | 작업 10.5 | `013`·`015` 가 신규 DB 에 설치 불가 | **J4 Flyway baseline 이 해소 지점이다.** 현재 스키마를 `V1` 로 떠서 두 파일을 실행하지 않는다 |
+
+### [폐기] — Node 삭제로 소멸 (19건)
+
+| # | 발견 | 항목 | 사유 |
+|---|---|---|---|
+| 1 | 작업 2 | `tools/check/checknego.js` 미종료 (`conn.end()` 누락) | `tools/` 는 Node 전용. 이식 대상 아님 |
+| 2 | 작업 2 | `tools/ops/dbtest.js` dotenv 경로 미지정 | 〃 (이미 처리 완료) |
+| 3 | 작업 4 | 이동 깊이가 일률적이지 않다 (`__dirname` 상대깊이) | Node 모듈 해석 문제. Java 에 개념이 없다 |
+| 4 | 작업 4 | `quote-service.js` 의 형제 `require('./db')` | 〃 |
+| 5 | 작업 5 | 기준선 대비 행수 +32 는 검증용 산출물 | 기록성. 정리 완료 |
+| 6 | 작업 6 | 임금단가 비고 열 잘림 | 작업 7 에서 처리 완료 |
+| 7 | 작업 6 | `app.css` 의 `:root` 가 `tokens.css` 를 덮어씀 | 처리 완료. `app.css` 는 작업 7 에서 제거됨 |
+| 8 | 작업 7 | 임금단가 표 잘림이 선행 결함이었음 | 처리 완료 |
+| 9 | 작업 8 | 자사 정보 6항목 중 2건 빈 값 (초기 기술) | 아래 [이식] 10 번으로 통합됨 (중복 항목) |
+| 10 | 작업 8 | 견적 생성 API 필수 필드 (초기 기술) | [이식] 11 번으로 통합됨 (중복 항목) |
+| 11 | 작업 9 | `render/html.js` 181행이 미실행 경로였음 | 처리 완료. 규칙은 [이식] 13 번으로 이관 |
+| 12 | 작업 9 | 위저드 STEP③ 이중 계상 수정 | 처리 완료. 규칙은 [이식] 14 번으로 이관 |
+| 13 | 작업 9 | 월 특별DC 입력 UI 부재 | 처리 완료. 프론트가 그대로 이관되므로 기능도 그대로 간다 |
+| 14 | 작업 9 | 이관 누락 3건(견적조건 편집·절사 단위·연락처/메모) | 처리 완료. 〃 |
+| 15 | 작업 10 | `mysqldump` 미설치 → `tools/ops/dbdump.js` 승격 | Node 도구. Java 쪽 백업 방식은 별도 판단 |
+| 16 | 작업 10 | 위저드 템플릿 변경 시 STEP③ 이 옛 템플릿 유지 | 처리 완료. 프론트 그대로 이관 |
+| 17 | 작업 10 | `editor.js` 가 견적 11건 어느 것도 열지 못한다 | `editor.js` 를 이식하지 않으므로 소멸. 기능 공백은 [이식] 19~23 번이 받는다 |
+| 18 | 작업 10.5 | `editor.js` 존치 사유가 6건이라는 정정 | 존치 자체가 끝난다. 대체 구현 목록은 [이식] 19~23 번 |
+| 19 | 작업 10.5 | `docs/baseline-pdf/generate.js` 가 생성 견적을 지우지 않는다 | Node 스크립트. **다만 J7 의 Java 대조 스크립트를 만들 때 같은 실수를 하지 말 것** |
+
+### [보류] — 판단 유예 (1건)
+
+| # | 발견 | 항목 | 유예 사유 |
+|---|---|---|---|
+| 1 | 작업 10 | **VAT 포함/별도(`vat_mode`)** — 위저드는 별도 고정 | 실측 5종은 전부 별도다. 포함 견적 요구가 실제로 있는지 **영업 확인**이 선결이다. 요구가 없으면 [폐기], 있으면 J5+J6 |
+
+---
+
 ## 이슈 로그
 
-작업 중 발견했으나 해당 작업 범위 밖인 문제를 여기 기록하고, 작업 20에서 처리한다.
+작업 중 발견했으나 해당 작업 범위 밖인 문제를 여기 기록한다.
+아래 51건은 **위 "Java 이식 재분류" 에서 전수 분류했다.** 원문은 근거로 보존한다.
 
 | 발견 시점 | 내용 | 처리 |
 |---|---|---|
