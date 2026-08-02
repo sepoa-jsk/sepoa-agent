@@ -232,6 +232,79 @@ Java 앱이 죽어 있으면 **502 와 함께 원인을 돌려준다**(빈 응�
 
 ---
 
+## 사건 — appmod 도구 병행 실행 (2026-08-03, J4 중)
+
+**Java 업그레이드 자동화 도구가 같은 워크스페이스에서 병행 실행됐다.**
+브랜치가 바뀌었고 미추적 파일 4개가 사라졌다.
+
+### 무엇이 일어났는가
+
+| 시각 | 사건 | 근거 |
+|---|---|---|
+| 08-02 13:05 | 도구가 업그레이드 계획 수립 — **JDK 17→25, Boot 3.5.3→3.5.16** | `.github/modernize/java-upgrade/20260802130507/plan.md` |
+| 08-02 15:15 | Step 1 완료 — **JDK 25.0.2 설치** (`~/AppData/Local/jdks/`). 로그는 여기서 끊긴다 | `progress.md` · `logs/0.log` |
+| **08-03 00:14:24** | **`appmod/java-upgrade-20260802130507` 브랜치 생성 + checkout** | `git reflog` |
+| 08-03 00:15 | `.vscode/settings.json` 생성 | 파일 mtime |
+| 그 사이 | **미커밋 파일 소실 2회** | 아래 |
+
+브랜치 전환을 인지하지 못한 채 J4 작업을 계속했다. `appmod` 와 `refactor/restructure` 가
+같은 커밋(`a0b5293`)을 가리켜 `git log`·`git status` 로는 구분되지 않았다.
+
+### 소실된 것
+
+| 회차 | 대상 | 복구 |
+|---|---|---|
+| 1차 | `pom.xml`·`application*.yml` 의 Flyway 설정(되돌려짐), `domain/quote/` 3개 | 재작성함 |
+| 2차 | `tools/gen-flyway-baseline.js` · `tools/compare-queries.js` · `V1__baseline.sql` · `QuoteDumpMain.java` | **미복구** |
+
+**소실된 것은 전부 미커밋(untracked) 파일이다.** 커밋된 파일은 하나도 잃지 않았다.
+
+### 원인은 확정하지 못했다
+
+정황은 강하나 직접 증거가 없다. 확인한 것만 적는다.
+
+| 확인 | 결과 |
+|---|---|
+| 4개 경로 `.gitignore` 판정 | **전부 무시 대상 아님** |
+| `target/` 경유 | **전부 아님** — `mvn clean` 은 무관 |
+| `git reflog` | `reset`·`checkout --`·`rebase` **0건**. 단 `git clean` 은 reflog 에 남지 않아 배제 불가 |
+| 도구 로그 249줄 전문 | `delete`·`remove`·`clean`·`stash`·`rm`·`git`·`branch` **전부 0건**. 기록된 호출은 조회·JDK 설치·이벤트 보고뿐 |
+| 로그 종료 시각 | 08-02 15:15 — **브랜치 생성(08-03 00:14)조차 기록하지 않았다** |
+| 반례 | 1차 소실 후 재작성한 파일들은 미커밋인데도 살아남았다 → 상시 삭제가 아니라 시점 이벤트 |
+
+도구 로그에 브랜치 조작이 남지 않는다는 사실 자체가, 이 로그로는 파일 삭제를
+확인할 수도 배제할 수도 없다는 뜻이다.
+
+> 부수 발견 — 로그에 `Project java version: 8`,
+> `Failed to detect build tool for the project at d:\Project\sepoa-agent` 가 반복된다.
+> 도구가 **레포 루트를 대상으로 잡아** 빌드 도구 탐지에 실패하고 있다
+> (실제 Maven 프로젝트는 `quote_automation/` 하위다). 오작동 상태로 보인다.
+
+### 조치
+
+- **Java 25 업그레이드는 중단한다.** 이식 기준은 **JDK 17 / Boot 3.5.3** 이다.
+  J1~J3 의 모든 검증(실측 20종·계약 16종·`BigDecimal` 반올림 정합성·`tomcat-embed`
+  provided 스코프·WAR 구조)이 그 버전 기준이며, 버전이 바뀌면 전량 재검증이 필요하다.
+  설치된 JDK 25 는 도구 전용 경로에만 있고 `PATH`·`JAVA_HOME` 은 17 그대로다 —
+  되돌릴 것이 없었다.
+- 작업분을 **레포 밖**(`D:/Project/_j4-rescue/`)에 먼저 복사한 뒤 브랜치를 정리했다.
+- `refactor/restructure` 로 복귀하고 **즉시 WIP 커밋**했다(`579637c`).
+- `appmod/java-upgrade-20260802130507` 브랜치는 **삭제하지 않고 남긴다.** 도구 재실행 시
+  참조가 필요할 수 있다.
+- `.github/modernize/` 는 **커밋하지 않는다.** 도구가 자체 `.gitignore` 에 `**/*` 를 두어
+  이미 무시된다 — 우리 `.gitignore` 에 추가할 필요가 없다.
+
+### 재발 방지 — 만들면 즉시 커밋한다
+
+**미커밋 상태로 오래 두지 않는다. WIP 커밋이 소실보다 낫다.**
+검증이 끝나야 커밋하던 방식을 바꿨다. 검증 전 상태라도 커밋 메시지에 그 사실을 적는다.
+
+같은 워크스페이스에서 다른 자동화 도구가 도는 동안에는 특히 그렇다.
+브랜치가 바뀌어도 `git log`·`git status` 로는 드러나지 않으므로,
+**작업 착수 시 `git branch --show-current` 를 확인하는 것을 절차에 넣는다.**
+
+---
+
 ## J3 계산 엔진 이식 기록 (2026-08-02)
 
 `quote/src/domain/pricing/engine.js` 165줄 → `BlockPricingEngine`.
