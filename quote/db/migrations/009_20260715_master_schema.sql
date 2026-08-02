@@ -82,32 +82,25 @@ CREATE TABLE IF NOT EXISTS sq_labor_rates (
 
 -- ── 기업구분 컬럼 보강 (매출조건/상주여부 정식화) ──────────
 -- 기존 sq_company_classes에 컬럼 추가 (없을 때만)
-DROP PROCEDURE IF EXISTS _add_col;
-DELIMITER //
-CREATE PROCEDURE _add_col(IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl VARCHAR(255))
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = tbl AND COLUMN_NAME = col
-  ) THEN
-    SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN ', ddl);
-    PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
-  END IF;
-END //
-DELIMITER ;
-
-CALL _add_col('sq_company_classes', 'revenue_cond', "revenue_cond VARCHAR(100) NULL COMMENT '매출조건'");
-CALL _add_col('sq_company_classes', 'onsite',       "onsite TINYINT NULL COMMENT '1=상주 0=비상주'");
-CALL _add_col('sq_company_classes', 'active',       "active TINYINT NOT NULL DEFAULT 1");
+--
+-- 2026-08-02 수정: 원래는 DELIMITER + CREATE PROCEDURE _add_col 로 존재확인을 했으나,
+--   러너(db/migrate.js)가 세미콜론으로 구문을 쪼개므로 프로시저 본문이 6조각으로 파열되어
+--   ER_PARSE_ERROR(1064) 가 났고, 이어지는 CALL 8건이 전부 ER_SP_DOES_NOT_EXIST 로 실패했다.
+--   즉 이 파일의 컬럼 추가분은 러너로 적용된 적이 한 번도 없다(운영 DB 에는 수동 적용된 상태).
+--   MariaDB 가 지원하는 ADD COLUMN IF NOT EXISTS 로 치환한다 — 프로시저가 필요 없고 멱등이다.
+--   같은 결함이 021_20260722_labor_role_mapping.sql 에도 있었고 함께 고쳤다.
+ALTER TABLE sq_company_classes
+  ADD COLUMN IF NOT EXISTS revenue_cond VARCHAR(100) NULL COMMENT '매출조건',
+  ADD COLUMN IF NOT EXISTS onsite TINYINT NULL COMMENT '1=상주 0=비상주',
+  ADD COLUMN IF NOT EXISTS active TINYINT NOT NULL DEFAULT 1;
 
 -- ── price_items 참조 컬럼 확장 ─────────────────────────────
-CALL _add_col('sq_price_items', 'block',           "block VARCHAR(20) NULL COMMENT 'SOLUTION/LABOR/THIRDPARTY/SAAS_SERVICE/SAAS_ETC'");
-CALL _add_col('sq_price_items', 'module_code',     "module_code VARCHAR(50) NULL");
-CALL _add_col('sq_price_items', 'labor_role_code', "labor_role_code VARCHAR(50) NULL");
-CALL _add_col('sq_price_items', 'thirdparty_code', "thirdparty_code VARCHAR(50) NULL");
-CALL _add_col('sq_price_items', 'service_type',    "service_type VARCHAR(30) NULL");
-
-DROP PROCEDURE IF EXISTS _add_col;
+ALTER TABLE sq_price_items
+  ADD COLUMN IF NOT EXISTS block VARCHAR(20) NULL COMMENT 'SOLUTION/LABOR/THIRDPARTY/SAAS_SERVICE/SAAS_ETC',
+  ADD COLUMN IF NOT EXISTS module_code VARCHAR(50) NULL,
+  ADD COLUMN IF NOT EXISTS labor_role_code VARCHAR(50) NULL,
+  ADD COLUMN IF NOT EXISTS thirdparty_code VARCHAR(50) NULL,
+  ADD COLUMN IF NOT EXISTS service_type VARCHAR(30) NULL;
 
 -- 참고: 기존 category(한글) 컬럼은 당분간 유지(마이그레이션 안전).
 --       신규 block 컬럼으로 점진 전환.
