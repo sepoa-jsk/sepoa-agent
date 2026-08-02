@@ -49,7 +49,6 @@ function paint() {
 export const PAGE_META = {
   quotes: { title: '견적 목록', path: '견적관리 / 견적 목록' },
   new: { title: '견적 작성', path: '견적관리 / 견적 작성' },
-  'new-template': { title: '템플릿 견적', path: '견적관리 / 템플릿 견적' },
   detail: { title: '견적 상세', path: '견적관리 / 견적 목록 / 상세' },
   pricing: { title: '가격정책', path: '기준정보 / 가격정책' },
   master: { title: '마스터 관리', path: '기준정보 / 마스터 관리' },

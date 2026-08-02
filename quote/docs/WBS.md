@@ -289,18 +289,18 @@ sepoa-agent/
 
 `editor.js`(레거시 섹션형)를 폐기하고 `quote-block.js` 로직을 5단계 위저드로 분해합니다.
 
-- [ ] **운영 DB 백업 (1차, 전체) — 생략 금지.** 개편 전 원본. 작업 10 이 `sq_quote_seq`(채번)를
+- [x] **운영 DB 백업 (1차, 전체) — 생략 금지.** 개편 전 원본. 작업 10 이 `sq_quote_seq`(채번)를
       변경한다. → §1.1
-- [ ] `public/js/views/quote/wizard/` 신설, `step1~step5.js` 생성
-- [ ] `quote-block.js` 389줄을 STEP③(구성)·STEP④(인건비)로 분해
-- [ ] STEP① 기본정보 — 고객사 선택 시 기업구분 자동 로드, 회사정보 읽기전용 블록
-- [ ] STEP② 유형 선택 — 5종 카드 + 유효 정책 버전 표시
-- [ ] STEP③ 구성 — 좌 입력 / 우 실시간 미리보기 분할, 옵션 선택 시 라인 자동 생성
-- [ ] STEP⑤ 검토·발행 — 검증 배너 + 미리보기 + 산출물 버튼
-- [ ] `components/preview.js` — 견적서 레이아웃 실시간 미리보기 (PDF HTML 재사용)
-- [ ] `#/quotes/new` 라우트를 위저드로 교체, `new-template` 라우트 제거
-- [ ] `editor.js` 삭제 + `renderEditor` 참조 제거
-- [ ] 견적번호 `SYYYYMMDD###` → `QT{YYYYMMDD}_{NNN}` 변경, 기존 번호는 조회 호환 유지
+- [x] `public/js/views/quote/wizard/` 신설, `step1~step5.js` 생성
+- [x] `quote-block.js` 389줄을 STEP③(구성)·STEP④(인건비)로 분해
+- [x] STEP① 기본정보 — 고객사 선택 시 기업구분 자동 로드, 회사정보 읽기전용 블록
+- [x] STEP② 유형 선택 — 5종 카드 + 유효 정책 버전 표시
+- [x] STEP③ 구성 — 좌 입력 / 우 실시간 미리보기 분할, 옵션 선택 시 라인 자동 생성
+- [x] STEP⑤ 검토·발행 — 검증 배너 + 미리보기 + 산출물 버튼
+- [x] `components/preview.js` — 견적서 레이아웃 실시간 미리보기 (PDF HTML 재사용)
+- [x] `#/quotes/new` 라우트를 위저드로 교체, `new-template` 라우트 제거
+- [ ] `editor.js` 삭제 + `renderEditor` 참조 제거 — **보류**. 위저드에 대응물 없는 기능 5건(네고율 산정 등)이 남아 편집 전용으로 존치하고 블록형은 가드로 막았다. 삭제는 네고율 대체 모델이 생긴 뒤(이슈 로그 ②)
+- [x] 견적번호 `SYYYYMMDD###` → `QT{YYYYMMDD}_{NNN}` 변경, 기존 번호는 조회 호환 유지
 
 **DoD** 실측 3종을 위저드로 재작성했을 때 STEP 0 기준선 PDF와 금액·레이아웃 일치. `editor.js` 참조 0건.
 **커밋** `feat(quote): 견적 작성 5단계 위저드 전환, 레거시 에디터 폐기`

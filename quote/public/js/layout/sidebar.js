@@ -31,7 +31,6 @@ export const MENU = [
   { group: '견적관리', items: [
     { nav: 'quotes', label: '견적 목록', href: '#/quotes', icon: I.fileText },
     { nav: 'new', label: '견적 작성', href: '#/quotes/new', icon: I.plus },
-    { nav: 'new-template', label: '템플릿 견적', href: '#/quotes/new-template', icon: I.layout },
     { nav: 'approvals', label: '승인 요청함', icon: I.inbox },
     { nav: 'dispatch', label: '발송·열람 현황', icon: I.send },
   ] },
