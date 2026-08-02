@@ -9,6 +9,17 @@ server:
     context-path: /quote2
 
 spring:
+  # ⚠️ Flyway 자동 실행 금지 (J4).
+  #
+  # 개발 DB(test_01)를 Node 앱과 공유하고 있다. Flyway 가 기동과 함께 돌면
+  # flyway_schema_history 테이블이 생기고, 그것만으로도 백업·행수 대조 기준이 어긋난다.
+  # 마이그레이션이 실제로 적용되면 Node 앱이 즉시 영향받는다.
+  #
+  # baseline 검증은 임시 스키마에서 하고 지운다(tools/gen-flyway-baseline.js 참조).
+  # 신규 마이그레이션 적용은 수동 승인 후 별도로 한다 — 파이프라인은 J9 에서 정한다.
+  flyway:
+    enabled: false
+
   # 접속 정보를 두 곳에 두지 않으려고 Node 앱의 .env 를 그대로 읽는다.
   # optional: 이라 파일이 없어도 기동은 되고, 그 경우 OS 환경변수에서 찾는다.
   # [.properties] 는 확장자 없는 파일을 properties 형식으로 파싱하라는 지시다.

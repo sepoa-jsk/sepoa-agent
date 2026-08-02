@@ -57,6 +57,22 @@
     </dependency>
 
     <!--
+      Flyway (J4) — 자체 러너(db/migrate.js) 대체.
+      flyway-mysql 은 MySQL/MariaDB 방언 모듈이며 flyway-core 만으로는 MariaDB 를 인식하지 못한다.
+
+      ⚠️ 개발 DB 를 Node 앱과 공유 중이다. dev 프로파일에서 spring.flyway.enabled=false 로
+      자동 실행을 막는다. 근거는 application-dev.yml 주석 참조.
+    -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-mysql</artifactId>
+    </dependency>
+
+    <!--
       외부 Tomcat 에 WAR 로 배포하므로 내장 Tomcat 은 provided 로 둔다.
       이 스코프가 틀리면 WAR 는 정상 생성되는데 외부 Tomcat 에서 뜨지 않는다
       (컨테이너와 클래스가 충돌한다). 빌드 후 WEB-INF/lib 에 tomcat-embed-* 가
