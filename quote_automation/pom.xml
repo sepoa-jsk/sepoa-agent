@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    세포아소프트 견적 자동화 시스템 — Java 이식 (J1 스캐폴딩)
+
+    Spring Boot 는 3.5.3 으로 고정한다. start.spring.io 는 현재 4.x 만 제공하지만
+    docs/WBS-java.md 가 3.x 를 전제로 작성돼 있어 그대로 따랐다. Maven Wrapper 만
+    Initializr 산출물에서 가져왔다(러너는 Boot 버전과 무관하다).
+
+    의존성은 J1 최소 구성이다. security · oauth2 · flyway · thymeleaf · poi 는
+    각각 J8 · J8 · J4 · J7 · J7 에서 추가한다. 지금 넣지 않는다.
+  -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.3</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>kr.co.sepoasoft</groupId>
+  <artifactId>quote-automation</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <packaging>war</packaging>
+  <name>quote-automation</name>
+  <description>세포아소프트 견적 자동화 시스템 (Java 이식)</description>
+
+  <properties>
+    <java.version>17</java.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.mariadb.jdbc</groupId>
+      <artifactId>mariadb-java-client</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!--
+      외부 Tomcat 에 WAR 로 배포하므로 내장 Tomcat 은 provided 로 둔다.
+      이 스코프가 틀리면 WAR 는 정상 생성되는데 외부 Tomcat 에서 뜨지 않는다
+      (컨테이너와 클래스가 충돌한다). 빌드 후 WEB-INF/lib 에 tomcat-embed-* 가
+      없는지 반드시 확인할 것 — docs/README.md 의 검증 절차 참조.
+      provided 라도 mvnw spring-boot:run 은 정상 동작한다.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-tomcat</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <!--
+      tomcat-embed-el 을 명시적으로 provided 로 내린다.
+
+      spring-boot-starter-validation 이 이것을 compile 스코프로 끌어오기 때문에,
+      starter-tomcat 쪽 provided 선언이 있어도 compile 이 이겨 WEB-INF/lib 에 들어간다
+      (직접 선언이 전이 의존성보다 우선하므로 여기서 덮는다).
+
+      실제로 J1 첫 빌드에서 WEB-INF/lib/tomcat-embed-el-10.1.42.jar 이 포함된 것을 확인했다.
+      외부 Tomcat 은 자기 EL 구현을 lib/ 에 가지고 있어 클래스가 중복된다.
+      Tomcat 10.1 이 Jakarta EL 5.0 을 제공하므로 Hibernate Validator 8 은 그것을 쓴다.
+
+      주의: EL 을 제공하지 않는 컨테이너에 배포하면 검증 메시지 보간이 런타임에 깨진다.
+      J9 에서 대상 Tomcat 버전을 확인할 것(10.1 이상이어야 한다).
+    -->
+    <dependency>
+      <groupId>org.apache.tomcat.embed</groupId>
+      <artifactId>tomcat-embed-el</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!--
+      WAR 파일명을 quote2 로 고정한다. 외부 Tomcat 은 WAR 파일명이 context path 를
+      정하므로 quote2.war → /quote2 가 된다. Node 앱의 /quote 와 병행 운영하기 위한 것이며
+      J5 병행 대조에 쓴다.
+    -->
+    <finalName>quote2</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

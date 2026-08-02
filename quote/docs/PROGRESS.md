@@ -43,7 +43,7 @@ STEP 4~8 은 착수하지 않고 Java J10~J14 에서 구현한다. 실행계획 
 | # | 작업 | 상태 | 커밋 | 완료일 | 비고 |
 |---|---|---|---|---|---|
 | J0 | 착수 준비 — 자산 동결·반출 목록·이슈 재분류 | 진행중 | | | |
-| J1 | 프로젝트 스캐폴딩 | 대기 | | | |
+| J1 | 프로젝트 스캐폴딩 | 완료 | (본 커밋) | 2026-08-02 | `quote_automation/` · Boot 3.5.3 · Maven Wrapper · `/quote2/api/health` 200 |
 | J2 | 테스트 픽스처와 JUnit 명세 | 대기 | | | **완료 후 `quote/` 삭제** |
 | J3 | 계산 엔진 | 대기 | | | 실측 20종이 DoD |
 | J4 | Flyway 및 데이터 계층 | 대기 | | | 013·015 문제 해소 지점 |
@@ -102,19 +102,19 @@ STEP 4~8 은 착수하지 않고 Java J10~J14 에서 구현한다. 실행계획 
 
 | # | 반출 대상 | 현재 위치 | 이관 위치 | 단계 | 비고 |
 |---|---|---|---|---|---|
-| 1 | 실측 재현 20종의 입력·기대값 | `test/engine/quote-block.test.js` (271줄) | `quote-java/src/test/resources/fixtures/*.json` | **J2** | Node 테스트도 같은 픽스처를 읽도록 먼저 고친다 — 두 구현이 같은 입력을 공유해야 대조가 성립 |
+| 1 | 실측 재현 20종의 입력·기대값 | `test/engine/quote-block.test.js` (271줄) | `quote_automation/src/test/resources/fixtures/*.json` | **J2** | Node 테스트도 같은 픽스처를 읽도록 먼저 고친다 — 두 구현이 같은 입력을 공유해야 대조가 성립 |
 | 2 | 계산 엔진 | `src/domain/pricing/engine.js` (171줄) | `domain/pricing/PricingEngine.java` | J3 | `BigDecimal` + 반올림 모드 명시. JS `Number` 와 결과가 갈릴 수 있다 |
 | 3 | PDF 본문 HTML | `src/domain/render/html.js` (359줄) | `resources/templates/quote/*.html` (Thymeleaf) | **J7** | 실측 3종을 재현하는 레이아웃이 이미 검증돼 있다. **다시 만들지 말 것** |
 | 4 | Excel 생성 | `src/domain/render/excel.js` (480줄) | `domain/render/ExcelRenderer.java` (POI) | J7 | 표지·견적서 2시트 + 인감 텍스트 |
 | 5 | SQL 문자열 전량 | `src/web/routes/*.js` (1,454줄) · `src/domain/quote/service.js` (139줄) | `domain/*/​*Repository.java` | J4/J5 | 바인딩 표기와 `RowMapper` 만 추가하고 SQL 은 그대로 옮긴다 |
-| 6 | 프론트엔드 | `public/` (파일 24개 · JS 20개) | `quote-java/src/main/resources/static/` | J6 | 변경 파일은 `api.js` 하나여야 한다 |
-| 7 | 문서 일체 | `docs/{WBS.md, WBS-java.md, PROGRESS.md, ui-mockup.html, baseline-pdf/, archive/}` | `quote-java/docs/` | **J2** | `quote/` 삭제 방침에 따라 참조가 아니라 **이동**이다 |
+| 6 | 프론트엔드 | `public/` (파일 24개 · JS 20개) | `quote_automation/src/main/resources/static/` | J6 | 변경 파일은 `api.js` 하나여야 한다 |
+| 7 | 문서 일체 | `docs/{WBS.md, WBS-java.md, PROGRESS.md, ui-mockup.html, baseline-pdf/, archive/}` | `quote_automation/docs/` | **J2** | `quote/` 삭제 방침에 따라 참조가 아니라 **이동**이다 |
 | 8 | 마이그레이션 25개 | `db/migrations/` | Flyway `V1__baseline.sql` 산출 근거로 보존 | J4 | `README.md` 의 미실행 등록 사유·006 탐지 쿼리가 함께 가야 한다 |
 | 9 | 환경변수 키 16종 | `.env.example` | `application.yml` 매핑표 | J1 | 아래 표 |
 | 10 | 견적번호 채번 | `src/domain/quote/numbering.js` (75줄) | `domain/quote/QuoteNumbering.java` | J4 | `QT{YYYYMMDD}_{NNN}` · `sq_quote_seq` 일자 카운터 |
 | 11 | 인건비 표준단가 산출 | `src/domain/labor/standard.js` (30줄) | `domain/labor/LaborCalculator.java` | J3 | 평균임금×제경비×기술료. `editor.js` 가 유일한 UI 였다 |
 | 12 | 실측 원본 PDF 5종 | `assets/인장/*.pdf` | 그대로 유지 (레포 루트 이동) | J2 | **기준선의 근거.** 기준선 PDF 는 우리 렌더러 산출물일 뿐 실측 정답이 아니다 |
-| 13 | 로고·직인·밴드 이미지 | `assets/{logo,seal,band_top,band_bottom}.png` | `quote-java/src/main/resources/static/assets/` | J7 | base64 임베드 4개가 PDF 검증 항목 |
+| 13 | 로고·직인·밴드 이미지 | `assets/{logo,seal,band_top,band_bottom}.png` | `quote_automation/src/main/resources/static/assets/` | J7 | base64 임베드 4개가 PDF 검증 항목 |
 
 **환경변수 → `application.yml` 매핑표** (16종, `.env.example` 기준)
 
@@ -134,6 +134,101 @@ STEP 4~8 은 착수하지 않고 Java J10~J14 에서 구현한다. 실행계획 
 | `API_KEY` | 커스텀 — `app.api-key` | |
 
 > `CHROME_PATH` 는 `.env.example` 에 없지만 `render/pdf.js` 가 읽는다. J7 `ChromeRunner` 에 필요하다.
+
+---
+
+## J1 스캐폴딩 기록 (2026-08-02)
+
+### 환경
+
+| 항목 | 값 |
+|---|---|
+| JDK | **Temurin 17.0.20** (`JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.20.8-hotspot`) |
+| Maven | **미설치.** Maven Wrapper 를 커밋했다 — `./mvnw` 로 Maven 3.9.16 을 자동 내려받는다 |
+| Wrapper 취득 | `start.spring.io` 산출물의 `mvnw` · `mvnw.cmd` · `.mvn/wrapper/` 를 그대로 가져왔다. `mvn -N wrapper:wrapper` 는 Maven 이 한 번 필요해서 쓰지 않았다 |
+| Tomcat | **미설치.** J1 검증은 내장 Tomcat(10.1.42)으로 했다. **외부 Tomcat WAR 배포 검증은 J9** |
+| Spring Boot | **3.5.3** — `start.spring.io` 는 현재 **4.x 만 제공**해서 pom 에 직접 고정했다. Wrapper 만 Initializr 에서 가져왔다(러너는 Boot 버전과 무관) |
+
+### 프로젝트
+
+| 항목 | 값 |
+|---|---|
+| 경로 | `sepoa-agent/quote_automation/` |
+| 좌표 | `kr.co.sepoasoft:quote-automation:0.0.1-SNAPSHOT`, 패키지 `kr.co.sepoasoft.quote` |
+| 패키징 | `war`, `finalName=quote2` → 외부 Tomcat 에서 `/quote2` |
+| 의존성 | web · jdbc · validation · mariadb-java-client (J1 최소) |
+| 포트 | dev 3200 (`JAVA_PORT`). 게이트웨이가 `/quote2` 를 여기로 프록시한다 |
+
+`security` · `oauth2` · `flyway` · `thymeleaf` · `poi` 는 각각 J8 · J8 · J4 · J7 · J7 에서 추가한다.
+
+### 발견·수정한 결함 — `tomcat-embed-el` 이 `WEB-INF/lib` 에 포함됐다
+
+첫 빌드에서 `WEB-INF/lib/tomcat-embed-el-10.1.42.jar` 이 들어갔다.
+`spring-boot-starter-tomcat` 을 `provided` 로 뒀는데도 그랬다.
+
+원인은 **`spring-boot-starter-validation` 이 `tomcat-embed-el` 을 `compile` 스코프로
+끌어오기 때문**이다. `dependency:tree` 로 확인했다.
+
+```
++- org.springframework.boot:spring-boot-starter-validation:jar:3.5.3:compile
+|  +- org.apache.tomcat.embed:tomcat-embed-el:jar:10.1.42:compile      ← 이것
+|  +- org.apache.tomcat.embed:tomcat-embed-core:jar:10.1.42:provided
+|  \- org.apache.tomcat.embed:tomcat-embed-websocket:jar:10.1.42:provided
+```
+
+`tomcat-embed-el` 을 pom 에 **직접 `provided` 로 선언**해 덮었다(직접 선언이 전이 의존성보다 우선).
+
+**이것은 조용한 실패 유형이다.** WAR 는 정상 생성되고 빌드도 성공하며, 내장 Tomcat 으로는
+아무 문제 없이 뜬다. 외부 Tomcat 에 올렸을 때만 클래스 충돌로 실패한다 — 즉 **J9 에 가서야
+드러났을 결함**이다. 그래서 빌드마다 아래 확인을 거친다.
+
+```bash
+jar tf target/quote2.war | grep 'WEB-INF/lib/tomcat-embed'   # 결과가 없어야 정상
+```
+
+> **J9 전제**: Tomcat 10.1 이상이어야 한다. Boot 3.5 는 Jakarta EE 9+ 기준이라 Tomcat 9 에서는
+> `javax.*` 문제로 뜨지 않는다. 또 EL 을 `provided` 로 내렸으므로 **컨테이너가 Jakarta EL 5.0 을
+> 제공해야** 검증 메시지 보간이 동작한다(Tomcat 10.1 은 제공한다).
+
+### 설정
+
+- 접속 정보를 `application-*.yml` 에 **하드코딩하지 않았다.** 전부 `${DB_HOST}` 형태 참조이며
+  위 환경변수 16종 매핑표를 따랐다.
+- `DB_HOST` · `DB_NAME` · `DB_USER` · `DB_PASSWORD` 에 **기본값을 두지 않았다.** 값이 없으면
+  기동이 실패해야 한다 — 기본값으로 조용히 엉뚱한 DB 에 붙는 것이 최악이다.
+- dev 프로파일이 `../quote/.env` 를 properties 로 읽는다(`spring.config.import` +
+  `optional:`). 접속 정보를 두 곳에 두지 않기 위한 것이다. **비밀번호에 백슬래시가 있으면
+  properties 파서가 이스케이프로 해석하므로 그때는 OS 환경변수로 넘길 것.**
+- `context-path: /quote2` 는 **dev 에만** 뒀다. prod 는 WAR 파일명이 context path 를 정하므로
+  중복 지정하면 `/quote2/quote2` 가 된다.
+- `server.forward-headers-strategy: framework` 는 공통에 뒀다.
+
+### 게이트웨이
+
+`server.js` 에 `/quote2` → `127.0.0.1:3200` 프록시를 추가했다. `/quote`(Node)는 그대로다.
+**`http-proxy-middleware` 를 쓰지 않고 Node 내장 `http` 로 구현**했다 — 폐쇄망 배포에서
+의존성을 늘리지 않기 위한 것이며, 같은 이유로 Puppeteer 도 쓰지 않고 있다.
+
+Java 앱이 죽어 있으면 **502 와 함께 원인을 돌려준다**(빈 응답이나 타임아웃으로 끝내지 않는다).
+
+### 검증
+
+| 항목 | 결과 |
+|---|---|
+| `./mvnw clean package` | 성공 · `target/quote2.war` **24,197,710 B** |
+| WAR `WEB-INF/lib` 의 `tomcat-embed-*` | **0건** (core · websocket · el 3개 모두 `lib-provided/`) |
+| 기동 | 내장 Tomcat 10.1.42 · 포트 3200 · context path `/quote2` · dev 프로파일 · 2.1초 |
+| `GET /quote2/api/health` (직접) | **200** — `{"status":"UP","db":"UP","time":...}` |
+| 〃 (게이트웨이 경유 :8080) | **200** — 동일 |
+| **실패 경로** (도달 불가 DB 로 임시 인스턴스) | **500** — `{"status":"DOWN","db":"DOWN","error":"CannotGetJdbcConnectionException","message":"Failed to obtain JDBC Connection"}` + 스택 로그 |
+| **게이트웨이 502 경로** (Java 정지 상태) | **502** — `ECONNREFUSED` 원인·힌트 포함, 서버 로그에도 기록 |
+| Node `/quote/` | **200** (Java 정지 중에도 영향 없음) |
+| `git status` 빌드 산출물 | 미노출 — `.gitignore:16 quote_automation/target/` 적중 확인 |
+| **DB 변경** | **0건** — `sq_` 33종 / 640행, 착수 전과 동일 |
+
+> 실패 경로는 실 DB 를 건드리지 않고 검증했다. 도달 불가 IP(`192.0.2.1`, TEST-NET-1)를 가리키는
+> 임시 인스턴스를 다른 포트(3299)에 띄워 확인하고 종료했다.
+> 이 과정에서 `java -jar target/quote2.war` 로도 기동되는 것을 함께 확인했다(`lib-provided` 정상).
 
 ---
 
@@ -537,4 +632,6 @@ CREATE TABLE sq_users_bak_YYYYMMDD AS SELECT * FROM sq_users;
 | 작업 10.5 | **`021_20260722_labor_role_mapping.sql` 에도 `DELIMITER` 결함이 있었다.** 이슈 로그는 `009` 만 적고 있었으나 021 이 같은 구조였다. 009 만 고쳤으면 021 에서 다시 멈췄다. 또한 009 는 "거기서 멈춰 010 이후가 안 돌았다" 는 것뿐 아니라 **자신의 컬럼 추가 8건(`CALL _add_col`)도 전부 실패**하고 있었다 — 22문 중 14문 실패. 운영 DB 에 그 컬럼이 있는 것은 과거 수동 적용 덕이지 러너가 적용한 것이 아니다. 둘 다 `ADD COLUMN IF NOT EXISTS` 로 치환했다. | 처리 완료 |
 | 작업 10.5 | **`013_20260715_company_classes_pure.sql` 은 실행하지 않고 이력에만 등록했다.** `DELETE FROM sq_company_classes WHERE solution='PROCURE'` + `WHERE key='LARGE'` 로 **23행을 지우고 5행만 재삽입**한다(31 → 13행). 삭제분 중 18행은 `003`/`007`/`008` 이 심은 행이라 이력 도입 후에는 복구되지 않는다. 특히 `PROCURE/SAAS` 7행(S2C·S2P·P2P·SOURCING·LARGE·MID·SMALL)이 사라지면 **SaaS 전자구매 견적의 기업구분 선택지가 0** 이 된다. `key='LARGE'` 삭제는 주석과 달리 `EXPENSE`·`SEAL` 의 정상 대기업 구분 4행까지 지운다. 지금까지 드러나지 않은 이유는 구 러너가 매번 `003`/`007`/`008` 을 재실행해 되살려 놓았기 때문이다. 신규 환경에서는 누적 데이터가 없어 원래 설계대로 동작한다. | **미실행 등록** — 기업구분 마스터 정리는 작업 13~14 에서 재설계 |
 | 작업 10.5 | **`015_20260715_nego_rates_seed.sql` 도 미실행 등록.** `solution` 컬럼에 INSERT 하는데 `017` 이 그 컬럼 없는 형태로 테이블을 재정의한다. 기존 환경(이미 017 형태)에서는 `ER_BAD_FIELD_ERROR` 로 죽는다. `018` 이 같은 20행을 재시드하므로 기능상 대체됐다. 신규 환경에서는 `014` → `015` → `017` → `018` 순서가 성립해 문제없다. | 미실행 등록 |
+| J1 | **게이트웨이(`server.js`)가 세션 스토어 오류로 프로세스째 죽는다.** J1 검증 중 실제로 발생했다 — `express-mysql-session` 이 만료 세션 정리 쿼리를 돌리다 `connect ETIMEDOUT` 이 났고, 처리되지 않아 Node 프로세스가 종료됐다. 스택은 전부 `express-mysql-session/index.js` 안이며 `/quote2` 프록시 추가와는 무관하다(프록시는 자체 오류 핸들러를 가진다). **J5 병행 대조는 Node 와 Java 를 동시에 띄워 두고 응답을 비교하는 방식이라, 게이트웨이가 임의로 죽으면 대조가 중단된다.** 세션 스토어 오류를 잡아 로그만 남기고 살아 있게 하거나(`store.on('error')`), 대조 스크립트가 게이트웨이를 우회해 두 앱을 직접 호출하도록 해야 한다. | **J5 착수 전 처리 필요** |
+| J1 | **`start.spring.io` 가 Spring Boot 3.x 를 더는 제공하지 않는다** (4.0.7 / 4.1.0 만 제공). `WBS-java.md` 가 3.x 전제로 작성돼 있어 pom 에 3.5.3 을 직접 고정하고 Wrapper 만 Initializr 산출물에서 가져왔다. Boot 4 로 갈지, 3.5.x(현행 3.x 최신)를 유지할지는 별도 판단이 필요하다 — 3.x 지원 종료 시점이 이식 완료 후 유지보수에 영향을 준다. | **판단 필요** — J9 전까지 |
 | 작업 10.5 | **`docs/baseline-pdf/generate.js` 는 생성한 견적을 지우지 않는다.** 3종 PDF 대조를 돌릴 때마다 `sq_quotes` 에 `[기준선]` 견적 3건이 새로 쌓인다(이번엔 id 82·83·84). 검증 후 수동으로 삭제했으나(자식 행 포함 30행), 스크립트가 정리하지 않는 한 매 회귀 검증마다 반복된다. | 정리 로직 추가 검토 — 작업 20 |

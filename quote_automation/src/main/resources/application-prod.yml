@@ -1,0 +1,13 @@
+# 운영 프로파일 — 외부 Tomcat 에 quote2.war 로 배포한다.
+#
+# context-path 를 지정하지 않는다. 외부 Tomcat 은 WAR 파일명으로 context path 를 정하므로
+# quote2.war → /quote2 가 되고, 여기서 또 지정하면 /quote2/quote2 로 어긋난다.
+# server.port 도 두지 않는다 — 컨테이너가 정한다.
+#
+# 접속 정보는 전부 OS 환경변수(또는 Tomcat setenv.sh)로 넘긴다. dev 처럼 .env 를
+# 읽어들이지 않는다. 운영 서버에 개발 DB 접속정보 파일을 두지 않기 위한 것이다.
+
+logging:
+  level:
+    root: INFO
+    kr.co.sepoasoft.quote: INFO

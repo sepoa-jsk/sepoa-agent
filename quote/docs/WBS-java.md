@@ -45,19 +45,28 @@
 
 ## 2. 목표 프로젝트 구조
 
-**`sepoa-agent` 모노레포 안에 `quote-java/` 로 둡니다.** 같은 레포에 있으면 Node 참조 구현과 나란히 두고 대조하기 쉽고, 게이트웨이도 그대로 씁니다.
+**`sepoa-agent` 모노레포 안에 `quote_automation/` 로 둡니다.** 같은 레포에 있으면 Node 참조 구현과 나란히 두고 대조하기 쉽고, 게이트웨이도 그대로 씁니다.
+
+> **2026-08-02 (J1) 정정** — 디렉터리명은 `quote-java` 가 아니라 **`quote_automation`**,
+> 빌드도구는 Gradle 이 아니라 **Maven(`pom.xml`)** 으로 확정했습니다.
+> Maven Wrapper(`mvnw`)를 커밋했으므로 Maven 별도 설치는 필요 없습니다.
+>
+> **`quote/` 는 J2 완료 후 삭제합니다.** 초안의 "삭제하지 않음" 은 J0 에서 뒤집혔습니다.
+> 그에 따라 문서도 참조가 아니라 `quote_automation/docs/` 로 **이동**합니다.
+> 4장의 병행 대조는 J2~J5 사이, `quote/` 가 살아 있는 동안에만 가능합니다.
 
 ```
 sepoa-agent/
 ├─ server.js                게이트웨이 — /quote → Node, /quote2 → Java(병행 대조용)
-├─ tools/                   Node 전용 도구 (유지)
+├─ tools/                   Node 전용 도구 (Node 삭제 시 함께 판단)
 ├─ blog-automation/         (변경 없음)
-├─ quote/                   ★Node 참조 구현 — 삭제하지 않음
-│   ├─ docs/                WBS · PROGRESS · ui-mockup · baseline-pdf
+├─ quote/                   Node 참조 구현 — ★J2 완료 후 삭제
+│   ├─ docs/                WBS · PROGRESS · LESSONS · ui-mockup · baseline-pdf
 │   ├─ src/  public/  db/  test/
-└─ quote-java/              ★신규
-    ├─ build.gradle         (또는 pom.xml)
-    ├─ Jenkinsfile
+└─ quote_automation/        ★신규
+    ├─ pom.xml              Spring Boot 3.5.3 · packaging war · finalName quote2
+    ├─ mvnw · mvnw.cmd · .mvn/   Maven Wrapper (커밋 대상)
+    ├─ Jenkinsfile          (J9)
     ├─ docs/                → quote/docs 를 참조. 중복 보관하지 말 것
     └─ src/
         ├─ main/
@@ -86,14 +95,20 @@ sepoa-agent/
             └─ resources/fixtures/  실측 픽스처 JSON (Node 와 공유)
 ```
 
-**문서는 `quote/docs/` 하나만 유지합니다.** WBS·PROGRESS·이슈 로그·기준선 PDF 를 두 곳에 두면 반드시 어긋납니다. `quote-java/docs/README.md` 에 참조 경로만 남기세요.
+**문서는 한 곳에만 둡니다.** WBS·PROGRESS·이슈 로그·기준선 PDF 를 두 곳에 두면 반드시 어긋납니다.
+J2 까지는 `quote/docs/` 가 정본이고 `quote_automation/docs/README.md` 에 참조 경로만 둡니다.
+**J2 에서 `quote/` 를 지울 때 `quote_automation/docs/` 로 옮깁니다.**
 
-**픽스처도 단일 출처입니다.** `quote/test/fixtures/` 를 정본으로 두고 Java 쪽이 상대경로로 읽거나, Gradle 빌드 시 복사하는 방식 중 하나를 J2 에서 정합니다.
+**픽스처도 단일 출처입니다.** J2 에서 `quote/test/engine/quote-block.test.js` 의 실측 20종을
+JSON 으로 분리하고 **Node 테스트도 같은 파일을 읽도록 고칩니다** — 두 구현이 같은 입력을
+공유해야 대조가 성립합니다. `quote/` 삭제와 함께 픽스처는
+`quote_automation/src/test/resources/fixtures/` 로 이동합니다.
 
 **모노레포 주의점**
-- `.gitignore` 에 `quote-java/build/`, `quote-java/target/`, `quote-java/.gradle/` 추가
-- Jenkins 는 `quote-java/` 변경 시에만 빌드하도록 경로 필터
-- 게이트웨이 `server.js` 에 `/quote2` → Java 포트 프록시를 추가해 4장의 병행 대조에 사용
+- `.gitignore` 에 `quote_automation/target/` 추가 (Maven 이므로 `build/`·`.gradle/` 불필요) — **J1 완료**
+- Jenkins 는 `quote_automation/` 변경 시에만 빌드하도록 경로 필터
+- 게이트웨이 `server.js` 에 `/quote2` → Java 포트(기본 3200) 프록시 추가 — **J1 완료**
+  (`http-proxy-middleware` 대신 Node 내장 `http` 로 구현. 폐쇄망 배포에서 의존성을 늘리지 않는다)
 
 ## 3. 이식 단계
 

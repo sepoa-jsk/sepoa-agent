@@ -1,0 +1,19 @@
+# 개발 프로파일 — 내장 Tomcat 으로 직접 기동할 때 쓴다.
+#
+# context-path 는 여기에만 둔다. 운영은 외부 Tomcat 에 quote2.war 로 배포하고,
+# 그때는 WAR 파일명이 context path 를 정하므로 여기서 또 지정하면 /quote2/quote2 가 된다.
+
+server:
+  port: ${JAVA_PORT:3200}
+  servlet:
+    context-path: /quote2
+
+spring:
+  # 접속 정보를 두 곳에 두지 않으려고 Node 앱의 .env 를 그대로 읽는다.
+  # optional: 이라 파일이 없어도 기동은 되고, 그 경우 OS 환경변수에서 찾는다.
+  # [.properties] 는 확장자 없는 파일을 properties 형식으로 파싱하라는 지시다.
+  #
+  # 주의: properties 파서는 백슬래시를 이스케이프 문자로 본다. 비밀번호에 \ 가 있으면
+  # 이 경로로는 값이 깨지므로, 그때는 OS 환경변수로 직접 넘길 것.
+  config:
+    import: "optional:file:../quote/.env[.properties]"

@@ -1,0 +1,37 @@
+# 공통 설정 — 프로파일 무관.
+#
+# 접속 정보는 이 파일에 쓰지 않는다. 전부 환경변수 참조이며, 매핑 근거는
+# quote/docs/PROGRESS.md 의 "환경변수 → application.yml 매핑표"(16종)다.
+#
+# DB_HOST · DB_NAME · DB_USER · DB_PASSWORD 에는 기본값을 두지 않는다.
+# 값이 없으면 기동 자체가 실패해야 한다 — 기본값으로 조용히 엉뚱한 DB 에 붙는 것이
+# 최악이다(docs/LESSONS.md '조용한 실패').
+
+spring:
+  application:
+    name: quote-automation
+  profiles:
+    # Node 의 NODE_ENV(development/production)에 대응한다.
+    # SPRING_PROFILES_ACTIVE 가 있으면 그것이 우선한다.
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  datasource:
+    url: jdbc:mariadb://${DB_HOST}:${DB_PORT:3306}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${DB_CONNECTION_LIMIT:10}
+      pool-name: quote-hikari
+      # 개발 DB 를 Node 앱과 공유한다. 커넥션을 오래 물고 있지 않는다.
+      connection-timeout: 5000
+      validation-timeout: 3000
+
+server:
+  # 프록시(게이트웨이 server.js, 운영의 httpd/nginx) 뒤에서 스킴·호스트를 살린다.
+  forward-headers-strategy: framework
+
+# J1 은 스캐폴딩이라 로깅을 과하게 켜지 않는다. DataSource 초기화 실패만 또렷하게 본다.
+logging:
+  level:
+    com.zaxxer.hikari: INFO
+    kr.co.sepoasoft.quote: DEBUG

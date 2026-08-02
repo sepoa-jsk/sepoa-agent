@@ -12,7 +12,5 @@
 # 환경설정
 .env
 
-# Java 빌드 산출물 (quote-java/)
-quote-java/build/
-quote-java/target/
-quote-java/.gradle/
+# Java 빌드 산출물 (quote_automation/ — Maven)
+quote_automation/target/
