@@ -1,0 +1,178 @@
+[
+  {
+    "caseId": "sk-manpower-plan",
+    "description": "실측 SK이터닉스 인력투입계획 — 합계 3.70 MM, 월별 합계 0.25 / 1.20 / 1.50 / 0.75",
+    "source": "assets/인장/전자인장_프라이빗클라우드.pdf 3페이지 인력투입계획표",
+    "input": [
+      {
+        "role_code": "CONSULTANT",
+        "role_label": "컨설턴트",
+        "mm": 1,
+        "month_alloc": {
+          "M": 0.25,
+          "M1": 0.25,
+          "M2": 0.25,
+          "M3": 0.25
+        }
+      },
+      {
+        "role_code": "DEV",
+        "role_label": "개발#1",
+        "mm": 1.5,
+        "month_alloc": {
+          "M1": 0.5,
+          "M2": 0.75,
+          "M3": 0.25
+        }
+      },
+      {
+        "role_code": "DEV",
+        "role_label": "개발#2",
+        "mm": 1,
+        "month_alloc": {
+          "M1": 0.25,
+          "M2": 0.5,
+          "M3": 0.25
+        }
+      },
+      {
+        "role_code": "SUPPORT",
+        "role_label": "기술지원",
+        "mm": 0.2,
+        "month_alloc": {
+          "M1": 0.2
+        }
+      }
+    ],
+    "kind": "MONTH_ALLOC",
+    "expected": {
+      "errors": [],
+      "error_count": 0,
+      "mm_total": 3.7,
+      "month_totals": {
+        "M": 0.25,
+        "M1": 1.2,
+        "M2": 1.5,
+        "M3": 0.75
+      }
+    }
+  },
+  {
+    "caseId": "solbrain-manpower-plan",
+    "description": "실측 솔브레인 인력투입계획 — 합계 3.20 MM (M 0.25 / M1 1.45 / M2 0.75 / M3 0.75)",
+    "source": "assets/인장/전자인장_온프레미스.pdf 인력투입계획표",
+    "input": [
+      {
+        "role_code": "PM",
+        "mm": 1,
+        "month_alloc": {
+          "M": 0.25,
+          "M1": 0.25,
+          "M2": 0.25,
+          "M3": 0.25
+        }
+      },
+      {
+        "role_code": "DEV",
+        "mm": 2,
+        "month_alloc": {
+          "M1": 1,
+          "M2": 0.5,
+          "M3": 0.5
+        }
+      },
+      {
+        "role_code": "SUPPORT",
+        "mm": 0.2,
+        "month_alloc": {
+          "M1": 0.2
+        }
+      }
+    ],
+    "kind": "MONTH_ALLOC",
+    "expected": {
+      "errors": [],
+      "error_count": 0,
+      "mm_total": 3.2,
+      "month_totals": {
+        "M": 0.25,
+        "M1": 1.45,
+        "M2": 0.75,
+        "M3": 0.75
+      }
+    }
+  },
+  {
+    "caseId": "alloc-sum-mismatch",
+    "description": "월별 배분 합계가 공수와 다르면 오류로 잡는다",
+    "source": "규약",
+    "input": [
+      {
+        "role_code": "PM",
+        "role_label": "PM",
+        "mm": 1,
+        "month_alloc": {
+          "M": 0.25,
+          "M1": 0.25
+        }
+      }
+    ],
+    "kind": "MONTH_ALLOC",
+    "expected": {
+      "errors": [
+        {
+          "role_code": "PM",
+          "mm": 1,
+          "alloc_sum": 0.5,
+          "message": "PM: 월별 배분 합계 0.5 가 공수 1 MM 과 다릅니다."
+        }
+      ],
+      "error_count": 1,
+      "mm_total": 1,
+      "month_totals": {
+        "M": 0.25,
+        "M1": 0.25
+      }
+    }
+  },
+  {
+    "caseId": "alloc-json-string",
+    "description": "month_alloc 은 JSON 문자열도 허용 (DB 저장값 그대로 검증)",
+    "source": "규약",
+    "input": [
+      {
+        "role_code": "PM",
+        "mm": 1,
+        "month_alloc": "{\"M\":0.5,\"M1\":0.5}"
+      }
+    ],
+    "kind": "MONTH_ALLOC",
+    "expected": {
+      "errors": [],
+      "error_count": 0,
+      "mm_total": 1,
+      "month_totals": {
+        "M": 0.5,
+        "M1": 0.5
+      }
+    }
+  },
+  {
+    "caseId": "alloc-absent",
+    "description": "month_alloc 없으면 검증 통과 (옵션 기능)",
+    "source": "규약",
+    "input": [
+      {
+        "role_code": "PM",
+        "mm": 1
+      }
+    ],
+    "kind": "MONTH_ALLOC",
+    "expected": {
+      "errors": [],
+      "error_count": 0,
+      "mm_total": 1,
+      "month_totals": {}
+    }
+  }
+]

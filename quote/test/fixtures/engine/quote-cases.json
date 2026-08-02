@@ -1,0 +1,1042 @@
+[
+  {
+    "caseId": "solbrain-contract",
+    "description": "실측 솔브레인 전자계약 — 솔루션 50,000,000 + 인건비 36,600,000 = 86,600,000 → 특별DC → 60,000,000",
+    "source": "assets/인장/전자인장_온프레미스.pdf QT20260728_001",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 60000000
+      },
+      "blocks": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "POA_ECONTRACT",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Contract™",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 40000000
+            },
+            {
+              "item_code": "POA_DOCSCV_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa DocsCV™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_COMMON_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Common™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_APPROVAL_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Approval™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "WEB_GRID_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Web Grid & Chart",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "ESEAL_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 1,
+              "base_price": 15000000,
+              "proposed_price": 10000000
+            }
+          ]
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "labor": [
+            {
+              "role_code": "PM",
+              "role_label": "PM",
+              "task": "프로젝트 총괄(PM), 분석, 설계",
+              "mm": 1,
+              "base_price": 25418735,
+              "proposed_price": 13500000
+            },
+            {
+              "role_code": "DEV",
+              "role_label": "개발",
+              "task": "커스터마이징, 인터페이스, 안정화",
+              "mm": 2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            },
+            {
+              "role_code": "SUPPORT",
+              "role_label": "기술지원",
+              "task": "서버확인, 보안점검",
+              "mm": 0.2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "subtotal": 50000000
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "subtotal": 36600000
+        }
+      ],
+      "onetime_subtotal": 86600000,
+      "monthly_subtotal": 0,
+      "discount_amount": 26600000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 60000000,
+      "monthly_total": 0,
+      "vat_amount": 6000000,
+      "monthly_vat": 0,
+      "total_amount": 66000000,
+      "supply_amount": 86600000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "solbrain-seal",
+    "description": "실측 솔브레인 전자인장계약 — Poa Seal 20,000,000 가산 → 솔루션 70,000,000 / Total 106,600,000 → 80,000,000",
+    "source": "assets/인장/전자인장_온프레미스.pdf QT20260728_002",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 80000000
+      },
+      "blocks": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "POA_ECONTRACT",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Contract™",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 40000000
+            },
+            {
+              "item_code": "POA_DOCSCV_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa DocsCV™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_COMMON_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Common™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_APPROVAL_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Approval™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "WEB_GRID_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Web Grid & Chart",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_SEAL",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Seal™",
+              "qty": 1,
+              "base_price": 20000000,
+              "proposed_price": 20000000
+            },
+            {
+              "item_code": "ESEAL_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 1,
+              "base_price": 15000000,
+              "proposed_price": 10000000
+            }
+          ]
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "labor": [
+            {
+              "role_code": "PM",
+              "role_label": "PM",
+              "task": "프로젝트 총괄(PM), 분석, 설계",
+              "mm": 1,
+              "base_price": 25418735,
+              "proposed_price": 13500000
+            },
+            {
+              "role_code": "DEV",
+              "role_label": "개발",
+              "task": "커스터마이징, 인터페이스, 안정화",
+              "mm": 2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            },
+            {
+              "role_code": "SUPPORT",
+              "role_label": "기술지원",
+              "task": "서버확인, 보안점검",
+              "mm": 0.2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "subtotal": 70000000
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "subtotal": 36600000
+        }
+      ],
+      "onetime_subtotal": 106600000,
+      "monthly_subtotal": 0,
+      "discount_amount": 26600000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 80000000,
+      "monthly_total": 0,
+      "vat_amount": 8000000,
+      "monthly_vat": 0,
+      "total_amount": 88000000,
+      "supply_amount": 106600000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "sk-pcloud",
+    "description": "실측 SK이터닉스 PCloud — 일시납 104,400,000 → 100,000,000 / 월 1,275,000",
+    "source": "assets/인장/전자인장_프라이빗클라우드.pdf QT20260506_001",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 100000000
+      },
+      "blocks": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_SETUP",
+              "category": "전자인장시스템",
+              "name": "클라우드 셋업",
+              "qty": 3.7,
+              "unit": "MM",
+              "base_price": 19540395,
+              "proposed_price": 12000000
+            },
+            {
+              "item_code": "ESEAL_PC_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 0,
+              "base_price": 20000000,
+              "proposed_price": 15000000
+            }
+          ]
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_LICENSE",
+              "category": "전자인장시스템",
+              "name": "솔루션 라이선스",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 60000000
+            }
+          ]
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_API",
+              "name": "연동 API 사용료",
+              "qty": 1,
+              "base_price": 200000,
+              "proposed_price": 200000
+            },
+            {
+              "item_code": "ESEAL_PC_SERVER",
+              "name": "Private Server 사용료",
+              "qty": 1,
+              "base_price": 700000,
+              "proposed_price": 700000
+            },
+            {
+              "item_code": "ESEAL_PC_MAINT",
+              "name": "유지보수",
+              "qty": 1,
+              "base_price": 750000,
+              "proposed_price": 375000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "subtotal": 44400000
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "subtotal": 60000000
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "subtotal": 1275000
+        }
+      ],
+      "onetime_subtotal": 104400000,
+      "monthly_subtotal": 1275000,
+      "discount_amount": 4400000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 100000000,
+      "monthly_total": 1275000,
+      "vat_amount": 10000000,
+      "monthly_vat": 127500,
+      "total_amount": 110000000,
+      "supply_amount": 104400000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "sk-pcloud-recurring-separated",
+    "description": "recurring 블록은 일시불 합계에 섞이지 않는다",
+    "source": "assets/인장/전자인장_프라이빗클라우드.pdf QT20260506_001",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 100000000
+      },
+      "blocks": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_SETUP",
+              "category": "전자인장시스템",
+              "name": "클라우드 셋업",
+              "qty": 3.7,
+              "unit": "MM",
+              "base_price": 19540395,
+              "proposed_price": 12000000
+            },
+            {
+              "item_code": "ESEAL_PC_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 0,
+              "base_price": 20000000,
+              "proposed_price": 15000000
+            }
+          ]
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_LICENSE",
+              "category": "전자인장시스템",
+              "name": "솔루션 라이선스",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 60000000
+            }
+          ]
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_API",
+              "name": "연동 API 사용료",
+              "qty": 1,
+              "base_price": 200000,
+              "proposed_price": 200000
+            },
+            {
+              "item_code": "ESEAL_PC_SERVER",
+              "name": "Private Server 사용료",
+              "qty": 1,
+              "base_price": 700000,
+              "proposed_price": 700000
+            },
+            {
+              "item_code": "ESEAL_PC_MAINT",
+              "name": "유지보수",
+              "qty": 1,
+              "base_price": 750000,
+              "proposed_price": 375000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "subtotal": 44400000
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "subtotal": 60000000
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "subtotal": 1275000
+        }
+      ],
+      "onetime_subtotal": 104400000,
+      "monthly_subtotal": 1275000,
+      "discount_amount": 4400000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 100000000,
+      "monthly_total": 1275000,
+      "vat_amount": 10000000,
+      "monthly_vat": 127500,
+      "total_amount": 110000000,
+      "supply_amount": 104400000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "hagendazs-saas",
+    "description": "실측 하겐다즈 SaaS — 셋업 2,000,000 → 무상제공(0) / 월 300,000 → 100,000",
+    "source": "assets/인장/전자인장_SaaS.pdf QT20260415_002",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 0
+      },
+      "monthly_discount": {
+        "type": "TARGET",
+        "value": 100000
+      },
+      "blocks": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_SAAS_SETUP",
+              "category": "전자인장관리솔루션(Easy Seal™)",
+              "name": "SaaS 셋업",
+              "qty": 0.4,
+              "unit": "MM",
+              "base_price": 10000000,
+              "proposed_price": 5000000
+            }
+          ]
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "items": [
+            {
+              "item_code": "ESEAL_SAAS_BASE",
+              "category": "전자인장관리솔루션(Easy Seal™)",
+              "name": "전자인장 서비스 이용료",
+              "qty": 1,
+              "base_price": 500000,
+              "proposed_price": 300000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "subtotal": 2000000
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "subtotal": 300000
+        }
+      ],
+      "onetime_subtotal": 2000000,
+      "monthly_subtotal": 300000,
+      "discount_amount": 2000000,
+      "monthly_discount_amount": 200000,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 0,
+      "monthly_total": 100000,
+      "vat_amount": 0,
+      "monthly_vat": 10000,
+      "total_amount": 0,
+      "supply_amount": 2000000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "sk-pcloud-no-monthly-discount",
+    "description": "월 특별DC 가 없으면 월 소계가 그대로 유지된다",
+    "source": "assets/인장/전자인장_프라이빗클라우드.pdf QT20260506_001",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 100000000
+      },
+      "blocks": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_SETUP",
+              "category": "전자인장시스템",
+              "name": "클라우드 셋업",
+              "qty": 3.7,
+              "unit": "MM",
+              "base_price": 19540395,
+              "proposed_price": 12000000
+            },
+            {
+              "item_code": "ESEAL_PC_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 0,
+              "base_price": 20000000,
+              "proposed_price": 15000000
+            }
+          ]
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_LICENSE",
+              "category": "전자인장시스템",
+              "name": "솔루션 라이선스",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 60000000
+            }
+          ]
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "items": [
+            {
+              "item_code": "ESEAL_PC_API",
+              "name": "연동 API 사용료",
+              "qty": 1,
+              "base_price": 200000,
+              "proposed_price": 200000
+            },
+            {
+              "item_code": "ESEAL_PC_SERVER",
+              "name": "Private Server 사용료",
+              "qty": 1,
+              "base_price": 700000,
+              "proposed_price": 700000
+            },
+            {
+              "item_code": "ESEAL_PC_MAINT",
+              "name": "유지보수",
+              "qty": 1,
+              "base_price": 750000,
+              "proposed_price": 375000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SETUP",
+          "recurring": 0,
+          "subtotal": 44400000
+        },
+        {
+          "block_code": "LICENSE",
+          "recurring": 0,
+          "subtotal": 60000000
+        },
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "subtotal": 1275000
+        }
+      ],
+      "onetime_subtotal": 104400000,
+      "monthly_subtotal": 1275000,
+      "discount_amount": 4400000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 100000000,
+      "monthly_total": 1275000,
+      "vat_amount": 10000000,
+      "monthly_vat": 127500,
+      "total_amount": 110000000,
+      "supply_amount": 104400000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "monthly-not-floored",
+    "description": "월 금액은 절사하지 않는다 — 밴드 금액 150,000 이 십만절사되면 100,000 이 되어 밴드가 깨진다",
+    "source": "규약 (CLAUDE.md §6)",
+    "input": {
+      "round_unit": 100000,
+      "blocks": [
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "items": [
+            {
+              "qty": 1,
+              "proposed_price": 150000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SERVICE",
+          "recurring": 1,
+          "subtotal": 150000
+        }
+      ],
+      "onetime_subtotal": 0,
+      "monthly_subtotal": 150000,
+      "discount_amount": 0,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 0,
+      "monthly_total": 150000,
+      "vat_amount": 0,
+      "monthly_vat": 15000,
+      "total_amount": 0,
+      "supply_amount": 0,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "calc-order-fixed",
+    "description": "계산 순서 고정 — 소계합 → 특별DC → 절사. 절사를 먼저 하면 값이 달라진다",
+    "source": "규약 (CLAUDE.md §6)",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "AMOUNT",
+        "value": 1234567
+      },
+      "blocks": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "items": [
+            {
+              "qty": 1,
+              "proposed_price": 98765432
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "subtotal": 98765432
+        }
+      ],
+      "onetime_subtotal": 98765432,
+      "monthly_subtotal": 0,
+      "discount_amount": 1234567,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 30865,
+      "onetime_total": 97500000,
+      "monthly_total": 0,
+      "vat_amount": 9750000,
+      "monthly_vat": 0,
+      "total_amount": 107250000,
+      "supply_amount": 98765432,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "solbrain-no-discount",
+    "description": "DC 없으면 소계합이 그대로(절사만) 최종금액",
+    "source": "assets/인장/전자인장_온프레미스.pdf QT20260728_001 변형",
+    "input": {
+      "round_unit": 100000,
+      "discount": null,
+      "blocks": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "POA_ECONTRACT",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Contract™",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 40000000
+            },
+            {
+              "item_code": "POA_DOCSCV_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa DocsCV™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_COMMON_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Common™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_APPROVAL_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Approval™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "WEB_GRID_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Web Grid & Chart",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "ESEAL_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 1,
+              "base_price": 15000000,
+              "proposed_price": 10000000
+            }
+          ]
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "labor": [
+            {
+              "role_code": "PM",
+              "role_label": "PM",
+              "task": "프로젝트 총괄(PM), 분석, 설계",
+              "mm": 1,
+              "base_price": 25418735,
+              "proposed_price": 13500000
+            },
+            {
+              "role_code": "DEV",
+              "role_label": "개발",
+              "task": "커스터마이징, 인터페이스, 안정화",
+              "mm": 2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            },
+            {
+              "role_code": "SUPPORT",
+              "role_label": "기술지원",
+              "task": "서버확인, 보안점검",
+              "mm": 0.2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "subtotal": 50000000
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "subtotal": 36600000
+        }
+      ],
+      "onetime_subtotal": 86600000,
+      "monthly_subtotal": 0,
+      "discount_amount": 0,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 86600000,
+      "monthly_total": 0,
+      "vat_amount": 8660000,
+      "monthly_vat": 0,
+      "total_amount": 95260000,
+      "supply_amount": 86600000,
+      "labor_errors": []
+    }
+  },
+  {
+    "caseId": "labor-errors-surfaced",
+    "description": "calcQuoteBlocks 가 labor_errors 를 함께 반환한다 — 검증 오류가 있어도 금액 계산은 수행",
+    "source": "assets/인장/전자인장_온프레미스.pdf QT20260728_001 변형",
+    "input": {
+      "round_unit": 100000,
+      "discount": {
+        "type": "TARGET",
+        "value": 60000000
+      },
+      "blocks": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "items": [
+            {
+              "item_code": "POA_ECONTRACT",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Contract™",
+              "qty": 1,
+              "base_price": 100000000,
+              "proposed_price": 40000000
+            },
+            {
+              "item_code": "POA_DOCSCV_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa DocsCV™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_COMMON_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Common™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "POA_APPROVAL_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Poa Approval™",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "WEB_GRID_ES",
+              "category": "전자인장관리솔루션",
+              "name": "Web Grid & Chart",
+              "qty": 0,
+              "base_price": 0,
+              "proposed_price": 0
+            },
+            {
+              "item_code": "ESEAL_PKI",
+              "category": "응용소프트웨어",
+              "name": "전자계약 공인인증",
+              "qty": 1,
+              "base_price": 15000000,
+              "proposed_price": 10000000
+            }
+          ]
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "labor": [
+            {
+              "role_code": "PM",
+              "role_label": "PM",
+              "task": "프로젝트 총괄(PM), 분석, 설계",
+              "mm": 1,
+              "base_price": 25418735,
+              "proposed_price": 13500000,
+              "month_alloc": {
+                "M": 0.9
+              }
+            },
+            {
+              "role_code": "DEV",
+              "role_label": "개발",
+              "task": "커스터마이징, 인터페이스, 안정화",
+              "mm": 2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            },
+            {
+              "role_code": "SUPPORT",
+              "role_label": "기술지원",
+              "task": "서버확인, 보안점검",
+              "mm": 0.2,
+              "base_price": 25418735,
+              "proposed_price": 10500000
+            }
+          ]
+        }
+      ]
+    },
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [
+        {
+          "block_code": "SOLUTION",
+          "recurring": 0,
+          "subtotal": 50000000
+        },
+        {
+          "block_code": "LABOR",
+          "recurring": 0,
+          "subtotal": 36600000
+        }
+      ],
+      "onetime_subtotal": 86600000,
+      "monthly_subtotal": 0,
+      "discount_amount": 26600000,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 60000000,
+      "monthly_total": 0,
+      "vat_amount": 6000000,
+      "monthly_vat": 0,
+      "total_amount": 66000000,
+      "supply_amount": 86600000,
+      "labor_errors": [
+        {
+          "role_code": "PM",
+          "mm": 1,
+          "alloc_sum": 0.9,
+          "message": "PM: 월별 배분 합계 0.9 가 공수 1 MM 과 다릅니다."
+        }
+      ]
+    }
+  },
+  {
+    "caseId": "empty-quote",
+    "description": "빈 견적 — 0원, 오류 없음",
+    "source": "경계 사례",
+    "input": {},
+    "kind": "QUOTE",
+    "expected": {
+      "block_subtotals": [],
+      "onetime_subtotal": 0,
+      "monthly_subtotal": 0,
+      "discount_amount": 0,
+      "monthly_discount_amount": 0,
+      "round_unit": 100000,
+      "rounding_adjustment": 0,
+      "onetime_total": 0,
+      "monthly_total": 0,
+      "vat_amount": 0,
+      "monthly_vat": 0,
+      "total_amount": 0,
+      "supply_amount": 0,
+      "labor_errors": []
+    }
+  }
+]

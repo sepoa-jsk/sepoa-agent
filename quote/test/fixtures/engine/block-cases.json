@@ -1,0 +1,88 @@
+[
+  {
+    "caseId": "solbrain-labor-block",
+    "description": "인건비 라인 — 제안단가 × 공수 (실측 3.2MM = 36,600,000)",
+    "source": "assets/인장/전자인장_온프레미스.pdf QT20260728_001",
+    "input": {
+      "block_code": "LABOR",
+      "recurring": 0,
+      "labor": [
+        {
+          "role_code": "PM",
+          "role_label": "PM",
+          "task": "프로젝트 총괄(PM), 분석, 설계",
+          "mm": 1,
+          "base_price": 25418735,
+          "proposed_price": 13500000
+        },
+        {
+          "role_code": "DEV",
+          "role_label": "개발",
+          "task": "커스터마이징, 인터페이스, 안정화",
+          "mm": 2,
+          "base_price": 25418735,
+          "proposed_price": 10500000
+        },
+        {
+          "role_code": "SUPPORT",
+          "role_label": "기술지원",
+          "task": "서버확인, 보안점검",
+          "mm": 0.2,
+          "base_price": 25418735,
+          "proposed_price": 10500000
+        }
+      ]
+    },
+    "kind": "BLOCK",
+    "expected": {
+      "block_code": "LABOR",
+      "recurring": 0,
+      "subtotal": 36600000,
+      "line_amounts": [
+        13500000,
+        21000000,
+        2100000
+      ],
+      "mm_total": 3.2
+    }
+  },
+  {
+    "caseId": "pcloud-setup-block",
+    "description": "PCloud 셋업 — MM 기반 수량 (3.7 × 12,000,000), 수량 0 라인은 0원",
+    "source": "assets/인장/전자인장_프라이빗클라우드.pdf QT20260506_001",
+    "input": {
+      "block_code": "SETUP",
+      "recurring": 0,
+      "items": [
+        {
+          "item_code": "ESEAL_PC_SETUP",
+          "category": "전자인장시스템",
+          "name": "클라우드 셋업",
+          "qty": 3.7,
+          "unit": "MM",
+          "base_price": 19540395,
+          "proposed_price": 12000000
+        },
+        {
+          "item_code": "ESEAL_PC_PKI",
+          "category": "응용소프트웨어",
+          "name": "전자계약 공인인증",
+          "qty": 0,
+          "base_price": 20000000,
+          "proposed_price": 15000000
+        }
+      ]
+    },
+    "kind": "BLOCK",
+    "expected": {
+      "block_code": "SETUP",
+      "recurring": 0,
+      "subtotal": 44400000,
+      "line_amounts": [
+        44400000,
+        0
+      ],
+      "mm_total": null
+    }
+  }
+]

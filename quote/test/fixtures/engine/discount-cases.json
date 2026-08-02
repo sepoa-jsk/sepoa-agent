@@ -1,0 +1,69 @@
+[
+  {
+    "caseId": "discount-modes",
+    "description": "특별DC 3종 — AMOUNT / RATE / TARGET, 미입력, 목표가가 소계보다 큰 경우",
+    "source": "규약 (CLAUDE.md §6)",
+    "input": [
+      {
+        "label": "AMOUNT 5,000,000",
+        "discount": {
+          "type": "AMOUNT",
+          "value": 5000000
+        },
+        "base": 86600000
+      },
+      {
+        "label": "RATE 10%",
+        "discount": {
+          "type": "RATE",
+          "value": 10
+        },
+        "base": 86600000
+      },
+      {
+        "label": "TARGET 60,000,000",
+        "discount": {
+          "type": "TARGET",
+          "value": 60000000
+        },
+        "base": 86600000
+      },
+      {
+        "label": "DC 없음(null)",
+        "discount": null,
+        "base": 86600000
+      },
+      {
+        "label": "TARGET 이 소계보다 큼",
+        "discount": {
+          "type": "TARGET",
+          "value": 90000000
+        },
+        "base": 86600000
+      }
+    ],
+    "kind": "DISCOUNT",
+    "expected": [
+      {
+        "label": "AMOUNT 5,000,000",
+        "amount": 5000000
+      },
+      {
+        "label": "RATE 10%",
+        "amount": 8660000
+      },
+      {
+        "label": "TARGET 60,000,000",
+        "amount": 26600000
+      },
+      {
+        "label": "DC 없음(null)",
+        "amount": 0
+      },
+      {
+        "label": "TARGET 이 소계보다 큼",
+        "amount": 0
+      }
+    ]
+  }
+]
