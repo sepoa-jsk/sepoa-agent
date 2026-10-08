@@ -1,0 +1,75 @@
+{
+  "$comment": "사내 업무 플랫폼의 업무 목록·포트·경로 정의. 게이트웨이와 dev.ps1 이 이 파일 하나만 읽는다. 업무를 추가할 때 여기에 한 항목을 더한다 (docs/STANDARDS.md 6장).",
+  "gateway": { "port": 8080 },
+  "apps": [
+    {
+      "id": "quote",
+      "name": "견적자동화",
+      "dept": "영업",
+      "path": "/quote",
+      "port": 3100,
+      "stripPrefix": true,
+      "stack": "node",
+      "dir": "apps/quote-legacy",
+      "start": "npm start",
+      "health": "/api/health",
+      "enabled": true,
+      "note": "Node 참조 구현. J9 에서 /quote 를 Java(3200)로 전환하고 J7 이후 삭제"
+    },
+    {
+      "id": "quote2",
+      "name": "견적자동화 (Java)",
+      "dept": "영업",
+      "path": "/quote2",
+      "port": 3200,
+      "stripPrefix": false,
+      "stack": "java",
+      "dir": "apps/quote",
+      "start": ".\\mvnw.cmd spring-boot:run",
+      "health": "/quote2/api/health",
+      "enabled": true,
+      "note": "Spring Boot context-path 가 /quote2 라 접두어를 떼지 않는다"
+    },
+    {
+      "id": "blog",
+      "name": "블로그작성",
+      "dept": "마케팅",
+      "path": "/blog",
+      "port": 4317,
+      "stripPrefix": true,
+      "stack": "node",
+      "dir": "apps/blog/web-console",
+      "start": "npm start",
+      "health": null,
+      "enabled": true,
+      "note": "Java 이식 예정 (ROADMAP 2단계). 글 생성은 AI 엔진으로 이관"
+    },
+    {
+      "id": "work",
+      "name": "일일업무관리",
+      "dept": "경영지원",
+      "path": "/work",
+      "port": 3300,
+      "stripPrefix": false,
+      "stack": "java",
+      "dir": "apps/daily-work",
+      "start": ".\\mvnw.cmd spring-boot:run",
+      "health": "/work/api/health",
+      "enabled": false,
+      "note": "Java 이식 예정 (ROADMAP 3단계). 현행 Python 버전은 별도 레포 work_agent(:8000)에서 운영"
+    }
+  ],
+  "internal": [
+    {
+      "id": "ai-engine",
+      "name": "AI 엔진",
+      "port": 8100,
+      "stack": "python",
+      "dir": "platform/ai-engine",
+      "start": "uv run uvicorn app.main:app --port 8100 --reload",
+      "health": "/api/health",
+      "enabled": true,
+      "note": "게이트웨이에 노출하지 않는다. Java 업무 앱만 내부 토큰으로 호출한다"
+    }
+  ]
+}

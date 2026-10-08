@@ -1,0 +1,8 @@
+{
+  "name": "sepoa-platform-gateway",
+  "private": true,
+  "description": "사내 업무 플랫폼 게이트웨이 — ports.json 기준 경로별 리버스 프록시. 의존성 없음.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node --test" },
+  "engines": { "node": ">=18" }
+}
