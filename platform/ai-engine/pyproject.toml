@@ -1,0 +1,18 @@
+[project]
+name = "sepoa-ai-engine"
+version = "0.1.0"
+description = "세포아 사내 업무 플랫폼 — 내부 AI 엔진 (Java 업무 앱이 호출하는 판단·생성 API)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "anthropic>=0.40",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
