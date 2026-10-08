@@ -26,5 +26,11 @@ spring:
   #
   # 주의: properties 파서는 백슬래시를 이스케이프 문자로 본다. 비밀번호에 \ 가 있으면
   # 이 경로로는 값이 깨지므로, 그때는 OS 환경변수로 직접 넘길 것.
+  #
+  # 2026-10-08 플랫폼 재구성: Node 앱이 apps/quote-legacy/ 로 이동했다.
+  # 자기 폴더의 .env(apps/quote/.env)를 먼저 찾고, 없으면 legacy 의 .env 를 쓴다.
+  # 뒤에 오는 import 가 앞의 값을 덮어쓰므로 legacy 를 앞에 둔다.
   config:
-    import: "optional:file:../quote/.env[.properties]"
+    import:
+      - "optional:file:../quote-legacy/.env[.properties]"
+      - "optional:file:./.env[.properties]"

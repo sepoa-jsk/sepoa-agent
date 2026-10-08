@@ -16,9 +16,9 @@ const path = require('node:path');
 const mysql = require('mysql2/promise');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
-const { dump } = require('../../../tools/ops/dbdump.js');
-const { verify } = require('../../../tools/ops/dbverify.js');
-const fmt = require('../../../tools/ops/dumpformat.js');
+const { dump } = require('../../../quote/tools/ops/dbdump.js');
+const { verify } = require('../../../quote/tools/ops/dbverify.js');
+const fmt = require('../../../quote/tools/ops/dumpformat.js');
 
 const CONN = {
   host: process.env.DB_HOST, port: process.env.DB_PORT,

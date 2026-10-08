@@ -28,8 +28,8 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const QUOTE_DIR = path.join(ROOT, 'quote');
-const JAVA_DIR = path.join(ROOT, 'quote_automation');
+const QUOTE_DIR = path.join(ROOT, '..', 'quote-legacy');
+const JAVA_DIR = ROOT;
 
 require(path.join(QUOTE_DIR, 'node_modules', 'dotenv')).config({ path: path.join(QUOTE_DIR, '.env') });
 const mysql = require(path.join(QUOTE_DIR, 'node_modules', 'mysql2', 'promise'));

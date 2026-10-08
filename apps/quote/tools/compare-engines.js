@@ -28,9 +28,9 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const NODE_ENGINE = path.join(ROOT, 'quote', 'src', 'domain', 'pricing', 'engine.js');
-const FIXTURES = path.join(ROOT, 'quote', 'test', 'fixtures', 'engine');
-const JAVA_DIR = path.join(ROOT, 'quote_automation');
+const NODE_ENGINE = path.join(ROOT, '..', 'quote-legacy', 'src', 'domain', 'pricing', 'engine.js');
+const FIXTURES = path.join(ROOT, '..', 'quote-legacy', 'test', 'fixtures', 'engine');
+const JAVA_DIR = ROOT;
 
 const args = process.argv.slice(2);
 const has = (f) => args.includes(f);

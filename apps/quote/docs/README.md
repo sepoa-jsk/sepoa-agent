@@ -1,23 +1,26 @@
-# quote_automation — 문서 안내
+# apps/quote (견적 Java) — 문서 안내
 
-이 디렉터리에는 **문서를 보관하지 않는다.** 정본은 전부 `quote/docs/` 에 있다.
+> 2026-10-08 플랫폼 재구성으로 경로가 바뀌었다: `quote_automation/` → `apps/quote/`, `quote/` → `apps/quote-legacy/`, `tools/` → `apps/quote/tools/`.
+> 아래 문서 본문과 PROGRESS.md 의 과거 기록은 옛 경로로 적혀 있다.
+
+이 디렉터리에는 **문서를 보관하지 않는다.** 정본은 전부 `apps/quote-legacy/docs/` 에 있다.
 
 WBS·진행상태·이슈 로그·기준선 PDF 를 두 곳에 두면 반드시 어긋난다.
-Java 쪽 작업 중 문서를 고칠 일이 생기면 `quote/docs/` 의 원본을 고친다.
+Java 쪽 작업 중 문서를 고칠 일이 생기면 `apps/quote-legacy/docs/` 의 원본을 고친다.
 
 | 문서 | 경로 | 내용 |
 |---|---|---|
-| Java 이식 실행계획 | `quote/docs/WBS-java.md` | **현행 실행계획 정본.** J0~J14 단계와 DoD |
-| 개편 설계 | `quote/docs/WBS.md` | 설계·요구사항 정본. J10~J14 가 참조하는 구 STEP 4~8 설계 |
-| 진행 상태 | `quote/docs/PROGRESS.md` | 진행표 · 반출 목록 · 환경변수 매핑표 · 이슈 로그 51건 재분류 · 결정 기록 |
-| 발견 결함 이력 | `quote/docs/LESSONS.md` | Node 개발 중 결함 5건과 성격. **Java 에서 반복하지 않기 위한 문서** |
-| UI 정본 | `quote/docs/ui-mockup.html` | 화면 구조·간격·컴포넌트 기준 |
-| 기준선 PDF | `quote/docs/baseline-pdf/` | 실측 3종 회귀 방어선. J7 대조 기준 |
-| 마이그레이션 이력 | `quote/db/migrations/README.md` | 25개 파일 · 미실행 등록 사유 · 006 손상 탐지 쿼리 |
+| Java 이식 실행계획 | `apps/quote-legacy/docs/WBS-java.md` | **현행 실행계획 정본.** J0~J14 단계와 DoD |
+| 개편 설계 | `apps/quote-legacy/docs/WBS.md` | 설계·요구사항 정본. J10~J14 가 참조하는 구 STEP 4~8 설계 |
+| 진행 상태 | `apps/quote-legacy/docs/PROGRESS.md` | 진행표 · 반출 목록 · 환경변수 매핑표 · 이슈 로그 51건 재분류 · 결정 기록 |
+| 발견 결함 이력 | `apps/quote-legacy/docs/LESSONS.md` | Node 개발 중 결함 5건과 성격. **Java 에서 반복하지 않기 위한 문서** |
+| UI 정본 | `apps/quote-legacy/docs/ui-mockup.html` | 화면 구조·간격·컴포넌트 기준 |
+| 기준선 PDF | `apps/quote-legacy/docs/baseline-pdf/` | 실측 3종 회귀 방어선. J7 대조 기준 |
+| 마이그레이션 이력 | `apps/quote-legacy/db/migrations/README.md` | 25개 파일 · 미실행 등록 사유 · 006 손상 탐지 쿼리 |
 
 > `quote/` 는 **J2(테스트 픽스처 추출) 완료 후 삭제**한다.
 > 삭제 시 위 문서는 `quote_automation/docs/` 로 **이동**한다(참조가 아니라 이동).
-> 반출 대상 전체 목록은 `quote/docs/PROGRESS.md` 의 "반출 목록" 13건을 따른다.
+> 반출 대상 전체 목록은 `apps/quote-legacy/docs/PROGRESS.md` 의 "반출 목록" 13건을 따른다.
 
 ---
 
@@ -42,7 +45,7 @@ curl http://localhost:3200/quote2/api/health
 ```
 
 접속 정보는 `application-*.yml` 에 없다. dev 프로파일이 `../quote/.env` 를 properties 로
-읽고, 없으면 OS 환경변수를 쓴다. 매핑 근거는 `quote/docs/PROGRESS.md` 의 환경변수 16종 표다.
+읽고, 없으면 OS 환경변수를 쓴다. 매핑 근거는 `apps/quote-legacy/docs/PROGRESS.md` 의 환경변수 16종 표다.
 
 ### 빌드와 WAR 검증
 

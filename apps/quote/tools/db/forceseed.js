@@ -1,10 +1,10 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 
 (async () => {
-  const sql = fs.readFileSync(path.join(__dirname, '../../quote/db/migrations/008_20260715_procure_saas_seed.sql'), 'utf8');
+  const sql = fs.readFileSync(path.join(__dirname, '../../../quote-legacy/db/migrations/008_20260715_procure_saas_seed.sql'), 'utf8');
   console.log('파일 길이:', sql.length, '자');
   console.log('S2C 포함?', sql.includes('PRO_SAAS_S2C'));
 

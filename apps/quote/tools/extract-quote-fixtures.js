@@ -23,9 +23,9 @@ const fs = require('fs');
 const path = require('path');
 const {
   calcQuoteBlocks, calcBlock, computeDiscount, floorTo, validateMonthAlloc,
-} = require('../quote/src/domain/pricing/engine');
+} = require('../../quote-legacy/src/domain/pricing/engine');
 
-const OUT = path.join(__dirname, '..', 'quote', 'test', 'fixtures');
+const OUT = path.join(__dirname, '..', '..', 'quote-legacy', 'test', 'fixtures');
 
 // ─────────────────────────────────────────────────────────────────
 // 입력 정의 — test/engine/quote-block.test.js 와 같은 구조다.

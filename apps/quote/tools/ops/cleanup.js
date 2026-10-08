@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const mysql = require('mysql2/promise');
 
 (async () => {

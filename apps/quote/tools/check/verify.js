@@ -1,6 +1,6 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const mysql = require('mysql2/promise');
-const { calcLine } = require('../../quote/src/domain/pricing/engine');
+const { calcLine } = require('../../../quote-legacy/src/domain/pricing/engine');
 
 (async () => {
   const conn = await mysql.createConnection({

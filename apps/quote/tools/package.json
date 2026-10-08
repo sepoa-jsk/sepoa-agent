@@ -1,0 +1,9 @@
+{
+  "name": "sepoa-quote-tools",
+  "private": true,
+  "description": "견적 DB 운영·점검·Node/Java 대조 도구. 실행 위치와 무관하게 __dirname 기준 경로를 쓴다.",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.11.0"
+  }
+}

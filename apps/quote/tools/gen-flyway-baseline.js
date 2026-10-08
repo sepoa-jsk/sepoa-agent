@@ -18,13 +18,13 @@
 // 위험도: 안전 (원본 DB 를 읽기만 한다)
 
 const path = require('path');
-require(path.join(__dirname, '..', 'quote', 'node_modules', 'dotenv'))
-  .config({ path: path.join(__dirname, '..', 'quote', '.env') });
+require(path.join(__dirname, '..', '..', 'quote-legacy', 'node_modules', 'dotenv'))
+  .config({ path: path.join(__dirname, '..', '..', 'quote-legacy', '.env') });
 const fs = require('fs');
-const mysql = require(path.join(__dirname, '..', 'quote', 'node_modules', 'mysql2', 'promise'));
+const mysql = require(path.join(__dirname, '..', '..', 'quote-legacy', 'node_modules', 'mysql2', 'promise'));
 
 const DEFAULT_OUT = path.join(
-  __dirname, '..', 'quote_automation', 'src', 'main', 'resources', 'db', 'migration', 'V1__baseline.sql');
+  __dirname, '..', 'src', 'main', 'resources', 'db', 'migration', 'V1__baseline.sql');
 
 async function generate({ out, schema, host, port, user, password }) {
   const conn = await mysql.createConnection({

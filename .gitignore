@@ -12,5 +12,12 @@
 # 환경설정
 .env
 
-# Java 빌드 산출물 (quote_automation/ — Maven)
-quote_automation/target/
+# Java 빌드 산출물 (Maven)
+**/target/
+
+# Python (platform/ai-engine)
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/

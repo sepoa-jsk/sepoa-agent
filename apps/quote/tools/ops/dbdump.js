@@ -15,7 +15,7 @@
 // 스키마명을 생략하면 quote/.env 의 DB_NAME 을 쓴다.
 //
 // 위험도: 안전 (읽기 전용 — 대상 DB 에 아무것도 쓰지 않는다)
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 const fmt = require('./dumpformat');

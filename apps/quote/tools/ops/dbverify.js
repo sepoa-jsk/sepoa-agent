@@ -9,7 +9,7 @@
 // 대조 실패 시 종료코드 1.
 //
 // 위험도: 안전 (원본 DB 는 읽기만 한다. 쓰기는 임시 스키마에만 일어나고 끝나면 삭제한다)
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 const fmt = require('./dumpformat');

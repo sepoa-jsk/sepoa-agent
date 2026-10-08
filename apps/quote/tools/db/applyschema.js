@@ -1,9 +1,9 @@
-require('dotenv').config({ path: require('path').join(__dirname, '../../quote/.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '../../../quote-legacy/.env') });
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 
 (async () => {
-  const file = process.argv[2] || 'quote/db/migrations/009_20260715_master_schema.sql';
+  const file = process.argv[2] || 'apps/quote-legacy/db/migrations/009_20260715_master_schema.sql';
   let sql = fs.readFileSync(file, 'utf8');
 
   const conn = await mysql.createConnection({
