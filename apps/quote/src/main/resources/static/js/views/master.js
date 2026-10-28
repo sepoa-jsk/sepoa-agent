@@ -171,8 +171,11 @@ const MASTERS = [
     uniqueCombo: ['onsite_key', 'company_key'],
     list: ['onsite_key', 'company_key', 'rate', 'sort'],
     fields: [
-      { key: 'onsite_key', label: '상주구분', type: 'preset', required: true, options: ONSITE_PRESET },
-      { key: 'company_key', label: '기업구분', type: 'preset', required: true, options: 'company' },
+      // 코드 칸(codeview)은 옆 선택 칸에서 고른 코드를 글자로 보여주기만 한다 — 저장 대상 아님 (사용자 지정)
+      { key: '_onsite_code', label: '상주코드', type: 'codeview', of: 'onsite_key' },
+      { key: 'onsite_key', label: '상주구분', type: 'preset', required: true, options: ONSITE_PRESET, rerenders: true },
+      { key: '_company_code', label: '기업구분코드', type: 'codeview', of: 'company_key' },
+      { key: 'company_key', label: '기업구분', type: 'preset', required: true, options: 'company', rerenders: true },
       { key: 'rate', label: '네고율 (%)', type: 'percent', required: true },
       { key: 'sort', label: '정렬', type: 'number' },
     ],
@@ -381,6 +384,7 @@ export async function renderMaster(root) {
 
   function colWidth(f) {
     if (f.type === 'checkbox') return 60;
+    if (f.type === 'codeview') return 110;
     if (f.full || f.key === 'note' || f.key === 'revenue_cond') return 240;
     if (f.type === 'preset') return 170;
     if (f.key === 'name' || f.key === 'role_name') return 180;
@@ -487,7 +491,8 @@ export async function renderMaster(root) {
     if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
     const num = numType(f) || f.type === 'checkbox';
     const val = (r) => {
-      const v = f.type === 'preset' ? ((optionsOf(f).find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key]) : r.form[f.key];
+      const v = f.type === 'preset' ? ((optionsOf(f).find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key])
+        : f.type === 'codeview' ? r.form[f.of] : r.form[f.key];
       if (v == null || v === '') return null;
       return num ? Number(v) : String(v);
     };
@@ -525,6 +530,7 @@ export async function renderMaster(root) {
     const form = r.form;
     const off = !visible(f, form);
     const fire = () => onChange(f);
+    if (f.type === 'codeview') return h('td', { class: 'ss-cell--link' }, form[f.of] || '');
     if (f.type === 'checkbox') {
       return h('td', {}, h('input', { type: 'checkbox', checked: !!form[f.key], 'aria-label': f.label,
         onchange: (e) => { form[f.key] = e.target.checked ? 1 : 0; fire(); } }));
@@ -564,7 +570,7 @@ export async function renderMaster(root) {
   function payloadOf(m, form, isNew) {
     const payload = {};
     let missing = null;
-    m.fields.filter((f) => visible(f, form)).forEach((f) => {
+    m.fields.filter((f) => visible(f, form) && f.type !== 'codeview').forEach((f) => {
       let v = form[f.key];
       if (f.type === 'preset') {
         if (f.required && (v === '' || v == null)) missing = missing || f.label;
