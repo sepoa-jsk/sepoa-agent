@@ -1,7 +1,7 @@
 // 견적 목록 — SingleSuite L1 조회형 (툴바 + 명세바 + 그리드 상자). toray 적용 화면 기준.
 //   툴바 좌: Search (입력하면 바로 걸린다) → 필터(상세 검색) · 상태 — 상자 버튼
 //   툴바 우: 신규  — 이 화면에 원래 있던 액션은 "새 견적" 하나뿐이다
-//   건수: 그리드 바로 위 명세바 우측
+//   건수: 툴바 아래 상태별 건수 줄 (전체 n  작성중 n …)
 //   기간 선택기는 두지 않는다 — 목록 API 에 기간 조건이 없다
 import { api } from '../api.js';
 import { h, won, toast, clear, debounce } from '../ui.js';
@@ -101,9 +101,9 @@ export async function renderList(root) {
   const chips = h('div', { class: 'ss-chips' });
   root.appendChild(chips);
 
-  // ── 명세바: 건수는 우측 텍스트 (배지 아님) ──
-  const count = h('span', { class: 'ss-detailbar__count' });
-  root.appendChild(h('div', { class: 'ss-detailbar' }, h('div', { class: 'ss-detailbar__spacer' }), count));
+  // ── 상태별 건수 줄: 전체 n  작성중 n … — 누르면 그 상태로 거른다. 이 줄이 건수를 대신한다 ──
+  const statusItems = h('div', { class: 'ss-statusbar__items' });
+  root.appendChild(h('div', { class: 'ss-statusbar' }, statusItems));
 
   // ── 그리드 ──
   const tbody = h('tbody');
@@ -153,12 +153,14 @@ export async function renderList(root) {
     paintStatusMenu();
     clear(tbody).appendChild(emptyRow('불러오는 중...'));
     try {
-      const params = { page: state.page, size: PAGE_SIZE };
-      if (state.status) params.status = state.status;
+      const cond = {};
       // Search 칸과 상세 검색이 같은 조건을 쓰면 상세 검색이 이긴다
-      if (state.q) params[looksLikeQuoteNo(state.q) ? 'quote_no' : 'customer'] = state.q;
-      if (state.customer) params.customer = state.customer;
-      if (state.quoteNo) params.quote_no = state.quoteNo;
+      if (state.q) cond[looksLikeQuoteNo(state.q) ? 'quote_no' : 'customer'] = state.q;
+      if (state.customer) cond.customer = state.customer;
+      if (state.quoteNo) cond.quote_no = state.quoteNo;
+      const params = { ...cond, page: state.page, size: PAGE_SIZE };
+      if (state.status) params.status = state.status;
+      paintStatusCounts(cond);
       const { quotes, total } = await api.listQuotes(params);
       clear(tbody);
       if (!quotes.length) tbody.appendChild(emptyRow('조회된 견적이 없습니다.'));
@@ -173,7 +175,6 @@ export async function renderList(root) {
           h('td', { class: 'ss-cell--emphasis' }, STATUS[q.status] || q.status),
           h('td', {}, q.created_by_name || '-')));
       }
-      paintCount(quotes, total);
       paintPager(total);
     } catch (err) {
       clear(tbody).appendChild(emptyRow(err.message));
@@ -181,10 +182,21 @@ export async function renderList(root) {
     }
   }
 
-  // n 건 — 숫자만 Primary 색. 한 페이지에 다 안 들어올 때만 "보이는 건수 / 전체"
-  function paintCount(quotes, total) {
-    clear(count).append(h('b', {}, String(total)), ' 건');
-    if (quotes.length < total) count.prepend(h('b', {}, String(quotes.length)), ' / ');
+  // 상태별 건수 — 목록 API 가 상태별 집계를 주지 않으므로 상태마다 size=1 로 total 만 받는다.
+  // 검색 조건은 같이 걸고 상태 조건만 바꾼다. 늦게 온 응답이 새 조건을 덮지 않게 차례 번호를 둔다
+  let countSeq = 0;
+  async function paintStatusCounts(cond) {
+    const seq = ++countSeq;
+    const totals = await Promise.all(STATUS_OPTS.map(([v]) =>
+      api.listQuotes({ ...cond, ...(v ? { status: v } : {}), page: 1, size: 1 }).then((r) => r.total, () => '-')));
+    if (seq !== countSeq) return;
+    clear(statusItems);
+    STATUS_OPTS.forEach(([v, label], i) => {
+      statusItems.appendChild(h('button', {
+        class: 'ss-statusbar__item' + (state.status === v ? ' is-active' : ''),
+        onclick: () => { state.status = v; state.page = 1; load(); },
+      }, label + ' ', h('b', {}, String(totals[i]))));
+    });
   }
 
   function paintPager(total) {

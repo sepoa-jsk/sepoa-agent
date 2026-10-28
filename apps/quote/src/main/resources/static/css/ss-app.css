@@ -32,7 +32,7 @@
 
 /* ── 하단 탭바: 클릭·닫기 ── */
 .ss-tabbar__tab { cursor: pointer; }
-.ss-tabbar__tab:not(.ss-tabbar__tab--active):hover { background: var(--ss-head-bg); }
+.ss-tabbar__tab:not(.ss-tabbar__tab--active):hover { background: #ECECEC; }
 .ss-tabbar__close { cursor: pointer; padding: 0 2px; }
 
 /* ── 본문 ──
