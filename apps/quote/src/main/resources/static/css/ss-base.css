@@ -5,6 +5,7 @@
    2026-10-28 운영 화면 캡처(구매요청접수 · 구매요청생성) 반영 — 좌우 16px · 툴바 좌측 도구(필터·상태·기간) ·
    상태별 건수 줄 · 접수/반려 버튼 · 4열 폼 · 편집 셀 · 레일 탭 · 탭바 활성색
    2026-10-28 운영 화면 캡처(공통코드) 반영 — 코드 목록 레일(d형) · 본문 제목 줄 · 머리 폼 + 저장 · 편집 그리드
+   2026-10-28 마스터 관리 화면 확정 — 칸 너비 조절 · 머리 칸 정렬 · 줄인 표 끝선 (assets/grid-behaviors.js)
    테마: <html data-ss-theme="legacy"> (기본) | "new"
    이 파일 하나로 L1/L2/M1 골격이 모두 렌더된다. */
 
@@ -399,6 +400,20 @@ html, body {
 select.ss-cellinput { cursor: pointer; }
 .ss-grid input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--ss-ink-3); cursor: pointer; }
 .ss-grid tr.is-new td { background: #FFFDF2; }   /* 저장 전 새 행 */
+
+/* ── 그리드 동작 (assets/grid-behaviors.js, 2026-10-28 마스터 관리 화면 확정) ── */
+/* 칸 너비 조절 손잡이 — 머리 칸 오른쪽 끝 (머리 칸이 sticky 라 손잡이 위치의 기준이 된다) */
+.ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
+.ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
+body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
+/* 너비를 줄인 표 — 상자보다 좁아져도 마지막 칸 오른쪽 선이 보이게 */
+.ss-grid.is-resized thead tr > th:last-child { border-right: 1px solid #E7EAF0; }
+.ss-grid.is-resized tbody tr > td:last-child { border-right: 1px solid #EEF1F5; }
+/* 머리 칸 정렬 — 오름 ▲ → 내림 ▼ → 원래 순서 */
+.ss-grid th.is-sortable { cursor: pointer; user-select: none; }
+.ss-grid th.is-sortable:hover { background: #EEF2F7; }
+.ss-sortmark { margin-left: 3px; font-size: 8px; color: var(--ss-primary); }
+.ss-sortmark:empty { display: none; }
 
 /* ── 화면 내 탭 ────────────────────────────────── */
 

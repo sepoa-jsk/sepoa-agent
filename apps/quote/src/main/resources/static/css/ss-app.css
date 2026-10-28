@@ -76,19 +76,7 @@
 .ss-app--railtitle > .ss-title { display: none; }
 .ss-railview .ss-detailbar__note:empty { display: none; }
 
-/* 그리드 칸 너비 조절 손잡이 — 머리 칸 오른쪽 끝 (ui.js resizableColumns) */
-.ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
-.ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
-body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
-/* 너비를 조절한 표는 마지막 칸 오른쪽 선을 되살린다 — 상자보다 좁아져도 표 끝이 보이게 */
-.ss-grid.is-resized thead tr > th:last-child { border-right: 1px solid #E7EAF0; }
-.ss-grid.is-resized tbody tr > td:last-child { border-right: 1px solid #EEF1F5; }
-
-/* 그리드 머리 칸 정렬 — 누르면 오름 ▲ → 내림 ▼ → 원래 순서 */
-.ss-grid th.is-sortable { cursor: pointer; user-select: none; }
-.ss-grid th.is-sortable:hover { background: #EEF2F7; }
-.ss-sortmark { margin-left: 3px; font-size: 8px; color: var(--ss-primary); }
-.ss-sortmark:empty { display: none; }
+/* 칸 너비 조절 · 머리 칸 정렬 · 줄인 표 끝선 스타일은 ss-base.css(스킬 "그리드 동작" 절)로 옮겼다 */
 
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
