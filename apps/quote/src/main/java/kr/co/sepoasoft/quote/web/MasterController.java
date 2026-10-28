@@ -58,8 +58,9 @@ public class MasterController {
                 List.of("solution", "company_key", "rate", "sort")));
         TABLES.put("thirdparty", new Meta("sq_thirdparty", "id", "solution, sort",
                 List.of("solution", "code", "name", "base_price", "list_price", "note", "active", "sort")));
-        TABLES.put("nego_rates", new Meta("sq_nego_rates", "id", "target, company_key, onsite_key",
-                List.of("target", "company_key", "onsite_key", "rate")));
+        // 네고율은 V3 에서 sort 를 추가했다 (Node 는 target, company_key, onsite_key 순 — API-spec 3절 J ③)
+        TABLES.put("nego_rates", new Meta("sq_nego_rates", "id", "sort, onsite_key, company_key, target",
+                List.of("target", "company_key", "onsite_key", "rate", "sort")));
         TABLES.put("maintenance", new Meta("sq_maintenance_config", "id", "sort",
                 List.of("code", "name", "calc_type", "rate", "md_price", "md_per_mm", "tco_years", "free_months",
                         "note", "active", "sort")));
