@@ -1,0 +1,228 @@
+/* ══════════════════════════════════════════════════════════════
+   components — 시안(docs/ui-mockup.html) 스타일 그대로 이식
+   임의로 다듬지 않는다. 시안이 정본이다.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 카드 ── */
+.card{background:var(--white);border:1px solid var(--line);border-radius:3px}
+.card-h{height:38px;display:flex;align-items:center;padding:0 14px;border-bottom:1px solid var(--line-2);gap:8px}
+.card-h h2{font-size:13px;font-weight:600}
+.card-h .sub{font-size:11px;color:var(--text-3)}
+.card-h .sp{flex:1}
+.card-b{padding:14px}
+
+/* ── 버튼 ── */
+.btn{height:30px;padding:0 13px;border-radius:3px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line)}
+.btn:hover{background:var(--bg)}
+.btn.pri{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn.pri:hover{background:var(--primary-hover)}
+.btn.pri:disabled{background:#C1C7D0;border-color:#C1C7D0;cursor:not-allowed}
+.btn.sm{height:26px;padding:0 9px;font-size:11.5px;font-weight:500}
+.btn svg{width:14px;height:14px;stroke-width:2}
+
+/* ── 그리드(표) ── */
+table.grid{font-size:12.5px}
+table.grid thead th{background:#FAFBFC;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;font-weight:600;font-size:11.5px;color:var(--text-2);white-space:nowrap}
+table.grid tbody td{border-bottom:1px solid var(--line-2);padding:8px 10px;vertical-align:middle}
+table.grid tbody tr:hover{background:#FAFBFC}
+table.grid .num{text-align:right;font-variant-numeric:tabular-nums}
+table.grid .ctr{text-align:center}
+table.grid tfoot td{background:#FAFBFC;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:9px 10px;font-weight:600}
+
+/* ── 태그/뱃지 ── */
+.tag{display:inline-block;padding:2px 7px;border-radius:2px;font-size:11px;font-weight:600;line-height:1.5}
+.tag.draft{background:#EBECF0;color:var(--text-2)}
+.tag.issued{background:var(--primary-weak);color:var(--primary)}
+.tag.sent{background:var(--warn-bg);color:#B65C00}
+.tag.won{background:var(--ok-bg);color:var(--ok)}
+.tag.lost{background:var(--danger-bg);color:var(--danger)}
+.tag.ln{background:transparent;border:1px solid var(--line);color:var(--text-2);font-weight:500}
+
+/* ── 입력 필드 ── */
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:11.5px;font-weight:600;color:var(--text-2);margin-bottom:5px}
+.fld input,.fld select{width:100%;height:32px;padding:0 9px;border:1px solid var(--line);border-radius:3px;background:#FAFBFC}
+.fld input:focus,.fld select:focus{outline:none;border-color:var(--primary);background:#fff;box-shadow:0 0 0 2px var(--primary-weak)}
+.fld .hint{font-size:11px;color:var(--text-3);margin-top:4px}
+.fld input[readonly]{background:#EBECF0;color:var(--text-2)}
+
+/* ── 스텝 인디케이터 ── */
+.steps{display:flex;background:var(--white);border:1px solid var(--line);border-radius:3px;margin-bottom:14px;overflow:hidden}
+.steps div{flex:1;padding:10px 14px;font-size:12px;color:var(--text-3);border-right:1px solid var(--line-2);display:flex;align-items:center;gap:8px}
+.steps div:last-child{border-right:none}
+.steps .n{width:19px;height:19px;border-radius:50%;background:#EBECF0;color:var(--text-3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
+.steps .done{color:var(--text-2)}
+.steps .done .n{background:var(--ok-bg);color:var(--ok)}
+.steps .on{color:var(--text);font-weight:600;background:var(--primary-weak)}
+.steps .on .n{background:var(--primary);color:#fff}
+
+/* ── 배너(검증 결과) ── */
+.banner{border-radius:3px;padding:11px 14px;margin-bottom:14px;display:flex;gap:11px;align-items:flex-start;font-size:12.5px}
+.banner svg{width:17px;height:17px;flex-shrink:0;margin-top:1px;stroke-width:2}
+.banner.err{background:var(--danger-bg);border:1px solid #FFBDAD;color:#BF2600}
+.banner.wrn{background:var(--warn-bg);border:1px solid #FFE380;color:#974F0C}
+.banner.inf{background:var(--primary-weak);border:1px solid #B3D4FF;color:var(--primary)}
+.banner b{display:block;margin-bottom:4px;font-size:12.5px}
+.banner ul{margin:0;padding-left:15px;line-height:1.75}
+.banner .lk{text-decoration:underline;cursor:pointer;font-weight:600}
+
+/* ── 팩터(리스크 계수 선택) ── */
+.factor{border:1px solid var(--line);border-radius:3px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:#fff}
+.factor:hover{border-color:#B3D4FF;background:#FAFBFC}
+.factor.on{border-color:var(--primary);background:var(--primary-weak)}
+.factor input{margin-top:2px;accent-color:var(--primary);width:14px;height:14px;flex-shrink:0}
+.factor .t{flex:1;min-width:0}
+.factor .t b{font-size:12.5px;font-weight:600;display:block}
+.factor .t span{font-size:11px;color:var(--text-2);display:block;margin-top:2px;line-height:1.5}
+.factor .co{font-size:12px;font-weight:700;color:var(--primary);font-variant-numeric:tabular-nums;flex-shrink:0}
+.factor .src{font-size:10.5px;color:var(--text-3);margin-top:3px;display:block}
+
+/* ── 계산 패널 ── */
+.calc{background:#FAFBFC;border:1px solid var(--line);border-radius:3px;padding:12px}
+.calc .row{display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px;border-bottom:1px dashed var(--line-2)}
+.calc .row:last-of-type{border-bottom:none}
+.calc .row span:last-child{font-variant-numeric:tabular-nums;font-weight:600}
+.calc .tot{display:flex;justify-content:space-between;padding:11px 0 3px;margin-top:6px;border-top:2px solid var(--navy);font-size:14px;font-weight:700}
+.calc .tot span:last-child{font-variant-numeric:tabular-nums}
+
+/* ── 미리보기(견적서) ── */
+.pv{background:#fff;border:1px solid var(--line);padding:16px;font-size:11px}
+.pv .doc-h{border-bottom:2px solid var(--navy);padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-end}
+.pv .doc-h .ttl{font-size:16px;font-weight:700;letter-spacing:.04em}
+.pv .doc-h .no{font-size:10.5px;color:var(--text-2);text-align:right;line-height:1.6}
+.pv table{font-size:10.5px;margin-bottom:9px}
+.pv table th{background:#E3EDDA;border:1px solid #C1C7D0;padding:4px 6px;font-weight:600;font-size:10px}
+.pv table td{border:1px solid #DFE1E6;padding:4px 6px}
+.pv table .num{text-align:right;font-variant-numeric:tabular-nums}
+.pv table tr.sum td{background:#E3EDDA;font-weight:700}
+.pv .sec{font-size:11px;font-weight:700;margin:10px 0 5px}
+.pv .fin td{background:#DFF0D8;font-weight:700}
+
+/* ── 통계 카드 ── */
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.stat .c{background:#fff;border:1px solid var(--line);border-radius:3px;padding:12px 14px}
+.stat .c .k{font-size:11.5px;color:var(--text-2);margin-bottom:6px}
+.stat .c .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat .c .d{font-size:11px;color:var(--text-3);margin-top:3px}
+.stat .c.al .v{color:var(--danger)}
+
+/* ── 필터 바 ── */
+.filter{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.filter select,.filter input{height:29px;border:1px solid var(--line);border-radius:3px;padding:0 9px;background:#fff}
+.filter .sp{flex:1}
+
+/* ── 체크 목록 ── */
+.chk{display:flex;gap:9px;padding:7px 0;font-size:12.5px;align-items:flex-start;border-bottom:1px solid var(--line-2)}
+.chk:last-child{border-bottom:none}
+.chk svg{width:15px;height:15px;flex-shrink:0;margin-top:1px;stroke-width:2.2}
+.chk .pass{color:var(--ok)}
+.chk .fail{color:var(--danger)}
+.chk .warn{color:var(--warn)}
+.chk .tx{flex:1}
+.chk .tx b{display:block;font-weight:600;margin-bottom:2px}
+.chk .tx span{font-size:11px;color:var(--text-2);line-height:1.55}
+.chk .code{font-size:10.5px;color:var(--text-3);font-weight:600;flex-shrink:0}
+
+/* ══════════════════════════════════════════════════════════════
+   app.css 흡수분 — 기존 화면 9종이 의존하는 컴포넌트.
+   별칭 변수(--accent/--muted 등)는 전부 신 토큰으로 치환했다.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 버튼 (기존 화면용 변형) ── */
+.btn { justify-content: center; background: #fff; color: var(--text); transition: .12s; }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-navy { background: var(--navy); border-color: var(--navy); color: #fff; }
+.btn-navy:hover { background: var(--navy-2); }
+.btn-ghost { background: transparent; border-color: transparent; color: #B3BAC5; }
+.btn-ghost:hover { background: var(--navy-2); color: #fff; }
+.btn-danger { color: var(--danger); border-color: #FFBDAD; background: #fff; }
+.btn-danger:hover { background: var(--danger-bg); }
+.btn-sm { height: 26px; padding: 0 9px; font-size: 11.5px; font-weight: 500; }
+.btn-block { width: 100%; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── 페이지 헤더 (제목은 GNB 로 올라갔고 설명·액션만 남는다) ── */
+.page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.page-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.page-sub { color: var(--text-3); font-size: 12px; margin-top: 2px; }
+.page-actions { display: flex; gap: 8px; }
+
+/* ── 패널 ── */
+.panel { background: var(--white); border: 1px solid var(--line); border-radius: var(--radius); }
+.panel + .panel { margin-top: 14px; }
+.panel-head { padding: 0 14px; height: 38px; border-bottom: 1px solid var(--line-2); font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: space-between; }
+.panel-body { padding: 14px; }
+
+/* ── 폼 ── */
+.filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label { font-size: 11.5px; color: var(--text-2); font-weight: 600; }
+.input, .select, .textarea { height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: var(--radius); background: #FAFBFC; color: var(--text); }
+.textarea { height: auto; padding: 8px 10px; resize: vertical; }
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 2px var(--primary-weak); }
+.qty-input { width: 72px; height: 28px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.price-input { width: 110px; height: 28px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); }
+.chk-box { width: 15px; height: 15px; accent-color: var(--primary); cursor: pointer; }
+
+/* ── 표 (기존 화면용 보강) ── */
+.table-wrap { overflow-x: auto; }
+table.grid th { position: sticky; top: 0; z-index: 1; }
+table.grid tr.clickable { cursor: pointer; }
+.nowrap { white-space: nowrap; }
+
+/* 마스터 관리 전용: 세로 구분선 + zebra */
+table.master-grid th, table.master-grid td { border-right: 1px solid var(--line-2); padding: 8px 10px; }
+table.master-grid th:last-child, table.master-grid td:last-child { border-right: none; }
+table.master-grid th { background: #FAFBFC; color: var(--text-2); border-bottom: 1px solid var(--line); }
+table.master-grid tbody tr:nth-child(even) > td { background: #FCFCFD; }
+table.master-grid tbody tr:hover > td { background: var(--primary-weak); }
+
+/* ── 뱃지 ── */
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 2px; font-size: 11px; font-weight: 600; }
+.badge-gray { background: #EBECF0; color: var(--text-2); }
+.badge-blue { background: var(--primary-weak); color: var(--primary); }
+.badge-green { background: var(--ok-bg); color: var(--ok); }
+.badge-red { background: var(--danger-bg); color: var(--danger); }
+.badge-yellow { background: var(--warn-bg); color: #B65C00; }
+.badge-navy { background: var(--navy); color: #fff; }
+
+/* ── 견적 편집기 ── */
+.editor-grid { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+.section-card { border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.section-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #FAFBFC; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.section-head .field { min-width: 120px; }
+.section-head .grow { flex: 1; }
+.section-title { font-weight: 600; color: var(--text); }
+.section-body { padding: 0; }
+.item-row-negotiate { background: var(--warn-bg); }
+.add-section { width: 100%; height: 40px; border: 1px dashed var(--line); border-radius: var(--radius); background: #fff; color: var(--primary); font-weight: 600; }
+.add-section:hover { background: var(--primary-weak); border-color: var(--primary); }
+
+.summary { position: sticky; top: 0; }
+.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 12.5px; }
+.summary-row.total { border-top: 2px solid var(--navy); margin-top: 6px; padding-top: 11px; font-size: 14px; font-weight: 700; }
+.summary-row .lbl { color: var(--text-2); }
+
+/* ── 상세 ── */
+.detail-meta { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px 24px; }
+.meta-item .k { font-size: 11.5px; color: var(--text-3); margin-bottom: 2px; }
+.meta-item .v { font-size: 13.5px; font-weight: 600; color: var(--text); }
+
+/* ── 상태 표시 ── */
+.empty { text-align: center; padding: 44px 20px; color: var(--text-3); }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--primary-weak); border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 모달 ── */
+.modal-back { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal { background: #fff; border-radius: var(--radius); width: 520px; max-width: 92vw; max-height: 88vh; overflow: auto; box-shadow: 0 8px 28px rgba(15,23,42,.24); }
+.modal-head { padding: 14px 18px; border-bottom: 1px solid var(--line); font-weight: 600; font-size: 14px; }
+.modal-body { padding: 18px; }
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* 제목은 GNB 가 표시한다. 화면 안 page-title 은 중복이므로 숨기고
+   설명(page-sub)·액션(page-actions)만 남긴다. 화면 JS 는 건드리지 않는다. */
+.view .page-title { display: none; }
+.view .page-head { margin-bottom: 12px; }
+.view .page-head:empty, .view .page-head > div:empty { display: none; }
