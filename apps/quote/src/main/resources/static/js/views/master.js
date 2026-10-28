@@ -183,6 +183,8 @@ const MASTERS = [
   {
     // 유지보수 설정: 계산방식(RATE/MM)에 따라 요율 또는 단가+공수를 관리.
     type: 'maintenance', label: '유지보수', pk: 'id', scoped: false,
+    // M/M 환산일 · TCO 년수는 그리드에 보이지 않는다(사용자 지정) — 기존 값은 그대로 저장된다
+    hidden: ['md_per_mm', 'tco_years'],
     // 목록: 이름 | 계산방식 | 요율/단가 | 무상개월 | 사용
     list: [
       'name',
