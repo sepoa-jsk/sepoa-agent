@@ -20,6 +20,30 @@ const CLASS_PRESET = [
 const ONSITE_PRESET = [['ONSITE', '상주'], ['REMOTE', '비상주']];
 const NEGO_TARGETS = [['MODULE', '모듈(솔루션)'], ['LABOR', '인력']];
 
+// 숫자 칸 — 보일 때는 정수부에 3자리 콤마, 누르면(포커스) 콤마 없는 값으로 고친다.
+// 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자 · 점 · 빼기 외의 글자는 받지 않는다.
+const comma = (v) => {
+  if (v == null || v === '') return '';
+  const m = String(v).match(/^(-?)(\d+)(.*)$/);
+  return m ? m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + m[3] : String(v);
+};
+// plain 이면(연도 등) 콤마를 넣지 않는다
+function numInput(raw, onRaw, attrs, plain = false) {
+  let cur = raw == null ? '' : String(raw);
+  const show = (v) => (plain ? v : comma(v));
+  return h('input', {
+    ...attrs, type: 'text', inputMode: 'decimal', value: show(cur),
+    onfocus: (e) => { if (!e.target.readOnly) e.target.value = cur; },
+    onblur: (e) => { e.target.value = show(cur); },
+    oninput: (e) => {
+      const t = e.target.value.replace(/[^\d.-]/g, '');
+      if (t !== e.target.value) e.target.value = t;
+      cur = t;
+      onRaw(t);
+    },
+  });
+}
+
 // SW협회 노임단가 → 기준단가 (lib/labor-standard.js 와 동일 로직).
 function calcStandardRate(std) {
   const avgRaw = Number(std.daily_rate) * Number(std.work_days || 20.5);
@@ -188,7 +212,7 @@ const MASTERS = [
       // 코드 · 이름을 맨 앞에 (다른 마스터와 같게). 연도는 그 뒤 — 위 연도 선택값이 새 행에 들어간다
       { key: 'role_code', label: '코드', type: 'text', mono: true },
       { key: 'role_name', label: '이름', type: 'text' },
-      { key: 'year', label: '연도', type: 'number' },
+      { key: 'year', label: '연도', type: 'number', plain: true },
       { key: 'daily_rate', label: '노임단가 (M/D, 원)', type: 'money' },
       { key: 'work_days', label: '근무일 (M/M 환산)', type: 'number', step: '0.1', default: 20.5 },
       { key: 'overhead_rate', label: '제경비율 (기본 1.1)', type: 'number', step: '0.001', default: 1.1 },
@@ -506,16 +530,17 @@ export async function renderMaster(root) {
     const isNum = numType(f);
     let value = form[f.key];
     if (f.type === 'percent') value = value == null || value === '' ? '' : +(Number(value) * 100).toFixed(4);
-    const inp = h('input', {
-      class: 'ss-cellinput', type: isNum ? 'number' : 'text', step: isNum ? (f.step || 'any') : null,
-      value: off ? '' : (value ?? ''), disabled: off, readOnly: !!((f.pk || f.lockOnEdit) && !r.isNew), 'aria-label': f.label,
+    const attrs = {
+      class: 'ss-cellinput', disabled: off, readOnly: !!((f.pk || f.lockOnEdit) && !r.isNew), 'aria-label': f.label,
       style: isNum ? 'text-align:right' : (f.mono ? 'text-align:center' : null),
-      oninput: (e) => {
-        const t = e.target.value;
+    };
+    const inp = isNum
+      ? numInput(off ? '' : value, (t) => {
         form[f.key] = f.type === 'percent' ? (t === '' ? null : Number(t) / 100) : t;
         fire();
-      },
-    });
+      }, attrs, !!f.plain)
+      : h('input', { ...attrs, type: 'text', value: off ? '' : (value ?? ''),
+        oninput: (e) => { form[f.key] = e.target.value; fire(); } });
     return h('td', { class: 'ss-cell--input' + (f.mono ? ' ss-cell--link' : '') }, inp);
   }
 
