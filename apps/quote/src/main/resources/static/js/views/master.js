@@ -82,14 +82,15 @@ const MASTERS = [
   {
     // 기업구분: 코드 · 이름 · 조건 · 정렬을 직접 입력한다. 사용은 그리드에 보이지 않는다(hidden) —
     // 새 행은 사용=1, 정렬=끝 번호로 저장되고, 행삭제하면 사용 중지(숨김)된다.
-    // 코드는 네고율·견적이 참조하므로 저장된 뒤에는 바꾸지 않는다(lockOnEdit).
+    // 코드는 저장된 뒤에도 고칠 수 있다(사용자 지정). 단 네고율·견적은 옛 코드를 그대로 갖고 있어
+    // 코드를 바꾸면 그쪽 연결은 따라오지 않는다.
     // solution/deployment 는 저장 시 PROCURE/ONPREM 자동 주입(화면 노출 안 함).
     type: 'company_classes', label: '기업구분', pk: 'id', scoped: false,
     inject: { solution: 'PROCURE', deployment: 'ONPREM' },
     hidden: ['active'],
     list: ['key', 'label', 'revenue_cond'],
     fields: [
-      { key: 'key', label: '코드', type: 'text', mono: true, required: true, unique: true, lockOnEdit: true },
+      { key: 'key', label: '코드', type: 'text', mono: true, required: true, unique: true },
       { key: 'label', label: '이름', type: 'text', required: true },
       { key: 'revenue_cond', label: '조건', type: 'text', full: true },
       { key: 'active', label: '사용', type: 'checkbox' },
