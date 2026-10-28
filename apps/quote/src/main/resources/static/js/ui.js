@@ -99,6 +99,7 @@ export function resizableColumns(table, storeKey) {
     cols.forEach((c, i) => { c.style.width = w[i] + 'px'; });
     table.style.width = w.reduce((a, b) => a + b, 0) + 'px';
     table.style.minWidth = '';
+    table.classList.add('is-resized'); // 상자보다 좁아져도 표 오른쪽 끝에 선이 남게
   };
   const measure = () => ths.map((t) => Math.round(t.getBoundingClientRect().width));
 
@@ -136,6 +137,7 @@ export function resizableColumns(table, storeKey) {
       e.stopPropagation();
       cols.forEach((c, j) => { c.style.width = initCols[j]; });
       Object.assign(table.style, initTable);
+      table.classList.remove('is-resized');
       if (storeKey) { try { localStorage.removeItem(storeKey); } catch { /* 무시 */ } }
     });
     th.appendChild(grip);

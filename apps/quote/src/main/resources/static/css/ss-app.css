@@ -80,6 +80,9 @@
 .ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
 .ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
 body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
+/* 너비를 조절한 표는 마지막 칸 오른쪽 선을 되살린다 — 상자보다 좁아져도 표 끝이 보이게 */
+.ss-grid.is-resized thead tr > th:last-child { border-right: 1px solid #E7EAF0; }
+.ss-grid.is-resized tbody tr > td:last-child { border-right: 1px solid #EEF1F5; }
 
 /* 그리드 머리 칸 정렬 — 누르면 오름 ▲ → 내림 ▼ → 원래 순서 */
 .ss-grid th.is-sortable { cursor: pointer; user-select: none; }
