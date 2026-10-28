@@ -47,6 +47,10 @@ spring:
 server:
   # 프록시(게이트웨이 server.js, 운영의 httpd/nginx) 뒤에서 스킴·호스트를 살린다.
   forward-headers-strategy: framework
+  # 세션 만료는 Node(express-session maxAge)와 같은 24시간. 저장소는 J8 에서 JDBC 로 바꾼다.
+  servlet:
+    session:
+      timeout: 24h
 
 # J1 은 스캐폴딩이라 로깅을 과하게 켜지 않는다. DataSource 초기화 실패만 또렷하게 본다.
 logging:

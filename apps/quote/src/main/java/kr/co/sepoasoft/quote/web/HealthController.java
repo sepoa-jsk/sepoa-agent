@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import kr.co.sepoasoft.quote.web.auth.AuthSettings;
+
 /**
  * 헬스체크. context path 가 {@code /quote2} 이므로 실제 경로는 {@code /quote2/api/health} 다.
  *
@@ -35,9 +37,11 @@ public class HealthController {
     private static final Logger log = LoggerFactory.getLogger(HealthController.class);
 
     private final JdbcTemplate jdbcTemplate;
+    private final AuthSettings authSettings;
 
-    public HealthController(DataSource dataSource) {
+    public HealthController(DataSource dataSource, AuthSettings authSettings) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
+        this.authSettings = authSettings;
     }
 
     @GetMapping("/health")
@@ -64,12 +68,22 @@ public class HealthController {
         }
     }
 
-    /** 응답 키 순서를 status → db → time → (오류) 로 맞춘다. */
+    /**
+     * 응답 키 순서를 status → db → time → ok → authMode → (오류) 로 맞춘다.
+     *
+     * <p>{@code ok}·{@code authMode} 는 J5 에서 더했다(명세 3장 B). 로그인 화면이 Node 응답
+     * {@code {ok, authMode}} 의 {@code authMode} 를 읽어 dev 로그인 버튼을 띄우기 때문이다.
+     * {@code status}·{@code db} 는 게이트웨이·dev.ps1 이 쓰므로 지우지 않는다.
+     * Node 는 실패 시 {@code db} 에 오류 문구를 담지만 여기서는 {@code "DOWN"} 을 유지한다 —
+     * 화면은 실패 응답을 읽지 않는다.
+     */
     private Map<String, Object> reorder(Map<String, Object> src) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("status", src.get("status"));
         out.put("db", src.get("db"));
         out.put("time", src.get("time"));
+        out.put("ok", "UP".equals(src.get("status")));
+        out.put("authMode", authSettings.authMode());
         if (src.containsKey("error")) {
             out.put("error", src.get("error"));
             out.put("message", src.get("message"));
