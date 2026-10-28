@@ -146,14 +146,9 @@ const MASTERS = [
     injectOnCreate: { solution: 'PROCURE' },
     // 목록: 직무명 | 협회직군 | 필수 | 비고.
     list: ['name', ['standard_role_code', '협회직군', (v) => (STD_ROLE_NAME[v] || v || '-')], ['required', '필수'], 'note'],
-    // 매핑된 협회직군의 최신연도 기준단가를 모달에 참고 표시.
-    preview: (form, ctx) => {
-      if (!form.standard_role_code) return '협회직군 미매핑 (기준단가 자동연동 없음)';
-      const y = ctx && ctx.stdLatestYear;
-      const std = y && ctx.stdIndex[y + ':' + form.standard_role_code];
-      if (!std) return `${STD_ROLE_NAME[form.standard_role_code] || form.standard_role_code} · ${y || ''}년 협회단가 없음`;
-      return `${y}년 기준단가: ${won(calcStandardRate(std))} (협회단가 ${won(std.daily_rate)}/M-D)`;
-    },
+    // 표준 M/M 은 그리드에 보이지 않는다(사용자 지정) — 기존 값은 그대로 저장된다.
+    // 기준단가(참고) 칸도 뺐다(사용자 지정).
+    hidden: ['std_mm'],
     fields: [
       { key: 'code', label: '코드', type: 'text', mono: true },
       { key: 'name', label: '이름', type: 'text' },
@@ -243,15 +238,6 @@ export async function renderMaster(root) {
   let rows = [];     // [{ orig, form, isNew, checked }] — 지금 그리드에 있는 행
   let deleted = [];  // 행삭제한 기존 행 (저장할 때 서버에서 지운다)
   let negoEdits = {}; // 네고율 id → 새 rate
-
-  // 협회노임단가 인덱스(인력구분의 기준단가 참고 칸). 실패해도 무시.
-  const previewCtx = { stdIndex: {}, stdLatestYear: null };
-  try {
-    const { rows: std } = await api.masterList('labor_standards');
-    const ys = [...new Set((std || []).map((r) => Number(r.year)))].sort((a, b) => b - a);
-    previewCtx.stdLatestYear = ys[0] || null;
-    (std || []).forEach((r) => { previewCtx.stdIndex[r.year + ':' + r.role_code] = r; });
-  } catch { /* labor_standards 라우트 미반영 등 → 참고 칸 생략 */ }
 
   const current = () => MASTERS.find((m) => m.type === state.type);
   const numType = (f) => f.type === 'money' || f.type === 'number' || f.type === 'percent';
@@ -498,9 +484,9 @@ export async function renderMaster(root) {
   function rowEl(m, r) {
     const tr = h('tr', { class: r.isNew ? 'is-new' : null });
     tr.appendChild(h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
-    const previewTd = m.preview ? h('td', { class: 'ss-cell--left' }, m.preview(r.form, previewCtx)) : null;
+    const previewTd = m.preview ? h('td', { class: 'ss-cell--left' }, m.preview(r.form)) : null;
     const onChange = (f) => {
-      if (previewTd) previewTd.textContent = m.preview(r.form, previewCtx);
+      if (previewTd) previewTd.textContent = m.preview(r.form);
       if (f.rerenders) tr.replaceWith(rowEl(m, r)); // 계산방식이 바뀌면 쓸 칸이 바뀐다
     };
     gridFields(m).forEach((f) => tr.appendChild(cellEl(m, f, r, onChange)));
@@ -534,7 +520,8 @@ export async function renderMaster(root) {
     if (f.type === 'percent') value = value == null || value === '' ? '' : +(Number(value) * 100).toFixed(4);
     const attrs = {
       class: 'ss-cellinput', disabled: off, readOnly: !!((f.pk || f.lockOnEdit) && !r.isNew), 'aria-label': f.label,
-      style: isNum ? 'text-align:right' : (f.mono ? 'text-align:center' : null),
+      // 숫자는 우측 정렬. 단, 정렬(sort) 순번은 가운데 (사용자 지정)
+      style: f.key === 'sort' || f.mono ? 'text-align:center' : isNum ? 'text-align:right' : null,
     };
     const inp = isNum
       ? numInput(off ? '' : value, (t) => {
