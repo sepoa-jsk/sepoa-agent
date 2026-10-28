@@ -13,6 +13,7 @@ import { renderTemplates } from './views/templates.js';
 import { renderWizard } from './views/quote/wizard/index.js';
 import { renderSidebar, setActiveNav } from './layout/sidebar.js';
 import { setPage, setUser, PAGE_META } from './layout/gnb.js';
+import { openTab, resetTabs } from './layout/tabbar.js';
 
 export const store = {
   user: null,
@@ -92,6 +93,9 @@ async function router() {
   const metaKey = /^#\/quotes\/\d+$/.test(hash) ? 'detail' : nav;
   const meta = PAGE_META[metaKey] || PAGE_META.quotes;
   setPage({ title: meta.title, path: meta.path, actions: [] });
+  // 하단 탭바 — 견적 상세는 견적마다 탭이 따로 생긴다
+  const detailId = hash.match(/^#\/quotes\/(\d+)/)?.[1];
+  openTab({ key: detailId ? `quote:${detailId}` : nav, title: meta.title, hash });
 
   for (const r of routes) {
     const m = hash.match(r.re);
@@ -129,9 +133,7 @@ function showApp() {
   document.getElementById('login-gate').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   const u = store.user;
-  document.getElementById('user-name').textContent = u.name || u.email;
-  document.getElementById('user-role').textContent = u.role === 'ADMIN' ? '관리자' : '사용자';
-  renderSidebar(document.querySelector('.side'), { isAdmin: u.role === 'ADMIN' });
+  renderSidebar(null, { isAdmin: u.role === 'ADMIN' });
   setUser(u);
 }
 
@@ -140,9 +142,15 @@ async function bootstrap() {
   document.getElementById('logout-btn').onclick = async () => {
     await api.logout();
     store.user = null; store.master = null;
+    resetTabs();
     location.hash = '';
     showLogin();
   };
+
+  // GNB 로고·홈 → 견적 목록
+  for (const id of ['gnb-home', 'gnb-home-logo']) {
+    document.getElementById(id).onclick = () => { location.hash = '#/quotes'; };
+  }
 
   // dev 로그인
   const devForm = document.getElementById('login-dev');

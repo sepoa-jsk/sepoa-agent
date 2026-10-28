@@ -34,3 +34,11 @@ spring:
     import:
       - "optional:file:../quote-legacy/.env[.properties]"
       - "optional:file:./.env[.properties]"
+
+  # 화면 파일(static/)을 브라우저가 캐시하지 않게 한다 — 고친 화면이 바로 보이도록.
+  # ES 모듈(js/views/*.js)은 새로고침만으로는 캐시가 안 풀리는 경우가 있다. 운영은 J9 에서 정한다.
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          no-cache: true

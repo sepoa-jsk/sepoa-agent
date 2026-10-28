@@ -1,13 +1,12 @@
-// GNB (상단바) — 시안(docs/ui-mockup.html) header.gnb 구조. 높이 56px.
+// SingleSuite 셸의 화면 제목 바 + 본문 우측 상단 액션 + GNB 사용자 표시.
 //
-// 화면 ↔ GNB 인터페이스
+// 화면 ↔ 셸 인터페이스 (예전 GNB 와 같다 — 화면 코드는 그대로 부른다)
 //   setPage({ title, path, actions })
-//     title   : 화면 제목 (필수)
-//     path    : 브레드크럼 문자열. 예 '견적관리 / 견적 목록'
-//     actions : GNB 우측에 놓을 버튼 배열. [{ label, onClick, primary?, id? }]
-//   라우팅 시 app.js 가 라우트 테이블의 title/path 로 먼저 호출하고,
-//   화면이 자기 액션 버튼을 올리려면 렌더 중에 setPage({ actions }) 를 다시 부른다.
-//   (title/path 를 생략하면 직전 값을 유지한다)
+//     title   : 화면 제목. 제목 바(41px)에 글자만 들어간다 — 제목 바에는 버튼을 두지 않는다(SingleSuite 규칙)
+//     path    : 예전 브레드크럼. 지금 셸에는 표시하지 않지만 화면들이 넘기므로 받아 둔다
+//     actions : [{ label, onClick, primary?, id? }] — 본문 우측 상단(L2 자리)에 놓는다
+//   라우팅 시 app.js 가 PAGE_META 로 먼저 부르고, 화면이 렌더 중 setPage({ actions }) 로 덮어쓴다.
+//   L1 으로 바꾼 화면은 액션을 툴바 우측에 직접 그리므로 actions 를 넘기지 않는다.
 
 let state = { title: '', path: '', actions: [] };
 
@@ -18,34 +17,33 @@ export function setPage(patch = {}) {
   paint();
 }
 
+// GNB 우측 — 실화면 표기 "이름 ( ID )". ID 는 이메일 앞부분
 export function setUser(user) {
-  const name = (user && (user.name || user.email)) || '';
-  const initial = name ? name.trim().charAt(0).toUpperCase() : '?';
-  const av = el('gnb-avatar');
   const nm = el('gnb-username');
-  if (av) av.textContent = initial;
-  if (nm) nm.textContent = name;
+  if (!nm) return;
+  const id = (user?.email || '').split('@')[0];
+  const name = user?.name || id;
+  nm.textContent = id && id !== name ? `${name} ( ${id} )` : name;
 }
 
 function paint() {
-  const t = el('gnb-title');
-  const p = el('gnb-path');
-  const a = el('gnb-actions');
+  const t = el('page-title');
   if (t) t.textContent = state.title || '';
-  if (p) p.textContent = state.path || '';
+  const a = el('page-actions');
   if (!a) return;
   a.innerHTML = '';
   for (const act of state.actions || []) {
     const b = document.createElement('button');
-    b.className = 'btn' + (act.primary ? ' btn-primary' : '');
+    b.className = 'ss-btn ' + (act.primary ? 'ss-btn--save' : 'ss-btn--default');
     b.textContent = act.label;
     if (act.id) b.id = act.id;
     if (act.onClick) b.addEventListener('click', act.onClick);
     a.appendChild(b);
   }
+  a.hidden = !(state.actions || []).length;
 }
 
-// 라우트별 기본 제목·경로. 사이드바 그룹명을 브레드크럼 앞단으로 쓴다.
+// 라우트별 제목. 하단 탭바도 이 제목을 쓴다.
 export const PAGE_META = {
   quotes: { title: '견적 목록', path: '견적관리 / 견적 목록' },
   new: { title: '견적 작성', path: '견적관리 / 견적 작성' },

@@ -1,0 +1,80 @@
+/* SingleSuite 셸을 이 앱에 붙이는 데 필요한 것만 — ss-base.css(스킬 원본) 위에 얹는다.
+   색은 --ss-* 변수만 쓴다. 기존 tokens/base/components.css 는 아직 전환하지 않은 화면을 위해 남겨 둔다. */
+
+/* hidden 속성이 display:flex 클래스에 지지 않게 */
+[hidden] { display: none !important; }
+
+/* ── GNB: 클릭 가능한 아이콘·사용자·로그아웃 ── */
+.ss-gnb { position: relative; z-index: 50; }
+.ss-gnb__btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  background: none; border: 0; cursor: pointer; color: var(--ss-ink-2);
+}
+.ss-gnb__btn:hover { color: var(--ss-primary); }
+.ss-gnb__btn svg { width: 20px; height: 20px; }
+.ss-gnb__logo { cursor: pointer; }
+.ss-gnb__link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--ss-ink-3); cursor: pointer; }
+.ss-gnb__link:hover { color: var(--ss-primary); }
+
+/* 햄버거 메뉴 — 그룹별 열 */
+.ss-menu {
+  position: absolute; top: var(--ss-gnb-h); left: 0; right: 0;
+  display: flex; gap: 40px; padding: 20px var(--ss-pad-x) 24px;
+  background: #FFFFFF; border-bottom: 1px solid var(--ss-bd-soft);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+}
+.ss-menu[hidden] { display: none; }
+.ss-menu__group { min-width: 150px; }
+.ss-menu__title {
+  padding-bottom: 8px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--ss-bd-soft);
+  font-size: 14px; font-weight: 500; color: var(--ss-ink);
+}
+.ss-menu__item {
+  display: block; padding: 6px 0;
+  font-size: 13px; color: var(--ss-ink-2); text-decoration: none; cursor: pointer;
+}
+.ss-menu__item:hover { color: var(--ss-primary); }
+.ss-menu__item.is-active { color: var(--ss-primary); font-weight: 600; }
+.ss-menu__item--soon { color: #9AA3AF; }
+
+/* ── 하단 탭바: 클릭·닫기 ── */
+.ss-tabbar__tab { cursor: pointer; }
+.ss-tabbar__tab:not(.ss-tabbar__tab--active):hover { background: var(--ss-head-bg); }
+.ss-tabbar__close { cursor: pointer; padding: 0 2px; }
+
+/* ── 본문 ──
+   #view 는 화면이 그리는 자리. L1 그리드가 남은 높이를 채우도록 세로 flex 로 둔다. */
+.ss-view { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-bottom: 16px; }
+
+/* 아직 SingleSuite 로 바꾸지 않은 화면의 액션 버튼 — L2 규칙대로 본문 우측 상단 */
+.ss-pageactions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
+.ss-pageactions[hidden] { display: none; }
+
+/* ── 그리드 보탬 ── */
+.ss-grid tbody tr.is-clickable { cursor: pointer; }
+.ss-grid td.ss-cell--link a { color: inherit; text-decoration: none; }
+.ss-grid td.ss-cell--link a:hover { text-decoration: underline; }
+.ss-grid td.ss-cell--empty { height: 160px; color: #94A3B8; font-weight: 400; }
+
+/* 툴바의 상태 드롭다운 — 상태 버튼 아래로 열린다 */
+.ss-dropdown { position: relative; }
+.ss-dropdown__menu {
+  position: absolute; top: 32px; left: 0; z-index: 40; min-width: 120px;
+  padding: 4px 0; background: #FFFFFF;
+  border: 1px solid var(--ss-bd-input); border-radius: 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+}
+.ss-dropdown__menu[hidden] { display: none; }
+.ss-dropdown__item { display: block; width: 100%; padding: 7px 14px; border: 0; background: none; text-align: left; font: inherit; font-size: 13px; color: var(--ss-ink-2); cursor: pointer; }
+.ss-dropdown__item:hover { background: var(--ss-head-bg); }
+.ss-dropdown__item.is-active { color: var(--ss-primary); font-weight: 600; }
+
+/* 상세 검색 팝오버 — 필터 버튼 아래 */
+.ss-popover { top: 36px; left: 0; z-index: 45; }
+.ss-popover[hidden] { display: none; }
+.ss-popover__close { background: none; border: 0; color: #FFFFFF; font-size: 16px; cursor: pointer; }
+
+/* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
+.ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
+.ss-pager[hidden] { display: none; }

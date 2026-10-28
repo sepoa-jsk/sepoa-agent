@@ -1,14 +1,18 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-ss-theme="legacy">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>세포아 견적 시스템</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@1.3.9/dist/web/static/pretendard.min.css" />
-  <!-- tokens → base → components. app.css 는 작업 7 에서 흡수·제거됨. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" />
+  <!-- tokens → base → components : 아직 SingleSuite 로 바꾸지 않은 화면용.
+       ss-base(스킬 원본) → ss-app(앱 셸 보탬) 을 뒤에 두어 셸·전환한 화면은 이쪽이 이긴다. -->
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/ss-base.css" />
+  <link rel="stylesheet" href="css/ss-app.css" />
 </head>
 <body>
   <!-- 로그인 게이트 -->
@@ -33,36 +37,34 @@
     </div>
   </div>
 
-  <!-- 앱 셸 -->
-  <div id="app-shell" class="app hidden">
-    <aside class="side">
-      <div class="brand">
-        <div class="logo">S</div><span>SingleSuite</span>
+  <!-- 앱 셸 — SingleSuite: GNB → 화면 제목 바 → 본문 → 하단 화면 탭바 -->
+  <div id="app-shell" class="ss-app hidden">
+    <header class="ss-gnb">
+      <span class="ss-gnb__logo" id="gnb-home-logo">SepoaSoft Single Suite</span>
+      <button class="ss-gnb__btn" id="gnb-home" title="홈" aria-label="홈">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5V21H3z"/></svg>
+      </button>
+      <button class="ss-gnb__btn" id="gnb-menu-btn" title="전체 메뉴" aria-label="전체 메뉴" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <span class="ss-gnb__spacer"></span>
+      <div class="ss-gnb__right">
+        <span id="gnb-username"></span>
+        <button class="ss-gnb__link" id="logout-btn">로그아웃</button>
       </div>
-      <nav><!-- layout/sidebar.js 가 채운다 --></nav>
-      <div class="side-foot">
-        <div class="side-user">
-          <div class="side-name" id="user-name"></div>
-          <div class="side-role" id="user-role"></div>
-        </div>
-        <button id="logout-btn" class="btn btn-ghost btn-sm btn-block">로그아웃</button>
+      <nav class="ss-menu" id="gnb-menu" hidden><!-- layout/sidebar.js 가 채운다 --></nav>
+    </header>
+
+    <div class="ss-title" id="page-title"></div>
+
+    <div class="ss-main">
+      <div class="ss-body">
+        <div class="ss-pageactions" id="page-actions" hidden></div>
+        <div id="view" class="ss-view"></div>
       </div>
-    </aside>
-    <main class="main">
-      <header class="gnb">
-        <h1 id="gnb-title"></h1>
-        <span class="path" id="gnb-path"></span>
-        <span class="sp"></span>
-        <span class="gnb-actions" id="gnb-actions"></span>
-        <span class="user">
-          <span id="gnb-username"></span>
-          <span class="avatar" id="gnb-avatar"></span>
-        </span>
-      </header>
-      <div class="content">
-        <div id="view" class="view"></div>
-      </div>
-    </main>
+    </div>
+
+    <nav class="ss-tabbar" id="tabbar"><!-- layout/tabbar.js 가 채운다 --></nav>
   </div>
 
   <div id="toast-root" class="toast-root"></div>
