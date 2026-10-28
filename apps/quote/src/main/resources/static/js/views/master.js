@@ -301,8 +301,9 @@ export async function renderMaster(root) {
     sort = { key: null, dir: null };
     const fields = h('div', { class: 'ss-edithead__fields' });
     if (m.scoped) {
-      fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '솔루션'),
-        h('select', { class: 'ss-select', onchange: (e) => { if (!confirmLeave(e, state.solution)) return; state.solution = e.target.value; load(); } },
+      // 라벨 글자 없이 선택 상자만 (사용자 지정) — 화면 읽기용 이름은 aria-label 로
+      fields.appendChild(h('div', { class: 'ss-field' },
+        h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => { if (!confirmLeave(e, state.solution)) return; state.solution = e.target.value; load(); } },
           ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
     }
     if (m.filterYear) {
