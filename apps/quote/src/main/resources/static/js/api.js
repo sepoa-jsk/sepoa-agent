@@ -1,7 +1,9 @@
 // API 래퍼 — 세션 쿠키 기반. 오류 시 {status, error, message} throw.
 
-// 게이트웨이가 /quote/ 경로 아래로 라우팅하므로 모든 요청에 prefix를 붙인다.
-const BASE = '/quote';
+// Java 앱의 context-path 가 /quote2 라 모든 요청에 prefix를 붙인다.
+// 게이트웨이(:8080/quote2/)와 직접 접속(:3200/quote2/) 모두 같은 경로다.
+// J9 에서 /quote 를 Java 로 전환할 때 이 값도 함께 바꾼다.
+const BASE = '/quote2';
 
 async function req(method, path, body) {
   const url = BASE + path;
