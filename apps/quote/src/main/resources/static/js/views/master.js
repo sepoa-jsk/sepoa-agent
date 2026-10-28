@@ -162,10 +162,19 @@ const MASTERS = [
     ],
   },
   {
-    // 네고율: 전 솔루션 공통. 전용 매트릭스 렌더(custom='nego') — 솔루션 셀렉트 없음,
-    // [상주]/[비상주] 서브탭 + target(행) × 기업구분(열) 매트릭스.
-    type: 'nego_rates', label: '네고율', pk: 'id', scoped: false, custom: 'nego',
-    list: [], fields: [],
+    // 네고율: 전 솔루션 공통. 다른 마스터처럼 한 줄 = 상주여부 · 구분 · 기업구분 · 네고율 (사용자 지정 —
+    // 예전 상주/비상주 탭 + 행렬을 바꿈). 세 칸 조합은 겹칠 수 없다(uniqueCombo).
+    // 기업구분 선택지는 기업구분 마스터의 사용 중인 행에서 가져온다(companyOptions). 테이블에 정렬 컬럼이 없어
+    // 기본 순서는 상주여부 → 구분 → 기업구분 정렬값(defaultOrder). 행삭제는 실제 삭제(사용 컬럼 없음).
+    type: 'nego_rates', label: '네고율', pk: 'id', scoped: false,
+    uniqueCombo: ['onsite_key', 'target', 'company_key'],
+    list: ['onsite_key', 'target', 'company_key', 'rate'],
+    fields: [
+      { key: 'onsite_key', label: '상주여부', type: 'preset', required: true, options: ONSITE_PRESET },
+      { key: 'target', label: '구분', type: 'preset', required: true, options: NEGO_TARGETS },
+      { key: 'company_key', label: '기업구분', type: 'preset', required: true, options: 'company' },
+      { key: 'rate', label: '네고율 (%)', type: 'percent', required: true },
+    ],
   },
   {
     // 유지보수 설정: 계산방식(RATE/MM)에 따라 요율 또는 단가+공수를 관리.
@@ -238,16 +247,16 @@ export async function renderMaster(root) {
   const state = { type: MASTERS[0].type, solution: defaultSolution, year: null };
   let rows = [];     // [{ orig, form, isNew, checked }] — 지금 그리드에 있는 행
   let deleted = [];  // 행삭제한 기존 행 (저장할 때 서버에서 지운다)
-  let negoEdits = {}; // 네고율 id → 새 rate
+  let companyOpts = CLASS_PRESET; // 네고율의 기업구분 선택지 — 기업구분 마스터의 사용 중인 행으로 채운다
+  const optionsOf = (f) => (f.options === 'company' ? companyOpts : f.options);
 
   const current = () => MASTERS.find((m) => m.type === state.type);
   const numType = (f) => f.type === 'money' || f.type === 'number' || f.type === 'percent';
-  // 그리드에 입력칸으로 나오는 필드 — 솔루션은 머리 폼에서 고르므로 뺀다
   // 솔루션은 머리 폼에서 고르므로, hidden 은 마스터가 숨기기로 한 칸이므로 그리드에서 뺀다
   const gridFields = (m) => m.fields.filter((f) => f.type !== 'solution' && !(m.hidden || []).includes(f.key));
   const visible = (f, form) => !f.showIf || f.showIf(form);
   const hasActive = (m) => m.fields.some((f) => f.key === 'active');
-  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r)) || Object.keys(negoEdits).length > 0;
+  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r));
 
   // ── 셸: 화면 제목은 레일 머리가 맡는다 (셸 제목 바는 이 화면에서만 숨김) ──
   document.querySelector('.ss-app')?.classList.add('ss-app--railtitle');
@@ -296,13 +305,12 @@ export async function renderMaster(root) {
   }
 
   function refresh() {
-    rows = []; deleted = []; negoEdits = {};
+    rows = []; deleted = [];
     paintRail();
     clear(pane);
     const m = current();
     pane.appendChild(h('div', { class: 'ss-subtitle' }, `${m.label}`));
-    if (m.custom === 'nego') renderNego();
-    else renderTable();
+    renderTable();
   }
 
   // ── 일반 마스터: 머리 폼 + 편집 그리드 ──
@@ -416,6 +424,19 @@ export async function renderMaster(root) {
       }
       // 사용 중지한 행은 보이지 않는다 (사용자 지정 — 되살리기는 DB 에서 active=1)
       if (hasActive(m)) data = data.filter((r) => r.active);
+      if (m.fields.some((f) => f.options === 'company')) {
+        // 네고율: 기업구분 선택지를 기업구분 마스터(사용 중, 정렬 순)에서 새로 받는다
+        try {
+          const { rows: cc } = await api.masterList('company_classes');
+          const opts = (cc || []).filter((r) => r.active).sort((a, b) => a.sort - b.sort).map((r) => [r.key, r.label]);
+          if (opts.length) companyOpts = opts;
+        } catch { /* 못 받으면 기본 5종 */ }
+        // 기본 순서: 상주여부 → 구분 → 기업구분 (네고율 테이블엔 정렬 컬럼이 없다)
+        const idx = (opts, v) => { const i = opts.findIndex(([k]) => k === v); return i < 0 ? 99 : i; };
+        data.sort((a, b) => idx(ONSITE_PRESET, a.onsite_key) - idx(ONSITE_PRESET, b.onsite_key)
+          || idx(NEGO_TARGETS, a.target) - idx(NEGO_TARGETS, b.target)
+          || idx(companyOpts, a.company_key) - idx(companyOpts, b.company_key));
+      }
       rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false, seq: seq++ }));
       applySort();
       paintRows();
@@ -461,7 +482,7 @@ export async function renderMaster(root) {
     if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
     const num = numType(f) || f.type === 'checkbox';
     const val = (r) => {
-      const v = f.type === 'preset' ? ((f.options.find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key]) : r.form[f.key];
+      const v = f.type === 'preset' ? ((optionsOf(f).find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key]) : r.form[f.key];
       if (v == null || v === '') return null;
       return num ? Number(v) : String(v);
     };
@@ -508,11 +529,11 @@ export async function renderMaster(root) {
       const taken = f.unique ? new Set(rows.filter((x) => x !== r).map((x) => x.form[f.key])) : new Set();
       const sel = h('select', { class: 'ss-cellinput', disabled: off, 'aria-label': f.label, onchange: (e) => {
         form[f.key] = e.target.value;
-        if (f.labelField) form[f.labelField] = (f.options.find(([v]) => v === e.target.value) || [])[1] || '';
+        if (f.labelField) form[f.labelField] = (optionsOf(f).find(([v]) => v === e.target.value) || [])[1] || '';
         fire();
       } },
       h('option', { value: '', selected: !form[f.key] }, '선택'),
-      ...f.options.filter(([v]) => v === form[f.key] || !taken.has(v))
+      ...optionsOf(f).filter(([v]) => v === form[f.key] || !taken.has(v))
         .map(([v, txt]) => h('option', { value: v, selected: v === form[f.key] }, txt)));
       return h('td', { class: 'ss-cell--input' }, sel);
     }
@@ -560,7 +581,6 @@ export async function renderMaster(root) {
   function changed(r) {
     if (r.isNew) return true;
     const m = current();
-    if (m.custom) return false;
     const a = payloadOf(m, r.form, false).payload;
     const b = payloadOf(m, toForm(m, r.orig), false).payload;
     return JSON.stringify(a) !== JSON.stringify(b);
@@ -568,7 +588,6 @@ export async function renderMaster(root) {
 
   async function save() {
     const m = current();
-    if (m.custom === 'nego') return saveNego();
     const creates = rows.filter((r) => r.isNew);
     const updates = rows.filter((r) => !r.isNew && changed(r));
     if (!creates.length && !updates.length && !deleted.length) return toast('변경된 내용이 없습니다.', 'ok');
@@ -581,6 +600,19 @@ export async function renderMaster(root) {
       const vals = rows.map((r) => String(r.form[f.key] ?? '').trim()).filter(Boolean);
       const dup = vals.find((v, i) => vals.indexOf(v) !== i);
       if (dup) return toast(`${f.label}가 겹칩니다: ${dup}`, 'err');
+    }
+    // 여러 칸 조합이 겹치면 안 되는 마스터(네고율: 상주여부 · 구분 · 기업구분)
+    if (m.uniqueCombo) {
+      const keys = rows.map((r) => m.uniqueCombo.map((k) => r.form[k] ?? '').join('|'));
+      const di = keys.findIndex((k, i) => keys.indexOf(k) !== i);
+      if (di >= 0) {
+        const r = rows[di];
+        const label = m.uniqueCombo.map((k) => {
+          const f = m.fields.find((x) => x.key === k);
+          return (optionsOf(f).find(([v]) => v === r.form[k]) || [])[1] || r.form[k];
+        }).join(' · ');
+        return toast(`같은 조합이 두 번 있습니다: ${label}`, 'err');
+      }
     }
     const soft = m.fields.some((f) => f.key === 'active');
     if (deleted.length && !(await confirmModal({
@@ -601,70 +633,6 @@ export async function renderMaster(root) {
     }
     load();
     loadCounts();
-  }
-
-  // ── 네고율: 머리 폼 자리에 저장, 탭 상자(상주/비상주) + 대상 × 기업구분 행렬. 전 솔루션 공통 ──
-  let negoOnsite = 'ONSITE';
-  let negoRows = [];
-
-  async function renderNego() {
-    pane.appendChild(h('div', { class: 'ss-edithead' },
-      h('div', { class: 'ss-edithead__fields' }),
-      h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
-    const tabs = h('div', { class: 'ss-tabs' });
-    const body = h('div', { class: 'ss-tabbox__pane' });
-    pane.appendChild(h('div', { class: 'ss-tabbox' }, tabs, body));
-    try { ({ rows: negoRows } = await api.masterList('nego_rates')); } // solution 인자 없음
-    catch (err) { body.appendChild(h('div', { class: 'ss-empty' }, err.message)); return; }
-    paintNego(tabs, body);
-  }
-
-  function paintNego(tabs, body) {
-    clear(tabs).append(...ONSITE_PRESET.map(([code, label]) => h('div', {
-      class: 'ss-tabs__tab' + (code === negoOnsite ? ' ss-tabs__tab--active' : ''),
-      onclick: () => { negoOnsite = code; paintNego(tabs, body); },
-    }, label)));
-    clear(body);
-    body.appendChild(h('div', { class: 'ss-detailbar' },
-      h('span', { class: 'ss-detailbar__note' }, '칸에 네고율(%)을 입력하고 저장하세요. 솔루션과 관계없이 모두 같은 값이 적용됩니다.')));
-    const find = (target, ck) => negoRows.find((r) => r.target === target && r.company_key === ck && r.onsite_key === negoOnsite);
-    const tb = h('tbody');
-    NEGO_TARGETS.forEach(([target, tlabel]) => {
-      tb.appendChild(h('tr', {},
-        h('td', { class: 'ss-cell--left' }, tlabel),
-        ...CLASS_PRESET.map(([ck]) => {
-          const row = find(target, ck);
-          if (!row) return h('td', { class: 'ss-cell--right' }, '-');
-          const rate = row.id in negoEdits ? negoEdits[row.id] : Number(row.rate);
-          return h('td', { class: 'ss-cell--input' }, h('input', {
-            class: 'ss-cellinput', type: 'number', step: '1', style: 'text-align:right',
-            value: +(rate * 100).toFixed(2), 'aria-label': `${tlabel} ${ck} 네고율`,
-            oninput: (e) => {
-              const v = Number(e.target.value) / 100;
-              if (e.target.value === '' || v === Number(row.rate)) delete negoEdits[row.id];
-              else negoEdits[row.id] = v;
-            },
-          }));
-        })));
-    });
-    const table = h('table', { class: 'ss-grid' },
-      h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
-      h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name + ' (%)')))),
-      tb);
-    body.appendChild(h('div', { class: 'ss-gridwrap' }, table));
-    resizableColumns(table, 'quote2:master-cols:nego_rates');
-  }
-
-  async function saveNego() {
-    const ids = Object.keys(negoEdits);
-    if (!ids.length) return toast('변경된 내용이 없습니다.', 'ok');
-    if (ids.some((id) => !(negoEdits[id] >= 0))) return toast('네고율을 확인하세요.', 'err');
-    let done = 0;
-    try {
-      for (const id of ids) { await api.masterUpdate('nego_rates', id, { rate: negoEdits[id] }); done++; } // rate 만 수정
-      toast(`저장되었습니다. (${done}건)`, 'ok');
-    } catch (err) { toast(`${done}건 저장 후 실패: ${err.message}`, 'err'); }
-    refresh();
   }
 
   refresh();
