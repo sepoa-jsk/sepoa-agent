@@ -61,9 +61,8 @@
 .ss-dropdown__item:hover { background: var(--ss-head-bg); }
 .ss-dropdown__item.is-active { color: var(--ss-primary); font-weight: 600; }
 
-/* 상세 검색 팝오버 — 필터 버튼 아래. 도구가 툴바 우측에 있으므로 오른쪽 끝을 맞춘다 */
-.ss-popover { top: 36px; right: 0; z-index: 45; }
-.ss-dropdown__menu { right: 0; left: auto; }
+/* 상세 검색 팝오버 — 필터 버튼 아래. 도구가 Search 옆(좌측)에 있으므로 왼쪽 끝을 맞춘다 */
+.ss-popover { top: 36px; left: 0; right: auto; z-index: 45; }
 .ss-popover[hidden] { display: none; }
 .ss-popover__close { background: none; border: 0; color: #FFFFFF; font-size: 16px; cursor: pointer; }
 

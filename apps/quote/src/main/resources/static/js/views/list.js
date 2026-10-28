@@ -1,6 +1,6 @@
 // 견적 목록 — SingleSuite L1 조회형 (툴바 + 명세바 + 그리드 상자). toray 적용 화면 기준.
-//   툴바 좌: Search 만 (입력하면 바로 걸린다)
-//   툴바 우: 필터(상세 검색) · 상태 → 신규  — 이 화면에 원래 있던 액션은 "새 견적" 하나뿐이다
+//   툴바 좌: Search (입력하면 바로 걸린다) → 필터(상세 검색) · 상태 — 상자 버튼
+//   툴바 우: 신규  — 이 화면에 원래 있던 액션은 "새 견적" 하나뿐이다
 //   건수: 그리드 바로 위 명세바 우측
 //   기간 선택기는 두지 않는다 — 목록 API 에 기간 조건이 없다
 import { api } from '../api.js';
@@ -90,10 +90,10 @@ export async function renderList(root) {
 
   root.appendChild(h('div', { class: 'ss-toolbar' },
     search,
-    h('div', { class: 'ss-toolbar__spacer' }),
     h('div', { class: 'ss-toolbar__tools' },
       h('div', { class: 'ss-dropdown' }, filterBtn, popover),
       h('div', { class: 'ss-dropdown' }, statusBtn, statusMenu)),
+    h('div', { class: 'ss-toolbar__spacer' }),
     h('div', { class: 'ss-actions' },
       h('button', { class: 'ss-btn ss-btn--save', onclick: () => { location.hash = '#/quotes/new'; } }, '신규'))));
 
