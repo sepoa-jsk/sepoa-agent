@@ -81,6 +81,12 @@
 .ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
 body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
 
+/* 그리드 머리 칸 정렬 — 누르면 오름 ▲ → 내림 ▼ → 원래 순서 */
+.ss-grid th.is-sortable { cursor: pointer; user-select: none; }
+.ss-grid th.is-sortable:hover { background: #EEF2F7; }
+.ss-sortmark { margin-left: 3px; font-size: 8px; color: var(--ss-primary); }
+.ss-sortmark:empty { display: none; }
+
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
 .ss-pager[hidden] { display: none; }

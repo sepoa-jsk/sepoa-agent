@@ -114,6 +114,7 @@ export function resizableColumns(table, storeKey) {
     const grip = document.createElement('span');
     grip.className = 'ss-colgrip';
     grip.title = '끌어서 너비 조절 · 두 번 누르면 처음 너비';
+    grip.addEventListener('click', (e) => e.stopPropagation()); // 머리 칸 정렬 클릭과 겹치지 않게
     grip.addEventListener('mousedown', (e) => {
       e.preventDefault(); e.stopPropagation();
       const w = measure();

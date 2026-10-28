@@ -293,8 +293,12 @@ export async function renderMaster(root) {
 
   // ── 일반 마스터: 머리 폼 + 편집 그리드 ──
   let tbody;
+  let sort = { key: null, dir: null }; // 머리 칸 정렬 — 누를 때마다 오름 → 내림 → 원래 순서
+  let seq = 0;                         // 원래 순서 번호 (불러온 순서, 새 행은 뒤로)
+  let headCells = [];
   function renderTable() {
     const m = current();
+    sort = { key: null, dir: null };
     const fields = h('div', { class: 'ss-edithead__fields' });
     if (m.scoped) {
       fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '솔루션'),
@@ -332,7 +336,11 @@ export async function renderMaster(root) {
       h('colgroup', {}, ...cols),
       h('thead', {}, h('tr', {},
         h('th', { 'data-fixed': '' }, '선택'),
-        ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
+        ...(headCells = gf.map((f) => h('th', {
+          class: 'is-sortable' + (f.required || f.pk ? ' req' : ''),
+          title: '눌러서 정렬',
+          onclick: () => toggleSort(f),
+        }, f.label, h('span', { class: 'ss-sortmark' })))),
         ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
       tbody);
     pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' }, table));
@@ -393,7 +401,8 @@ export async function renderMaster(root) {
       }
       // 사용 중지한 행은 보이지 않는다 (사용자 지정 — 되살리기는 DB 에서 active=1)
       if (hasActive(m)) data = data.filter((r) => r.active);
-      rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false }));
+      rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false, seq: seq++ }));
+      applySort();
       paintRows();
     } catch (err) {
       clear(tbody).appendChild(emptyRow(err.message));
@@ -405,7 +414,7 @@ export async function renderMaster(root) {
     const form = {};
     m.fields.forEach((f) => { form[f.key] = defaultFor(f); if (f.type === 'preset' && f.labelField) form[f.labelField] = ''; });
     if (m.filterYear && state.year != null) form.year = state.year;
-    rows.push({ orig: null, form, isNew: true, checked: false });
+    rows.push({ orig: null, form, isNew: true, checked: false, seq: seq++ }); // 정렬 중이어도 새 행은 맨 아래
     paintRows();
     tbody.lastElementChild?.querySelector('input:not([type=checkbox]), select')?.focus();
   }
@@ -416,6 +425,38 @@ export async function renderMaster(root) {
     picked.forEach((r) => { if (!r.isNew) deleted.push(r.orig); });
     rows = rows.filter((r) => !r.checked);
     paintRows();
+  }
+
+  function toggleSort(f) {
+    const next = sort.key !== f.key ? 'asc' : sort.dir === 'asc' ? 'desc' : null;
+    sort = { key: next ? f.key : null, dir: next };
+    headCells.forEach((th, i) => {
+      const on = gridFields(current())[i].key === sort.key;
+      th.querySelector('.ss-sortmark').textContent = on ? (sort.dir === 'asc' ? '▲' : '▼') : '';
+      th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+    applySort();
+    paintRows();
+  }
+
+  // 지금 칸에 입력된 값 기준. 숫자·체크는 숫자로, 글자는 한글 순서로, 빈 값은 항상 뒤로
+  function applySort() {
+    const m = current();
+    const f = sort.key && m.fields.find((x) => x.key === sort.key);
+    if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
+    const num = numType(f) || f.type === 'checkbox';
+    const val = (r) => {
+      const v = f.type === 'preset' ? ((f.options.find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key]) : r.form[f.key];
+      if (v == null || v === '') return null;
+      return num ? Number(v) : String(v);
+    };
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x == null || y == null) return x == null && y == null ? a.seq - b.seq : x == null ? 1 : -1;
+      const c = num ? x - y : x.localeCompare(y, 'ko', { numeric: true });
+      return c ? c * dir : a.seq - b.seq;
+    });
   }
 
   function paintRows() {
