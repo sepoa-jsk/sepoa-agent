@@ -191,16 +191,14 @@ const MASTERS = [
   },
 ];
 
-const S = {
-  tabActive: 'padding:7px 16px;border-radius:999px;border:1px solid #0747A6;background:#0747A6;color:#fff;font-weight:600;font-size:13px;cursor:pointer',
-  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-2);font-weight:600;font-size:13px;cursor:pointer',
-  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--white);border:0.5px solid var(--line);border-radius:var(--radius)',
-  mono: 'font-family:ui-monospace,SFMono-Regular,Consolas,monospace;color:var(--primary);font-weight:600',
-  linkBtn: 'background:none;border:none;color:var(--primary);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
-  linkDanger: 'background:none;border:none;color:var(--danger);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
-  thead: 'background:var(--bg)',
-  check: 'color:#0747A6;font-weight:700',
-  uncheck: 'color:#ccc',
+// ── 화면 배치 — SingleSuite M1 좌측 레일(a형 구분 네비) + L1 조회형 ──
+//   레일: 마스터 10종. 고른 항목은 좌측 빨간 막대
+//   본문: 툴바(Search → 솔루션/연도 선택 | 신규) → 명세바(안내 · n 건) → 그리드 상자(--fill)
+//   네고율만 본문이 탭 상자(상주/비상주) + 행렬 그리드
+//   추가·수정은 예전 모달을 그대로 쓴다 (입력 규칙·저장 로직 변경 없음)
+
+const icon = {
+  search: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
 };
 
 export async function renderMaster(root) {
@@ -209,21 +207,21 @@ export async function renderMaster(root) {
   const solName = (c) => solutions.find((s) => s.code === c)?.name || c || '-';
 
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
-  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null };
-  let currentRows = []; // 현재 탭에 로드된 행 (preset 중복 제외에 사용)
+  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null, q: '' };
+  let currentRows = []; // 현재 마스터에 로드된 행 (preset 중복 제외에 사용)
+  let years = [];       // 협회노임단가 연도 목록
 
   // 협회노임단가 인덱스(인력구분 모달의 기준단가 미리보기용). 실패해도 무시.
   const previewCtx = { stdIndex: {}, stdLatestYear: null };
   try {
     const { rows } = await api.masterList('labor_standards');
-    const years = [...new Set((rows || []).map((r) => Number(r.year)))].sort((a, b) => b - a);
-    previewCtx.stdLatestYear = years[0] || null;
+    const ys = [...new Set((rows || []).map((r) => Number(r.year)))].sort((a, b) => b - a);
+    previewCtx.stdLatestYear = ys[0] || null;
     (rows || []).forEach((r) => { previewCtx.stdIndex[r.year + ':' + r.role_code] = r; });
   } catch { /* labor_standards 라우트 미반영 등 → 미리보기 생략 */ }
 
   const current = () => MASTERS.find((m) => m.type === state.type);
   const numType = (f) => f.type === 'money' || f.type === 'number';
-  const colClass = (f) => (numType(f) ? 'num' : f.type === 'checkbox' ? 'center' : '');
   // list 항목은 'key' | ['key','헤더'] | ['key','헤더', 포맷함수(v,row)] 를 허용한다.
   const listKey = (it) => (Array.isArray(it) ? it[0] : it);
   const listHeader = (it, fm) => (Array.isArray(it) ? it[1] : fm[listKey(it)].label);
@@ -240,134 +238,178 @@ export async function renderMaster(root) {
     return map;
   }
 
-  // ── 헤더 (추가 버튼은 목록 하단) ──
-  root.appendChild(h('div', { class: 'page-head' },
-    h('div', {},
-      h('div', { class: 'page-title' }, '마스터 관리'),
-      h('div', { class: 'page-sub' }, '견적의 기준정보를 관리합니다. 단가는 가격정책 관리에서 설정합니다.')
-    )
-  ));
+  // ── 레일 ──
+  const rail = h('aside', { class: 'ss-rail' },
+    h('div', { class: 'ss-rail__head' }, h('span', {}, '기준정보')));
+  const railItems = MASTERS.map((m) => {
+    const it = h('div', { class: 'ss-rail__item', onclick: () => { state.type = m.type; state.q = ''; refresh(); } },
+      h('span', {}, m.label));
+    rail.appendChild(it);
+    return it;
+  });
 
-  // ── 탭 바 ──
-  const tabbar = h('div', { style: 'display:flex;align-items:center;gap:8px;margin:4px 0 14px;flex-wrap:wrap' });
-  tabbar.appendChild(h('span', { style: 'font-size:12px;color:var(--text-3);font-weight:700;margin-right:2px' }, '기준정보'));
-  MASTERS.forEach((m) => tabbar.appendChild(h('button', {
-    dataset: { tab: m.type },
-    style: m.type === state.type ? S.tabActive : S.tabIdle,
-    onclick: () => { state.type = m.type; refresh(); },
-  }, m.label)));
-  root.appendChild(tabbar);
+  // ── 본문 ──
+  const pane = h('div', { class: 'ss-railview__body' });
+  root.appendChild(h('div', { class: 'ss-railview' }, rail, pane));
 
-  // ── 컨텍스트 바 (모듈 탭에서만 솔루션 셀렉트) ──
-  const ctxWrap = h('div', {});
-  root.appendChild(ctxWrap);
-
-  // ── 테이블 + 하단 추가 버튼 ──
-  const thead = h('thead');
-  const tbody = h('tbody');
-  const tablePanel = h('div', { class: 'panel' }, h('div', { class: 'table-wrap' },
-    h('table', { class: 'grid master-grid' }, thead, tbody)));
-  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editRow(null) }, '+ 새 항목 추가');
-  const customWrap = h('div', { style: 'display:none' }); // 네고율 매트릭스 등 전용 렌더 영역
-  root.appendChild(tablePanel);
-  root.appendChild(addBtn);
-  root.appendChild(customWrap);
-  let negoOnsite = 'ONSITE'; // 네고율 서브탭 상태 (상주/비상주)
-
-  function syncTabs() {
-    tabbar.querySelectorAll('button').forEach((b) => {
-      b.setAttribute('style', b.dataset.tab === state.type ? S.tabActive : S.tabIdle);
-    });
-  }
-
-  function buildContextBar() {
-    clear(ctxWrap);
-    if (!current().scoped) return;
-    const sel = h('select', { class: 'select', onchange: () => { state.solution = sel.value; load(); } },
-      ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)));
-    ctxWrap.appendChild(h('div', { style: S.ctxBar },
-      h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '솔루션'), sel));
-  }
-
-  // 연도 필터 셀렉트(협회노임단가 등 filterYear 마스터). 데이터에서 연도를 뽑아 구성.
-  function buildYearFilter(years) {
-    clear(ctxWrap);
-    const sel = h('select', { class: 'select', onchange: () => { state.year = Number(sel.value); load(); } },
-      ...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
-    ctxWrap.appendChild(h('div', { style: S.ctxBar },
-      h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '연도'), sel));
-  }
-
-  function buildHead() {
-    const fm = fmap(current());
-    clear(thead).appendChild(h('tr', { style: S.thead },
-      ...current().list.map((it) => h('th', { class: colClass(fm[listKey(it)]) }, listHeader(it, fm))),
-      h('th', { style: 'text-align:right' }, '관리')
-    ));
+  function syncRail() {
+    MASTERS.forEach((m, i) => railItems[i].classList.toggle('ss-rail__item--active', m.type === state.type));
   }
 
   function refresh() {
-    syncTabs();
-    const m = current();
-    if (m.custom === 'nego') {
-      // 전용 매트릭스: 솔루션 셀렉트·일반 테이블·추가 버튼 숨김.
-      clear(ctxWrap);
-      tablePanel.style.display = 'none';
-      addBtn.style.display = 'none';
-      customWrap.style.display = 'block';
-      renderNegoMatrix();
-      return;
-    }
-    tablePanel.style.display = '';
-    addBtn.style.display = '';
-    customWrap.style.display = 'none';
-    buildContextBar(); buildHead(); load();
+    syncRail();
+    clear(pane);
+    if (current().custom === 'nego') renderNego();
+    else renderTable();
   }
 
-  // ── 네고율 전용 매트릭스 (전 솔루션 공통) ──
+  // ── 일반 마스터: L1 ──
+  let tbody, count, yearSel;
+  function renderTable() {
+    const m = current();
+    const fm = fmap(m);
+
+    const searchInput = h('input', {
+      placeholder: 'Search', value: state.q,
+      oninput: () => { state.q = searchInput.value.trim(); paintRows(); },
+    });
+    const tools = h('div', { class: 'ss-toolbar__tools' });
+    if (m.scoped) {
+      tools.appendChild(h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => { state.solution = e.target.value; load(); } },
+        ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code))));
+    }
+    yearSel = h('select', { class: 'ss-select', 'aria-label': '연도', hidden: !m.filterYear, onchange: (e) => { state.year = Number(e.target.value); paintRows(); } });
+    tools.appendChild(yearSel);
+
+    pane.appendChild(h('div', { class: 'ss-toolbar' },
+      h('div', { class: 'ss-search' }, searchInput,
+        h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search })),
+      tools,
+      h('div', { class: 'ss-toolbar__spacer' }),
+      h('div', { class: 'ss-actions' },
+        h('button', { class: 'ss-btn ss-btn--save', onclick: () => editRow(null) }, '신규'))));
+
+    count = h('span', { class: 'ss-detailbar__count' });
+    const hasActive = m.fields.some((f) => f.key === 'active');
+    const note = m.type === 'modules' ? '단가는 가격정책에서 관리합니다.'
+      : hasActive ? '중지한 항목은 흐리게 표시됩니다.' : '';
+    pane.appendChild(h('div', { class: 'ss-detailbar' },
+      note ? h('span', { class: 'ss-detailbar__note' }, note) : null,
+      h('div', { class: 'ss-detailbar__spacer' }), count));
+
+    tbody = h('tbody');
+    pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' },
+      h('table', { class: 'ss-grid' },
+        h('thead', {}, h('tr', {},
+          ...m.list.map((it) => h('th', {}, listHeader(it, fm))),
+          h('th', { style: 'width:130px' }, '관리'))),
+        tbody)));
+
+    load();
+  }
+
+  // 셀 표시 — 코드는 링크색 굵게, 금액은 우측 정렬, 사용 여부는 글자로 (이모지·기호 없음)
+  function cell(f, v, fmt, row) {
+    if (fmt) return h('td', {}, fmt(v, row));
+    const blank = v == null || v === '';
+    if (f.mono || f.key === 'code') return h('td', { class: 'ss-cell--link' }, blank ? '-' : String(v));
+    if (f.type === 'money') return h('td', { class: 'ss-cell--amount' }, won(v));
+    if (f.type === 'number') return h('td', { class: 'ss-cell--right' }, blank ? '-' : String(v));
+    if (f.key === 'active') return v ? h('td', {}, '사용') : h('td', { class: 'ss-cell--emphasis' }, '중지');
+    if (f.type === 'checkbox') return h('td', {}, v ? 'Y' : '-');
+    if (f.type === 'solution') return h('td', {}, solName(v));
+    return h('td', { class: 'ss-cell--left' }, blank ? '-' : String(v));
+  }
+
+  const emptyRow = (text) => h('tr', {}, h('td', { colspan: current().list.length + 1, class: 'ss-cell--empty' }, text));
+
+  async function load() {
+    const m = current();
+    clear(tbody).appendChild(emptyRow('불러오는 중...'));
+    try {
+      const { rows } = await api.masterList(m.type, m.scoped ? state.solution : undefined);
+      currentRows = rows || [];
+      if (m.filterYear) {
+        years = [...new Set(currentRows.map((r) => Number(r.year)))].sort((a, b) => b - a);
+        if (state.year == null || !years.includes(state.year)) state.year = years[0] ?? null;
+        clear(yearSel).append(...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
+      }
+      paintRows();
+    } catch (err) {
+      clear(tbody).appendChild(emptyRow(err.message));
+    }
+  }
+
+  // Search 는 받아 둔 행 안에서 보이는 칸 글자로 거른다 (서버 조회 없음)
+  function paintRows() {
+    const m = current();
+    const fm = fmap(m);
+    const hasActive = m.fields.some((f) => f.key === 'active');
+    let list = m.filterYear ? currentRows.filter((r) => Number(r.year) === state.year) : currentRows;
+    const total = list.length;
+    if (state.q) {
+      const q = state.q.toLowerCase();
+      list = list.filter((row) => m.list.some((it) => {
+        const k = listKey(it); const fmt = listFmt(it);
+        const v = fmt ? fmt(row[k], row) : row[k];
+        return v != null && String(v).toLowerCase().includes(q);
+      }));
+    }
+    // n 건 — 검색으로 줄었을 때만 "보이는 건수 / 전체"
+    clear(count).append(h('b', {}, String(list.length)), list.length < total ? ` / ${total} 건` : ' 건');
+    clear(tbody);
+    if (!list.length) { tbody.appendChild(emptyRow(state.q ? '검색 결과가 없습니다.' : '데이터가 없습니다.')); return; }
+    const delLabel = hasActive ? '중지' : '삭제'; // active 있으면 서버가 소프트 삭제
+    for (const row of list) {
+      tbody.appendChild(h('tr', { class: hasActive && !row.active ? 'is-dim' : null },
+        ...m.list.map((it) => { const k = listKey(it); return cell(fm[k] || { key: k }, row[k], listFmt(it), row); }),
+        h('td', {},
+          h('span', { class: 'ss-rowbtns' },
+            h('button', { class: 'ss-btn ss-btn--gridrow ss-btn--sm', onclick: () => editRow(row) }, '수정'),
+            h('button', { class: 'ss-btn ss-btn--delete ss-btn--sm', disabled: hasActive && !row.active, onclick: () => delRow(row) }, delLabel)))));
+    }
+  }
+
+  // ── 네고율: 탭 상자(상주/비상주) + 대상 × 기업구분 행렬. 전 솔루션 공통 ──
   const targetLabel = (t) => (t === 'MODULE' ? '모듈(솔루션)' : '인력');
   const companyLabel = (k) => (CLASS_PRESET.find(([v]) => v === k) || [])[1] || k;
   const onsiteLabel = (k) => (k === 'ONSITE' ? '상주' : '비상주');
+  let negoOnsite = 'ONSITE';
 
-  async function renderNegoMatrix() {
-    clear(customWrap).appendChild(loading());
+  async function renderNego() {
+    const tabs = h('div', { class: 'ss-tabs' },
+      ...ONSITE_PRESET.map(([code, label]) => h('div', {
+        class: 'ss-tabs__tab' + (code === negoOnsite ? ' ss-tabs__tab--active' : ''),
+        onclick: () => { negoOnsite = code; refresh(); },
+      }, label)));
+    const body = h('div', { class: 'ss-tabbox__pane' });
+    pane.appendChild(h('div', { class: 'ss-tabbox' }, tabs, body));
+    body.appendChild(h('div', { class: 'ss-detailbar' },
+      h('span', { class: 'ss-detailbar__note' }, '값을 누르면 네고율을 수정합니다. 솔루션과 관계없이 모두 같은 값이 적용됩니다.')));
+
+    const tb = h('tbody');
+    body.appendChild(h('div', { class: 'ss-gridwrap' },
+      h('table', { class: 'ss-grid' },
+        h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
+        h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name)))),
+        tb)));
+    tb.appendChild(h('tr', {}, h('td', { colspan: CLASS_PRESET.length + 1, class: 'ss-cell--empty' }, '불러오는 중...')));
+
     let rows;
     try { ({ rows } = await api.masterList('nego_rates')); } // solution 인자 없음
-    catch (err) { clear(customWrap).appendChild(h('div', { class: 'empty' }, err.message)); return; }
-    clear(customWrap);
-
-    // 상주/비상주 서브탭
-    const subtabs = h('div', { style: 'display:flex;gap:8px;margin:4px 0 10px' });
-    ONSITE_PRESET.forEach(([code, label]) => subtabs.appendChild(h('button', {
-      style: code === negoOnsite ? S.tabActive : S.tabIdle,
-      onclick: () => { negoOnsite = code; renderNegoMatrix(); },
-    }, label)));
-    customWrap.appendChild(subtabs);
-    customWrap.appendChild(h('div', { class: 'page-sub', style: 'margin-bottom:10px' },
-      '셀을 클릭하면 네고율을 수정합니다. (솔루션과 무관하게 전 솔루션 공통 적용)'));
-
+    catch (err) { clear(tb).appendChild(h('tr', {}, h('td', { colspan: CLASS_PRESET.length + 1, class: 'ss-cell--empty' }, err.message))); return; }
     const find = (target, ck) => rows.find((r) => r.target === target && r.company_key === ck && r.onsite_key === negoOnsite);
-    const thead2 = h('thead', {}, h('tr', { style: S.thead },
-      h('th', {}, '구분'),
-      ...CLASS_PRESET.map(([, name]) => h('th', { class: 'num' }, name))
-    ));
-    const tbody2 = h('tbody');
+    clear(tb);
     NEGO_TARGETS.forEach(([target, tlabel]) => {
-      tbody2.appendChild(h('tr', {},
-        h('td', { style: 'font-weight:600' }, tlabel),
+      tb.appendChild(h('tr', {},
+        h('td', { class: 'ss-cell--left' }, tlabel),
         ...CLASS_PRESET.map(([ck]) => {
           const row = find(target, ck);
-          const pct = row ? (Number(row.rate) * 100).toFixed(0) + '%' : '-';
-          return h('td', {
-            class: 'num',
-            style: row ? 'cursor:pointer;color:var(--primary);font-weight:600' : 'color:#ccc',
-            onclick: row ? () => editRate(row) : null,
-          }, pct);
-        })
-      ));
+          return row
+            ? h('td', { class: 'ss-cell--link ss-cell--right is-clickable', onclick: () => editRate(row) }, (Number(row.rate) * 100).toFixed(0) + '%')
+            : h('td', { class: 'ss-cell--right' }, '-');
+        })));
     });
-    customWrap.appendChild(h('div', { class: 'panel' }, h('div', { class: 'table-wrap' },
-      h('table', { class: 'grid master-grid' }, thead2, tbody2))));
   }
 
   function editRate(row) {
@@ -387,57 +429,9 @@ export async function renderMaster(root) {
         await api.masterUpdate('nego_rates', row.id, { rate }); // rate 만 수정
         toast('저장되었습니다.', 'ok');
         modal.close();
-        renderNegoMatrix();
+        refresh();
       } catch (err) { toast(err.message, 'err'); saveBtn.disabled = false; }
     };
-  }
-
-  function cellNode(f, v) {
-    if (f.mono) return h('span', { style: S.mono }, v == null || v === '' ? '-' : String(v));
-    if (f.type === 'money') return won(v);
-    if (f.type === 'checkbox') return v ? h('span', { style: S.check }, '✓') : h('span', { style: S.uncheck }, '–');
-    if (f.type === 'solution') return solName(v);
-    return v == null || v === '' ? '-' : String(v);
-  }
-
-  async function load() {
-    const m = current();
-    const fm = fmap(m);
-    const hasActive = m.fields.some((f) => f.key === 'active');
-    const colspan = m.list.length + 1;
-    clear(tbody).appendChild(h('tr', {}, h('td', { colspan }, loading())));
-    try {
-      const { rows } = await api.masterList(m.type, m.scoped ? state.solution : undefined);
-      let list = rows || [];
-      if (m.filterYear) {
-        const years = [...new Set(list.map((r) => Number(r.year)))].sort((a, b) => b - a);
-        if (state.year == null || !years.includes(state.year)) state.year = years[0] ?? null;
-        buildYearFilter(years);
-        list = list.filter((r) => Number(r.year) === state.year);
-      }
-      currentRows = list;
-      clear(tbody);
-      if (currentRows.length === 0) {
-        tbody.appendChild(h('tr', {}, h('td', { colspan }, h('div', { class: 'empty' }, '데이터가 없습니다.'))));
-        return;
-      }
-      const delLabel = hasActive ? '중지' : '삭제'; // active 있으면 서버가 소프트 삭제
-      for (const row of currentRows) {
-        const dim = hasActive && !row.active;
-        tbody.appendChild(h('tr', { style: dim ? 'opacity:.5' : null },
-          ...m.list.map((it) => {
-            const k = listKey(it); const fmt = listFmt(it);
-            return h('td', { class: colClass(fm[k]) }, fmt ? fmt(row[k], row) : cellNode(fm[k], row[k]));
-          }),
-          h('td', { style: 'text-align:right' },
-            h('button', { style: S.linkBtn, onclick: () => editRow(row) }, '수정'),
-            h('button', { style: S.linkDanger, onclick: () => delRow(row) }, delLabel)
-          )
-        ));
-      }
-    } catch (err) {
-      clear(tbody).appendChild(h('tr', {}, h('td', { colspan }, h('div', { class: 'empty' }, err.message))));
-    }
   }
 
   async function delRow(row) {

@@ -66,6 +66,21 @@
 .ss-popover[hidden] { display: none; }
 .ss-popover__close { background: none; border: 0; color: #FFFFFF; font-size: 16px; cursor: pointer; }
 
+/* ── M1 좌측 레일 화면 ──
+   셸의 본문(.ss-body) 안에 그려지므로 본문 여백을 걷어내고 레일을 왼쪽 끝·탭바 위까지 붙인다.
+   레일 오른쪽 본문은 셸 본문과 같은 16px 여백 */
+.ss-railview { flex: 1; display: flex; min-height: 0; margin: -16px calc(-1 * var(--ss-pad-x)); }
+.ss-railview > .ss-rail { overflow: auto; }
+.ss-railview__body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px var(--ss-pad-x); }
+.ss-rail__item--active { color: var(--ss-ink); font-weight: 500; }
+
+/* 그리드 안 행 버튼 — 39px 행에 들어가는 작은 크기 */
+.ss-btn--sm { height: 26px; padding: 0 10px; }
+.ss-rowbtns { display: inline-flex; gap: 4px; }
+.ss-grid tbody tr.is-dim td { color: #94A3B8; }
+.ss-grid td.is-clickable { cursor: pointer; }
+.ss-grid td.is-clickable:hover { text-decoration: underline; }
+
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
 .ss-pager[hidden] { display: none; }
