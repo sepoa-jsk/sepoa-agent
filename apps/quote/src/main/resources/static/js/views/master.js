@@ -56,7 +56,8 @@ const MASTERS = [
   {
     // 기업구분: 5종 고정. 드롭다운으로 고르면 key/label 이 함께 정해진다.
     // solution/deployment 는 저장 시 PROCURE/ONPREM 자동 주입(화면 노출 안 함).
-    type: 'company_classes', label: '기업구분', pk: 'id', scoped: false,
+    // fixed: 5종(CLASS_PRESET) 고정 — 행추가·행삭제·사용·정렬 없이 매출조건만 고친다. 순서는 CLASS_PRESET 순.
+    type: 'company_classes', label: '기업구분', pk: 'id', scoped: false, fixed: true,
     inject: { solution: 'PROCURE', deployment: 'ONPREM' },
     list: ['label', 'revenue_cond', 'active'],
     fields: [
@@ -223,7 +224,8 @@ export async function renderMaster(root) {
   const current = () => MASTERS.find((m) => m.type === state.type);
   const numType = (f) => f.type === 'money' || f.type === 'number' || f.type === 'percent';
   // 그리드에 입력칸으로 나오는 필드 — 솔루션은 머리 폼에서 고르므로 뺀다
-  const gridFields = (m) => m.fields.filter((f) => f.type !== 'solution');
+  // 고정 마스터는 사용·정렬 칸도 뺀다
+  const gridFields = (m) => m.fields.filter((f) => f.type !== 'solution' && !(m.fixed && (f.key === 'active' || f.key === 'sort')));
   const visible = (f, form) => !f.showIf || f.showIf(form);
   const hasActive = (m) => m.fields.some((f) => f.key === 'active');
   const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r)) || Object.keys(negoEdits).length > 0;
@@ -303,31 +305,31 @@ export async function renderMaster(root) {
     // 행추가 · 행삭제는 저장 바로 왼쪽에 붙인다 (사용자 요청 — 캡처의 명세바 좌측 배치 대신)
     pane.appendChild(h('div', { class: 'ss-edithead' }, fields,
       h('div', { class: 'ss-actions' },
-        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
-        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
+        m.fixed ? null : h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
+        m.fixed ? null : h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
         h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
     // 편집 그리드 위에는 건수 줄을 두지 않는다 (건수는 레일에 있다). 안내 문구가 있는 마스터만 한 줄
-    if (m.type === 'modules') {
-      pane.appendChild(h('div', { class: 'ss-detailbar' },
-        h('span', { class: 'ss-detailbar__note' }, '단가는 가격정책에서 관리합니다.')));
-    }
+    const note = m.type === 'modules' ? '단가는 가격정책에서 관리합니다.'
+      : m.fixed ? `${m.label}은 ${CLASS_PRESET.length}개로 고정되어 있습니다. 매출조건만 고칠 수 있습니다.` : '';
+    if (note) pane.appendChild(h('div', { class: 'ss-detailbar' }, h('span', { class: 'ss-detailbar__note' }, note)));
 
     const gf = gridFields(m);
+    const sel = m.fixed ? 0 : 60; // 고정 마스터는 고를 일이 없어 선택 칸을 두지 않는다
     // 첫 칸은 '선택' — 60px 고정 (사용자 지정)
     // 표가 본문보다 좁으면 남는 폭은 비고(없으면 이름 → 고르는 칸) 칸이 받는다 — 다른 칸 폭은 그대로
     const flex = gf.find((f) => f.key === 'note')
       || gf.find((f) => ['name', 'role_name', 'revenue_cond'].includes(f.key))
       || gf.find((f) => f.type === 'preset') || gf[gf.length - 1];
-    const cols = [h('col', { style: 'width:60px' }),
+    const cols = [sel ? h('col', { style: 'width:60px' }) : null,
       ...gf.map((f) => h('col', { style: f === flex ? null : `width:${colWidth(f)}px` })),
       ...(m.preview ? [h('col', { style: 'width:220px' })] : [])];
     tbody = h('tbody');
     pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' },
-      h('table', { class: 'ss-grid', style: `min-width:${60 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
+      h('table', { class: 'ss-grid', style: `min-width:${sel + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
         h('colgroup', {}, ...cols),
         h('thead', {}, h('tr', {},
-          h('th', {}, '선택'),
+          sel ? h('th', {}, '선택') : null,
           ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
           ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
         tbody)));
@@ -387,6 +389,11 @@ export async function renderMaster(root) {
       }
       // 사용 중지한 행은 보이지 않는다 (사용자 지정 — 되살리기는 DB 에서 active=1)
       if (hasActive(m)) data = data.filter((r) => r.active);
+      if (m.fixed) {
+        // 고정 5종만, CLASS_PRESET 순서로
+        const order = CLASS_PRESET.map(([k]) => k);
+        data = data.filter((r) => order.includes(r.key)).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+      }
       rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false }));
       paintRows();
     } catch (err) {
@@ -422,7 +429,7 @@ export async function renderMaster(root) {
 
   function rowEl(m, r) {
     const tr = h('tr', { class: r.isNew ? 'is-new' : null });
-    tr.appendChild(h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
+    if (!m.fixed) tr.appendChild(h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
     const previewTd = m.preview ? h('td', { class: 'ss-cell--left' }, m.preview(r.form, previewCtx)) : null;
     const onChange = (f) => {
       if (previewTd) previewTd.textContent = m.preview(r.form, previewCtx);
@@ -440,6 +447,10 @@ export async function renderMaster(root) {
     if (f.type === 'checkbox') {
       return h('td', {}, h('input', { type: 'checkbox', checked: !!form[f.key], 'aria-label': f.label,
         onchange: (e) => { form[f.key] = e.target.checked ? 1 : 0; fire(); } }));
+    }
+    if (f.type === 'preset' && m.fixed) {
+      // 고정 마스터의 구분 값은 바꿀 수 없다 — 글자로만
+      return h('td', { class: 'ss-cell--left' }, (f.options.find(([v]) => v === form[f.key]) || [])[1] || form[f.labelField] || form[f.key]);
     }
     if (f.type === 'preset') {
       // unique(정체성 코드)면 다른 행이 이미 쓴 값은 고를 수 없다
