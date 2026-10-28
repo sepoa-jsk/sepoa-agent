@@ -43,20 +43,6 @@
       "health": null,
       "enabled": true,
       "note": "Java 이식 예정 (ROADMAP 2단계). 글 생성은 AI 엔진으로 이관"
-    },
-    {
-      "id": "work",
-      "name": "일일업무관리",
-      "dept": "경영지원",
-      "path": "/work",
-      "port": 3300,
-      "stripPrefix": false,
-      "stack": "java",
-      "dir": "apps/daily-work",
-      "start": ".\\mvnw.cmd spring-boot:run",
-      "health": "/work/api/health",
-      "enabled": false,
-      "note": "Java 이식 예정 (ROADMAP 3단계). 현행 Python 버전은 별도 레포 work_agent(:8000)에서 운영"
     }
   ],
   "internal": [

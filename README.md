@@ -7,7 +7,6 @@
 |---|---|---|---|---|
 | 견적자동화 | 영업 | `/quote` | `apps/quote` (Java) · `apps/quote-legacy` (Node, 운영 중) | Java 이식 J5~J9 진행 |
 | 블로그작성 | 마케팅 | `/blog` | `apps/blog` (Node + Claude Code 하네스) | Java 이식 예정 |
-| 일일업무관리 | 경영지원 | `/work` | `apps/daily-work` (예정) · 현행 별도 레포 `work_agent` | Java 이식 예정 |
 | AI 엔진 | (내부) | 비노출 | `platform/ai-engine` (Python) | 골격 |
 
 ## 문서
@@ -44,7 +43,7 @@
 
 ```
 platform/  ports.json · gateway/ · ai-engine/
-apps/      quote/ · quote-legacy/ · blog/ · daily-work/
+apps/      quote/ · quote-legacy/ · blog/
 docs/      ARCHITECTURE · STANDARDS · ROADMAP
 dev.ps1
 ```
