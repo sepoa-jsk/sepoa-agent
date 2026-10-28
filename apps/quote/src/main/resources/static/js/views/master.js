@@ -300,15 +300,15 @@ export async function renderMaster(root) {
     const m = current();
     sort = { key: null, dir: null };
     const fields = h('div', { class: 'ss-edithead__fields' });
+    // 솔루션 · 연도 모두 라벨 글자 없이 선택 상자만 (사용자 지정) — 화면 읽기용 이름은 aria-label 로
     if (m.scoped) {
-      // 라벨 글자 없이 선택 상자만 (사용자 지정) — 화면 읽기용 이름은 aria-label 로
       fields.appendChild(h('div', { class: 'ss-field' },
         h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => { if (!confirmLeave(e, state.solution)) return; state.solution = e.target.value; load(); } },
           ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
     }
     if (m.filterYear) {
-      fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '연도'),
-        h('select', { class: 'ss-select', id: 'master-year', onchange: (e) => { state.year = Number(e.target.value); load(); } })));
+      fields.appendChild(h('div', { class: 'ss-field' },
+        h('select', { class: 'ss-select', id: 'master-year', 'aria-label': '연도', onchange: (e) => { state.year = Number(e.target.value); load(); } })));
     }
     // 행추가 · 행삭제는 저장 바로 왼쪽에 붙인다 (사용자 요청 — 캡처의 명세바 좌측 배치 대신)
     pane.appendChild(h('div', { class: 'ss-edithead' }, fields,
