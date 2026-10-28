@@ -107,6 +107,8 @@ async function router() {
       }
       try {
         clear(viewEl());
+        // 레일 머리가 화면 제목을 맡는 화면(마스터 관리)이 숨긴 셸 제목 바를 되돌린다
+        document.querySelector('.ss-app')?.classList.remove('ss-app--railtitle');
         await r.view(m);
       } catch (err) {
         if (err.status === 401) return showLogin();

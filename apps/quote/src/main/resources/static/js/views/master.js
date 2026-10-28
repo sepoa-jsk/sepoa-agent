@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, toast, loading, clear, openModal, confirmModal } from '../ui.js';
+import { h, won, toast, clear, confirmModal } from '../ui.js';
 
 // ── 마스터 정의 ────────────────────────────────────────────────
 // 영업팀(실무자) 기준 목록/모달. 개발용 컬럼(코드·솔루션 등)은 숨기고,
@@ -191,11 +191,11 @@ const MASTERS = [
   },
 ];
 
-// ── 화면 배치 — SingleSuite M1 좌측 레일(a형 구분 네비) + L1 조회형 ──
-//   레일: 마스터 10종. 고른 항목은 좌측 빨간 막대
-//   본문: 툴바(Search → 솔루션/연도 선택 | 신규) → 명세바(안내 · n 건) → 그리드 상자(--fill)
-//   네고율만 본문이 탭 상자(상주/비상주) + 행렬 그리드
-//   추가·수정은 예전 모달을 그대로 쓴다 (입력 규칙·저장 로직 변경 없음)
+// ── 화면 배치 — SingleSuite M1 d형(코드 목록 레일) + 편집 그리드 ──
+//   레일: 머리 = 화면 제목 · 마스터 10종(이름 / 건수). 고른 항목은 회색 배경 + 오른쪽 빨간 막대
+//   본문: 제목 줄(고른 마스터) → 머리 폼(솔루션·연도) | 저장 → 행추가 · 행삭제 · n 건 → 편집 그리드
+//   등록·수정·삭제는 팝업 없이 그리드에서 하고, 저장 한 번에 서버로 보낸다
+//   네고율만 탭 상자(상주/비상주) + 대상 × 기업구분 행렬, 칸에 바로 입력
 
 const icon = {
   search: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
@@ -204,394 +204,388 @@ const icon = {
 export async function renderMaster(root) {
   const master = await store.getMaster();
   const solutions = master.solutions || [];
-  const solName = (c) => solutions.find((s) => s.code === c)?.name || c || '-';
 
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
-  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null, q: '' };
-  let currentRows = []; // 현재 마스터에 로드된 행 (preset 중복 제외에 사용)
-  let years = [];       // 협회노임단가 연도 목록
+  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null };
+  let rows = [];     // [{ orig, form, isNew, checked }] — 지금 그리드에 있는 행
+  let deleted = [];  // 행삭제한 기존 행 (저장할 때 서버에서 지운다)
+  let negoEdits = {}; // 네고율 id → 새 rate
 
-  // 협회노임단가 인덱스(인력구분 모달의 기준단가 미리보기용). 실패해도 무시.
+  // 협회노임단가 인덱스(인력구분의 기준단가 참고 칸). 실패해도 무시.
   const previewCtx = { stdIndex: {}, stdLatestYear: null };
   try {
-    const { rows } = await api.masterList('labor_standards');
-    const ys = [...new Set((rows || []).map((r) => Number(r.year)))].sort((a, b) => b - a);
+    const { rows: std } = await api.masterList('labor_standards');
+    const ys = [...new Set((std || []).map((r) => Number(r.year)))].sort((a, b) => b - a);
     previewCtx.stdLatestYear = ys[0] || null;
-    (rows || []).forEach((r) => { previewCtx.stdIndex[r.year + ':' + r.role_code] = r; });
-  } catch { /* labor_standards 라우트 미반영 등 → 미리보기 생략 */ }
+    (std || []).forEach((r) => { previewCtx.stdIndex[r.year + ':' + r.role_code] = r; });
+  } catch { /* labor_standards 라우트 미반영 등 → 참고 칸 생략 */ }
 
   const current = () => MASTERS.find((m) => m.type === state.type);
-  const numType = (f) => f.type === 'money' || f.type === 'number';
-  // list 항목은 'key' | ['key','헤더'] | ['key','헤더', 포맷함수(v,row)] 를 허용한다.
-  const listKey = (it) => (Array.isArray(it) ? it[0] : it);
-  const listHeader = (it, fm) => (Array.isArray(it) ? it[1] : fm[listKey(it)].label);
-  const listFmt = (it) => (Array.isArray(it) && typeof it[2] === 'function' ? it[2] : null);
+  const numType = (f) => f.type === 'money' || f.type === 'number' || f.type === 'percent';
+  // 그리드에 입력칸으로 나오는 필드 — 솔루션은 머리 폼에서 고르므로 뺀다
+  const gridFields = (m) => m.fields.filter((f) => f.type !== 'solution');
+  const visible = (f, form) => !f.showIf || f.showIf(form);
+  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r)) || Object.keys(negoEdits).length > 0;
 
-  // 목록/헤더용 필드 맵. preset 의 labelField(이름 컬럼)도 표시용으로 등록한다.
-  function fmap(m) {
-    const map = Object.fromEntries(m.fields.map((f) => [f.key, f]));
-    m.fields.forEach((f) => {
-      if (f.type === 'preset' && f.labelField && !map[f.labelField]) {
-        map[f.labelField] = { key: f.labelField, label: '이름', type: 'text' };
-      }
-    });
-    return map;
-  }
+  // ── 셸: 화면 제목은 레일 머리가 맡는다 (셸 제목 바는 이 화면에서만 숨김) ──
+  document.querySelector('.ss-app')?.classList.add('ss-app--railtitle');
 
   // ── 레일 ──
-  const rail = h('aside', { class: 'ss-rail' },
-    h('div', { class: 'ss-rail__head' }, h('span', {}, '기준정보')));
-  const railItems = MASTERS.map((m) => {
-    const it = h('div', { class: 'ss-rail__item', onclick: () => { state.type = m.type; state.q = ''; refresh(); } },
-      h('span', {}, m.label));
-    rail.appendChild(it);
-    return it;
-  });
+  const railSearch = h('input', { placeholder: 'Search', oninput: () => paintRail() });
+  const railList = h('div');
+  const rail = h('aside', { class: 'ss-rail ss-rail--code', style: '--ss-rail-w:280px' },
+    h('div', { class: 'ss-rail__head ss-rail__head--title' }, '마스터 관리'),
+    h('div', { class: 'ss-rail__search' }, h('div', { class: 'ss-search' }, railSearch,
+      h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search }))),
+    railList);
+  const counts = {};
+  function paintRail() {
+    const q = railSearch.value.trim();
+    clear(railList);
+    for (const m of MASTERS.filter((x) => !q || x.label.includes(q))) {
+      railList.appendChild(h('div', {
+        class: 'ss-rail__code' + (m.type === state.type ? ' ss-rail__code--active' : ''),
+        onclick: () => go(m.type),
+      },
+      h('span', { class: 'ss-rail__code-key' }, m.label),
+      h('span', { class: 'ss-rail__code-name' }, counts[m.type] == null ? '' : `${counts[m.type]} 건`)));
+    }
+  }
+  async function loadCounts() {
+    try {
+      const all = await api.masterAll();
+      MASTERS.forEach((m) => { if (Array.isArray(all[m.type])) counts[m.type] = all[m.type].length; });
+    } catch { /* 건수는 참고용 */ }
+    paintRail();
+  }
 
-  // ── 본문 ──
   const pane = h('div', { class: 'ss-railview__body' });
   root.appendChild(h('div', { class: 'ss-railview' }, rail, pane));
 
-  function syncRail() {
-    MASTERS.forEach((m, i) => railItems[i].classList.toggle('ss-rail__item--active', m.type === state.type));
+  async function go(type) {
+    if (type === state.type) return;
+    if (isDirty() && !(await confirmModal({
+      title: '저장하지 않은 변경',
+      message: '저장하지 않은 변경이 있습니다. 버리고 이동하시겠습니까?',
+      okLabel: '이동', danger: true,
+    }))) return;
+    state.type = type;
+    refresh();
   }
 
   function refresh() {
-    syncRail();
+    rows = []; deleted = []; negoEdits = {};
+    paintRail();
     clear(pane);
-    if (current().custom === 'nego') renderNego();
+    const m = current();
+    pane.appendChild(h('div', { class: 'ss-subtitle' }, `${m.label}`));
+    if (m.custom === 'nego') renderNego();
     else renderTable();
   }
 
-  // ── 일반 마스터: L1 ──
-  let tbody, count, yearSel;
+  // ── 일반 마스터: 머리 폼 + 편집 그리드 ──
+  let tbody, count;
   function renderTable() {
     const m = current();
-    const fm = fmap(m);
-
-    const searchInput = h('input', {
-      placeholder: 'Search', value: state.q,
-      oninput: () => { state.q = searchInput.value.trim(); paintRows(); },
-    });
-    const tools = h('div', { class: 'ss-toolbar__tools' });
+    const fields = h('div', { class: 'ss-edithead__fields' });
     if (m.scoped) {
-      tools.appendChild(h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => { state.solution = e.target.value; load(); } },
-        ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code))));
+      fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '솔루션'),
+        h('select', { class: 'ss-select', onchange: (e) => { if (!confirmLeave(e, state.solution)) return; state.solution = e.target.value; load(); } },
+          ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
     }
-    yearSel = h('select', { class: 'ss-select', 'aria-label': '연도', hidden: !m.filterYear, onchange: (e) => { state.year = Number(e.target.value); paintRows(); } });
-    tools.appendChild(yearSel);
-
-    pane.appendChild(h('div', { class: 'ss-toolbar' },
-      h('div', { class: 'ss-search' }, searchInput,
-        h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search })),
-      tools,
-      h('div', { class: 'ss-toolbar__spacer' }),
-      h('div', { class: 'ss-actions' },
-        h('button', { class: 'ss-btn ss-btn--save', onclick: () => editRow(null) }, '신규'))));
+    if (m.filterYear) {
+      fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '연도'),
+        h('select', { class: 'ss-select', id: 'master-year', onchange: (e) => { state.year = Number(e.target.value); load(); } })));
+    }
+    pane.appendChild(h('div', { class: 'ss-edithead' }, fields,
+      h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
     count = h('span', { class: 'ss-detailbar__count' });
-    const hasActive = m.fields.some((f) => f.key === 'active');
-    const note = m.type === 'modules' ? '단가는 가격정책에서 관리합니다.'
-      : hasActive ? '중지한 항목은 흐리게 표시됩니다.' : '';
     pane.appendChild(h('div', { class: 'ss-detailbar' },
-      note ? h('span', { class: 'ss-detailbar__note' }, note) : null,
+      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
+      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
+      h('span', { class: 'ss-detailbar__note' }, m.type === 'modules' ? '단가는 가격정책에서 관리합니다.' : ''),
       h('div', { class: 'ss-detailbar__spacer' }), count));
 
+    const gf = gridFields(m);
+    const cols = [h('col', { style: 'width:44px' }),
+      ...gf.map((f) => h('col', { style: `width:${colWidth(f)}px` })),
+      ...(m.preview ? [h('col', { style: 'width:220px' })] : [])];
     tbody = h('tbody');
+    const allCheck = h('input', { type: 'checkbox', 'aria-label': '전체 선택', onchange: (e) => { rows.forEach((r) => { r.checked = e.target.checked; }); paintRows(); } });
     pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' },
-      h('table', { class: 'ss-grid' },
+      h('table', { class: 'ss-grid', style: `min-width:${44 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
+        h('colgroup', {}, ...cols),
         h('thead', {}, h('tr', {},
-          ...m.list.map((it) => h('th', {}, listHeader(it, fm))),
-          h('th', { style: 'width:130px' }, '관리'))),
+          h('th', {}, allCheck),
+          ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
+          ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
         tbody)));
-
     load();
   }
 
-  // 셀 표시 — 코드는 링크색 굵게, 금액은 우측 정렬, 사용 여부는 글자로 (이모지·기호 없음)
-  function cell(f, v, fmt, row) {
-    if (fmt) return h('td', {}, fmt(v, row));
-    const blank = v == null || v === '';
-    if (f.mono || f.key === 'code') return h('td', { class: 'ss-cell--link' }, blank ? '-' : String(v));
-    if (f.type === 'money') return h('td', { class: 'ss-cell--amount' }, won(v));
-    if (f.type === 'number') return h('td', { class: 'ss-cell--right' }, blank ? '-' : String(v));
-    if (f.key === 'active') return v ? h('td', {}, '사용') : h('td', { class: 'ss-cell--emphasis' }, '중지');
-    if (f.type === 'checkbox') return h('td', {}, v ? 'Y' : '-');
-    if (f.type === 'solution') return h('td', {}, solName(v));
-    return h('td', { class: 'ss-cell--left' }, blank ? '-' : String(v));
+  function colWidth(f) {
+    if (f.type === 'checkbox') return 60;
+    if (f.full || f.key === 'note' || f.key === 'revenue_cond') return 240;
+    if (f.type === 'preset') return 170;
+    if (f.key === 'name' || f.key === 'role_name') return 180;
+    if (f.type === 'number' && f.key === 'sort') return 70;
+    return 130;
   }
 
-  const emptyRow = (text) => h('tr', {}, h('td', { colspan: current().list.length + 1, class: 'ss-cell--empty' }, text));
+  // 머리 폼 솔루션을 바꿀 때 저장 안 한 변경이 있으면 되돌린다
+  function confirmLeave(e, prev) {
+    if (!isDirty()) return true;
+    toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
+    e.target.value = prev;
+    return false;
+  }
+
+  const emptyRow = (text) => h('tr', {}, h('td', { colspan: gridFields(current()).length + 2, class: 'ss-cell--empty' }, text));
+
+  // 서버 행 → 입력 상태
+  function toForm(m, row) {
+    const form = {};
+    m.fields.forEach((f) => {
+      form[f.key] = f.type === 'checkbox' ? (row[f.key] ? 1 : 0) : row[f.key];
+      if (f.type === 'preset' && f.labelField) form[f.labelField] = row[f.labelField];
+    });
+    return form;
+  }
+
+  function defaultFor(f) {
+    if (f.default != null) return f.default;
+    if (f.type === 'checkbox') return f.key === 'active' ? 1 : 0;
+    if (f.type === 'solution') return state.solution || solutions[0]?.code || '';
+    if (f.type === 'number' && f.key === 'sort') return rows.length + 1;
+    return null;
+  }
 
   async function load() {
     const m = current();
+    rows = []; deleted = [];
     clear(tbody).appendChild(emptyRow('불러오는 중...'));
     try {
-      const { rows } = await api.masterList(m.type, m.scoped ? state.solution : undefined);
-      currentRows = rows || [];
+      const { rows: list } = await api.masterList(m.type, m.scoped ? state.solution : undefined);
+      let data = list || [];
       if (m.filterYear) {
-        years = [...new Set(currentRows.map((r) => Number(r.year)))].sort((a, b) => b - a);
+        const years = [...new Set(data.map((r) => Number(r.year)))].sort((a, b) => b - a);
         if (state.year == null || !years.includes(state.year)) state.year = years[0] ?? null;
-        clear(yearSel).append(...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
+        const sel = document.getElementById('master-year');
+        if (sel) clear(sel).append(...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
+        data = data.filter((r) => Number(r.year) === state.year);
       }
+      rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false }));
       paintRows();
     } catch (err) {
       clear(tbody).appendChild(emptyRow(err.message));
     }
   }
 
-  // Search 는 받아 둔 행 안에서 보이는 칸 글자로 거른다 (서버 조회 없음)
-  function paintRows() {
+  function addRow() {
     const m = current();
-    const fm = fmap(m);
-    const hasActive = m.fields.some((f) => f.key === 'active');
-    let list = m.filterYear ? currentRows.filter((r) => Number(r.year) === state.year) : currentRows;
-    const total = list.length;
-    if (state.q) {
-      const q = state.q.toLowerCase();
-      list = list.filter((row) => m.list.some((it) => {
-        const k = listKey(it); const fmt = listFmt(it);
-        const v = fmt ? fmt(row[k], row) : row[k];
-        return v != null && String(v).toLowerCase().includes(q);
-      }));
-    }
-    // n 건 — 검색으로 줄었을 때만 "보이는 건수 / 전체"
-    clear(count).append(h('b', {}, String(list.length)), list.length < total ? ` / ${total} 건` : ' 건');
-    clear(tbody);
-    if (!list.length) { tbody.appendChild(emptyRow(state.q ? '검색 결과가 없습니다.' : '데이터가 없습니다.')); return; }
-    const delLabel = hasActive ? '중지' : '삭제'; // active 있으면 서버가 소프트 삭제
-    for (const row of list) {
-      tbody.appendChild(h('tr', { class: hasActive && !row.active ? 'is-dim' : null },
-        ...m.list.map((it) => { const k = listKey(it); return cell(fm[k] || { key: k }, row[k], listFmt(it), row); }),
-        h('td', {},
-          h('span', { class: 'ss-rowbtns' },
-            h('button', { class: 'ss-btn ss-btn--gridrow ss-btn--sm', onclick: () => editRow(row) }, '수정'),
-            h('button', { class: 'ss-btn ss-btn--delete ss-btn--sm', disabled: hasActive && !row.active, onclick: () => delRow(row) }, delLabel)))));
-    }
+    const form = {};
+    m.fields.forEach((f) => { form[f.key] = defaultFor(f); if (f.type === 'preset' && f.labelField) form[f.labelField] = ''; });
+    if (m.filterYear && state.year != null) form.year = state.year;
+    rows.push({ orig: null, form, isNew: true, checked: false });
+    paintRows();
+    tbody.lastElementChild?.querySelector('input:not([type=checkbox]), select')?.focus();
   }
 
-  // ── 네고율: 탭 상자(상주/비상주) + 대상 × 기업구분 행렬. 전 솔루션 공통 ──
-  const targetLabel = (t) => (t === 'MODULE' ? '모듈(솔루션)' : '인력');
-  const companyLabel = (k) => (CLASS_PRESET.find(([v]) => v === k) || [])[1] || k;
-  const onsiteLabel = (k) => (k === 'ONSITE' ? '상주' : '비상주');
+  function removeRows() {
+    const picked = rows.filter((r) => r.checked);
+    if (!picked.length) return toast('삭제할 행을 선택하세요.', 'err');
+    picked.forEach((r) => { if (!r.isNew) deleted.push(r.orig); });
+    rows = rows.filter((r) => !r.checked);
+    paintRows();
+  }
+
+  function paintRows() {
+    const m = current();
+    const total = rows.length;
+    clear(count).append(h('b', {}, String(total)), ' 건');
+    if (deleted.length) count.append(` · 삭제 예정 ${deleted.length} 건`);
+    clear(tbody);
+    if (!total) { tbody.appendChild(emptyRow('데이터가 없습니다. 행추가로 등록하세요.')); return; }
+    rows.forEach((r) => tbody.appendChild(rowEl(m, r)));
+  }
+
+  function rowEl(m, r) {
+    const tr = h('tr', { class: r.isNew ? 'is-new' : null });
+    tr.appendChild(h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
+    const previewTd = m.preview ? h('td', { class: 'ss-cell--left' }, m.preview(r.form, previewCtx)) : null;
+    const onChange = (f) => {
+      if (previewTd) previewTd.textContent = m.preview(r.form, previewCtx);
+      if (f.rerenders) tr.replaceWith(rowEl(m, r)); // 계산방식이 바뀌면 쓸 칸이 바뀐다
+    };
+    gridFields(m).forEach((f) => tr.appendChild(cellEl(m, f, r, onChange)));
+    if (previewTd) tr.appendChild(previewTd);
+    return tr;
+  }
+
+  function cellEl(m, f, r, onChange) {
+    const form = r.form;
+    const off = !visible(f, form);
+    const fire = () => onChange(f);
+    if (f.type === 'checkbox') {
+      return h('td', {}, h('input', { type: 'checkbox', checked: !!form[f.key], 'aria-label': f.label,
+        onchange: (e) => { form[f.key] = e.target.checked ? 1 : 0; fire(); } }));
+    }
+    if (f.type === 'preset') {
+      // unique(정체성 코드)면 다른 행이 이미 쓴 값은 고를 수 없다
+      const taken = f.unique ? new Set(rows.filter((x) => x !== r).map((x) => x.form[f.key])) : new Set();
+      const sel = h('select', { class: 'ss-cellinput', disabled: off, 'aria-label': f.label, onchange: (e) => {
+        form[f.key] = e.target.value;
+        if (f.labelField) form[f.labelField] = (f.options.find(([v]) => v === e.target.value) || [])[1] || '';
+        fire();
+      } },
+      h('option', { value: '', selected: !form[f.key] }, '선택'),
+      ...f.options.filter(([v]) => v === form[f.key] || !taken.has(v))
+        .map(([v, txt]) => h('option', { value: v, selected: v === form[f.key] }, txt)));
+      return h('td', { class: 'ss-cell--input' }, sel);
+    }
+    const isNum = numType(f);
+    let value = form[f.key];
+    if (f.type === 'percent') value = value == null || value === '' ? '' : +(Number(value) * 100).toFixed(4);
+    const inp = h('input', {
+      class: 'ss-cellinput', type: isNum ? 'number' : 'text', step: isNum ? (f.step || 'any') : null,
+      value: off ? '' : (value ?? ''), disabled: off, readOnly: !!(f.pk && !r.isNew), 'aria-label': f.label,
+      style: isNum ? 'text-align:right' : (f.mono ? 'text-align:center' : null),
+      oninput: (e) => {
+        const t = e.target.value;
+        form[f.key] = f.type === 'percent' ? (t === '' ? null : Number(t) / 100) : t;
+        fire();
+      },
+    });
+    return h('td', { class: 'ss-cell--input' + (f.mono ? ' ss-cell--link' : '') }, inp);
+  }
+
+  // 입력 상태 → 저장할 값 (예전 모달과 같은 규칙: 숨은 칸은 보내지 않음, 고정 컬럼 주입)
+  function payloadOf(m, form, isNew) {
+    const payload = {};
+    let missing = null;
+    m.fields.filter((f) => visible(f, form)).forEach((f) => {
+      let v = form[f.key];
+      if (f.type === 'preset') {
+        if (f.required && (v === '' || v == null)) missing = missing || f.label;
+        payload[f.key] = v;
+        if (f.labelField) payload[f.labelField] = form[f.labelField];
+        return;
+      }
+      if (numType(f)) v = (v === '' || v == null) ? null : Number(v);
+      else if (f.type === 'checkbox') v = v ? 1 : 0;
+      if ((f.required || (f.pk && isNew)) && (v === '' || v == null)) missing = missing || f.label;
+      payload[f.key] = v;
+    });
+    if (m.inject) Object.assign(payload, m.inject);
+    if (isNew && m.injectOnCreate) Object.assign(payload, m.injectOnCreate);
+    if (isNew && m.scoped) payload.solution = state.solution;
+    return { payload, missing };
+  }
+
+  function changed(r) {
+    if (r.isNew) return true;
+    const m = current();
+    if (m.custom) return false;
+    const a = payloadOf(m, r.form, false).payload;
+    const b = payloadOf(m, toForm(m, r.orig), false).payload;
+    return JSON.stringify(a) !== JSON.stringify(b);
+  }
+
+  async function save() {
+    const m = current();
+    if (m.custom === 'nego') return saveNego();
+    const creates = rows.filter((r) => r.isNew);
+    const updates = rows.filter((r) => !r.isNew && changed(r));
+    if (!creates.length && !updates.length && !deleted.length) return toast('변경된 내용이 없습니다.', 'ok');
+    for (const r of [...creates, ...updates]) {
+      const { missing } = payloadOf(m, r.form, r.isNew);
+      if (missing) return toast(`필수 항목을 확인하세요: ${missing}`, 'err');
+    }
+    const soft = m.fields.some((f) => f.key === 'active');
+    if (deleted.length && !(await confirmModal({
+      title: soft ? '사용 중지' : '삭제',
+      message: soft
+        ? `행삭제한 ${deleted.length}건은 사용 중지됩니다(목록엔 '중지'로 남습니다). 저장하시겠습니까?`
+        : `행삭제한 ${deleted.length}건을 삭제합니다. 저장하시겠습니까?`,
+      okLabel: '저장', danger: true,
+    }))) return;
+    let done = 0;
+    try {
+      for (const o of deleted) { await api.masterDelete(m.type, o[m.pk]); done++; }
+      for (const r of creates) { await api.masterCreate(m.type, payloadOf(m, r.form, true).payload); done++; }
+      for (const r of updates) { await api.masterUpdate(m.type, r.orig[m.pk], payloadOf(m, r.form, false).payload); done++; }
+      toast(`저장되었습니다. (${done}건)`, 'ok');
+    } catch (err) {
+      toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
+    }
+    load();
+    loadCounts();
+  }
+
+  // ── 네고율: 머리 폼 자리에 저장, 탭 상자(상주/비상주) + 대상 × 기업구분 행렬. 전 솔루션 공통 ──
   let negoOnsite = 'ONSITE';
+  let negoRows = [];
 
   async function renderNego() {
-    const tabs = h('div', { class: 'ss-tabs' },
-      ...ONSITE_PRESET.map(([code, label]) => h('div', {
-        class: 'ss-tabs__tab' + (code === negoOnsite ? ' ss-tabs__tab--active' : ''),
-        onclick: () => { negoOnsite = code; refresh(); },
-      }, label)));
+    pane.appendChild(h('div', { class: 'ss-edithead' },
+      h('div', { class: 'ss-edithead__fields' }),
+      h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
+    const tabs = h('div', { class: 'ss-tabs' });
     const body = h('div', { class: 'ss-tabbox__pane' });
     pane.appendChild(h('div', { class: 'ss-tabbox' }, tabs, body));
+    try { ({ rows: negoRows } = await api.masterList('nego_rates')); } // solution 인자 없음
+    catch (err) { body.appendChild(h('div', { class: 'ss-empty' }, err.message)); return; }
+    paintNego(tabs, body);
+  }
+
+  function paintNego(tabs, body) {
+    clear(tabs).append(...ONSITE_PRESET.map(([code, label]) => h('div', {
+      class: 'ss-tabs__tab' + (code === negoOnsite ? ' ss-tabs__tab--active' : ''),
+      onclick: () => { negoOnsite = code; paintNego(tabs, body); },
+    }, label)));
+    clear(body);
     body.appendChild(h('div', { class: 'ss-detailbar' },
-      h('span', { class: 'ss-detailbar__note' }, '값을 누르면 네고율을 수정합니다. 솔루션과 관계없이 모두 같은 값이 적용됩니다.')));
-
+      h('span', { class: 'ss-detailbar__note' }, '칸에 네고율(%)을 입력하고 저장하세요. 솔루션과 관계없이 모두 같은 값이 적용됩니다.')));
+    const find = (target, ck) => negoRows.find((r) => r.target === target && r.company_key === ck && r.onsite_key === negoOnsite);
     const tb = h('tbody');
-    body.appendChild(h('div', { class: 'ss-gridwrap' },
-      h('table', { class: 'ss-grid' },
-        h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
-        h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name)))),
-        tb)));
-    tb.appendChild(h('tr', {}, h('td', { colspan: CLASS_PRESET.length + 1, class: 'ss-cell--empty' }, '불러오는 중...')));
-
-    let rows;
-    try { ({ rows } = await api.masterList('nego_rates')); } // solution 인자 없음
-    catch (err) { clear(tb).appendChild(h('tr', {}, h('td', { colspan: CLASS_PRESET.length + 1, class: 'ss-cell--empty' }, err.message))); return; }
-    const find = (target, ck) => rows.find((r) => r.target === target && r.company_key === ck && r.onsite_key === negoOnsite);
-    clear(tb);
     NEGO_TARGETS.forEach(([target, tlabel]) => {
       tb.appendChild(h('tr', {},
         h('td', { class: 'ss-cell--left' }, tlabel),
         ...CLASS_PRESET.map(([ck]) => {
           const row = find(target, ck);
-          return row
-            ? h('td', { class: 'ss-cell--link ss-cell--right is-clickable', onclick: () => editRate(row) }, (Number(row.rate) * 100).toFixed(0) + '%')
-            : h('td', { class: 'ss-cell--right' }, '-');
+          if (!row) return h('td', { class: 'ss-cell--right' }, '-');
+          const rate = row.id in negoEdits ? negoEdits[row.id] : Number(row.rate);
+          return h('td', { class: 'ss-cell--input' }, h('input', {
+            class: 'ss-cellinput', type: 'number', step: '1', style: 'text-align:right',
+            value: +(rate * 100).toFixed(2), 'aria-label': `${tlabel} ${ck} 네고율`,
+            oninput: (e) => {
+              const v = Number(e.target.value) / 100;
+              if (e.target.value === '' || v === Number(row.rate)) delete negoEdits[row.id];
+              else negoEdits[row.id] = v;
+            },
+          }));
         })));
     });
+    body.appendChild(h('div', { class: 'ss-gridwrap' },
+      h('table', { class: 'ss-grid' },
+        h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
+        h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name + ' (%)')))),
+        tb)));
   }
 
-  function editRate(row) {
-    const inp = h('input', { class: 'input', type: 'number', step: '0.01', value: row.rate });
-    const saveBtn = h('button', { class: 'btn btn-primary' }, '저장');
-    const modal = openModal({
-      title: `네고율 수정 — ${targetLabel(row.target)} / ${companyLabel(row.company_key)} / ${onsiteLabel(row.onsite_key)}`,
-      body: h('div', {}, h('div', { class: 'field' },
-        h('label', {}, '네고율 (예: 0.6 = 60%)'), inp)),
-      footer: [h('button', { class: 'btn', onclick: () => modal.close() }, '취소'), saveBtn],
-    });
-    saveBtn.onclick = async () => {
-      const rate = Number(inp.value);
-      if (!(rate >= 0)) return toast('네고율을 입력하세요.', 'err');
-      saveBtn.disabled = true;
-      try {
-        await api.masterUpdate('nego_rates', row.id, { rate }); // rate 만 수정
-        toast('저장되었습니다.', 'ok');
-        modal.close();
-        refresh();
-      } catch (err) { toast(err.message, 'err'); saveBtn.disabled = false; }
-    };
-  }
-
-  async function delRow(row) {
-    const m = current();
-    const soft = m.fields.some((f) => f.key === 'active');
-    const idVal = row[m.pk];
-    const name = row.name || row.label || row['key'] || row.code || idVal;
-    const ok = await confirmModal({
-      title: soft ? '사용 중지' : '삭제',
-      message: soft
-        ? `'${name}' 항목을 사용 중지하시겠습니까? (목록엔 남고 '중지' 상태가 됩니다)`
-        : `'${name}' 항목을 삭제하시겠습니까?`,
-      okLabel: soft ? '중지' : '삭제', danger: true,
-    });
-    if (!ok) return;
+  async function saveNego() {
+    const ids = Object.keys(negoEdits);
+    if (!ids.length) return toast('변경된 내용이 없습니다.', 'ok');
+    if (ids.some((id) => !(negoEdits[id] >= 0))) return toast('네고율을 확인하세요.', 'err');
+    let done = 0;
     try {
-      await api.masterDelete(m.type, idVal);
-      toast(soft ? '사용 중지되었습니다.' : '삭제되었습니다.', 'ok');
-      load();
-    } catch (err) { toast(err.message, 'err'); }
-  }
-
-  // ── 추가/수정 모달 ──
-  function defaultFor(f) {
-    if (f.default != null) return f.default;
-    if (numType(f)) return 0;
-    if (f.type === 'checkbox') return f.key === 'active' ? 1 : 0;
-    if (f.type === 'solution') return state.solution || solutions[0]?.code || '';
-    return ''; // text / preset
-  }
-
-  function buildInput(f, form, isNew, onChange) {
-    const fire = () => { if (onChange) onChange(); };
-    const set = (v) => { form[f.key] = v; fire(); };
-    if (f.type === 'preset') {
-      // unique(정체성 코드)인 경우에만 신규 추가 시 이미 존재하는 값을 제외(중복 방지).
-      const existing = f.unique ? new Set(currentRows.map((r) => r[f.key])) : null;
-      const avail = f.options.filter(([val]) => (isNew && existing ? !existing.has(val) : true));
-      const setPreset = (val) => {
-        form[f.key] = val;
-        if (f.labelField) {
-          const opt = f.options.find(([v]) => v === val);
-          form[f.labelField] = opt ? opt[1] : '';
-        }
-        fire();
-      };
-      return h('select', { class: 'select', onchange: (e) => setPreset(e.target.value) },
-        isNew ? h('option', { value: '', selected: !form[f.key] }, '선택하세요') : null,
-        ...avail.map(([val, txt]) => h('option', { value: val, selected: val === form[f.key] }, txt)));
-    }
-    if (f.type === 'solution') {
-      return h('select', { class: 'select', onchange: (e) => set(e.target.value) },
-        ...solutions.map((s) => h('option', { value: s.code, selected: s.code === form[f.key] }, `${s.name || s.code} (${s.code})`)));
-    }
-    if (f.type === 'checkbox') {
-      const cb = h('input', { type: 'checkbox', checked: !!form[f.key], onchange: (e) => set(e.target.checked ? 1 : 0) });
-      return h('label', { style: 'display:flex;align-items:center;gap:8px;cursor:pointer' }, cb,
-        h('span', {}, f.key === 'active' ? '사용 (체크 해제 시 중지)' : '적용'));
-    }
-    if (f.type === 'percent') {
-      // 화면엔 % 로 입력받고 저장은 소수(0.xx)로. 예: 15 입력 → 0.15 저장.
-      const disp = (form[f.key] == null || form[f.key] === '') ? '' : Number(form[f.key]) * 100;
-      return h('input', {
-        class: 'input', type: 'number', step: f.step || '0.1', value: disp,
-        oninput: (e) => { const t = e.target.value; form[f.key] = (t === '' ? null : Number(t) / 100); fire(); },
-      });
-    }
-    const attrs = {
-      class: 'input',
-      type: numType(f) ? 'number' : 'text',
-      value: form[f.key] ?? '',
-      oninput: (e) => set(e.target.value),
-    };
-    if (numType(f)) attrs.step = f.step || 'any';
-    if (f.pk && !isNew) attrs.disabled = true;
-    return h('input', attrs);
-  }
-
-  function fld(f, input) {
-    const hint = f.type === 'money' ? ' (원)' : f.pk ? ' (수정 불가)' : '';
-    return h('div', { class: f.full ? 'field full' : 'field' },
-      h('label', {}, f.label + hint), input);
-  }
-
-  function editRow(row) {
-    const m = current();
-    const isNew = !row;
-    const form = {};
-    m.fields.forEach((f) => {
-      form[f.key] = row ? (f.type === 'checkbox' ? (row[f.key] ? 1 : 0) : row[f.key]) : defaultFor(f);
-      if (f.type === 'preset' && f.labelField) form[f.labelField] = row ? row[f.labelField] : ''; // 이름 컬럼 동기화
-    });
-    if (isNew && m.scoped) {
-      const sf = m.fields.find((f) => f.type === 'solution');
-      if (sf) form[sf.key] = state.solution;
-    }
-    if (isNew && m.filterYear && state.year != null) form.year = state.year; // 현재 연도 필터값으로
-
-    // 실시간 미리보기(예: 협회노임단가 → 기준단가)
-    let previewEl = null;
-    const refreshPreview = m.preview
-      ? () => { previewEl.textContent = m.preview(form, previewCtx); }
-      : null;
-    if (m.preview) previewEl = h('div', { style: 'margin-top:12px;padding:10px 12px;background:var(--primary-weak);border-radius:8px;font-weight:700;color:var(--primary);text-align:right' });
-
-    // showIf 로 조건부 노출. rerenders 필드(예: calc_type) 변경 시 폼을 다시 그린다.
-    const gridEl = h('div', { class: 'form-grid' });
-    function renderFields() {
-      clear(gridEl);
-      m.fields.filter((f) => !f.showIf || f.showIf(form)).forEach((f) => {
-        const onChange = () => {
-          if (refreshPreview) refreshPreview();
-          if (f.rerenders) renderFields();
-        };
-        gridEl.appendChild(fld(f, buildInput(f, form, isNew, onChange)));
-      });
-    }
-    renderFields();
-    const body = h('div', {}, gridEl, previewEl);
-    if (refreshPreview) refreshPreview();
-
-    const saveBtn = h('button', { class: 'btn btn-primary' }, isNew ? '추가' : '저장');
-    const modal = openModal({
-      title: `${m.label} ${isNew ? '추가' : '수정'}`,
-      body,
-      footer: [h('button', { class: 'btn', onclick: () => modal.close() }, '취소'), saveBtn],
-    });
-
-    saveBtn.onclick = async () => {
-      const payload = {};
-      let missing = null;
-      // 조건부(showIf) 로 숨겨진 필드는 저장하지 않는다(엉뚱한 기본값 방지).
-      m.fields.filter((f) => !f.showIf || f.showIf(form)).forEach((f) => {
-        if (f.type === 'preset') {
-          const v = form[f.key];
-          if (f.required && (v === '' || v == null)) missing = missing || f.label;
-          payload[f.key] = v;                        // 코드(key/code/target 등)
-          if (f.labelField) payload[f.labelField] = form[f.labelField]; // 이름 컬럼 동시 세팅
-          return;
-        }
-        let v = form[f.key];
-        if (numType(f)) v = (v === '' || v == null) ? null : Number(v);
-        else if (f.type === 'checkbox') v = v ? 1 : 0;
-        if (f.required && (v === '' || v == null)) missing = missing || f.label;
-        payload[f.key] = v;
-      });
-      if (missing) return toast(`필수 항목을 확인하세요: ${missing}`, 'err');
-      if (m.inject) Object.assign(payload, m.inject); // solution/deployment 자동 주입(항상)
-      if (isNew && m.injectOnCreate) Object.assign(payload, m.injectOnCreate); // 신규 시에만(수정 땐 기존값 유지)
-
-      saveBtn.disabled = true;
-      try {
-        if (isNew) await api.masterCreate(m.type, payload);
-        else await api.masterUpdate(m.type, row[m.pk], payload);
-        toast('저장되었습니다.', 'ok');
-        modal.close();
-        load();
-      } catch (err) { toast(err.message, 'err'); saveBtn.disabled = false; }
-    };
+      for (const id of ids) { await api.masterUpdate('nego_rates', id, { rate: negoEdits[id] }); done++; } // rate 만 수정
+      toast(`저장되었습니다. (${done}건)`, 'ok');
+    } catch (err) { toast(`${done}건 저장 후 실패: ${err.message}`, 'err'); }
+    refresh();
   }
 
   refresh();
+  loadCounts();
 }

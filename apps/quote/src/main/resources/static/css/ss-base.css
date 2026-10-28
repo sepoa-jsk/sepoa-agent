@@ -4,6 +4,7 @@
    툴바 우측 도구 묶음 · 건수 위치(명세바) · 탭 상자 · 본문 머리 · GNB 아이콘
    2026-10-28 운영 화면 캡처(구매요청접수 · 구매요청생성) 반영 — 좌우 16px · 툴바 좌측 도구(필터·상태·기간) ·
    상태별 건수 줄 · 접수/반려 버튼 · 4열 폼 · 편집 셀 · 레일 탭 · 탭바 활성색
+   2026-10-28 운영 화면 캡처(공통코드) 반영 — 코드 목록 레일(d형) · 본문 제목 줄 · 머리 폼 + 저장 · 편집 그리드
    테마: <html data-ss-theme="legacy"> (기본) | "new"
    이 파일 하나로 L1/L2/M1 골격이 모두 렌더된다. */
 
@@ -353,6 +354,51 @@ html, body {
 .ss-rail__toolbar { display: flex; align-items: center; gap: 6px; padding: 16px 20px; }
 .ss-rail__toolbar--line { border-bottom: 1px solid var(--ss-bd-soft); }
 .ss-rail__toolbar .ss-search { width: auto; flex: 1; }
+
+/* d형 코드 목록 레일 — 좌: 코드(빨강) / 우: 이름(굵게, 우측 정렬, 줄바꿈 허용).
+   고른 항목은 회색 배경 + 오른쪽 빨간 막대 (운영 화면 캡처: 공통코드) */
+.ss-rail--code { --ss-rail-w: 400px; }
+.ss-rail__search { padding: 16px; border-bottom: 1px solid var(--ss-bd-soft); }
+.ss-rail__search .ss-search { width: 100%; }
+.ss-rail__code {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 53px; padding: 8px 24px 8px 22px;
+  border-bottom: 1px solid #EEEEEE; cursor: pointer;
+}
+.ss-rail__code:hover { background: #F8FAFC; }
+.ss-rail__code-key { font-size: 14px; color: var(--ss-emphasis); word-break: break-all; }
+.ss-rail__code-name { font-size: 14px; font-weight: 500; color: var(--ss-ink); text-align: right; }
+.ss-rail__code--active { background: #F3F3F3; box-shadow: inset -3px 0 0 var(--ss-emphasis); }
+
+/* 레일 옆 본문 제목 줄 — 고른 대상 이름 `공통코드(CODE)`. 셸 제목 바와 같은 41px · 하단선 */
+.ss-subtitle {
+  flex: 0 0 var(--ss-title-h); display: flex; align-items: center;
+  margin: -16px calc(-1 * var(--ss-pad-x)) 16px; padding: 0 calc(var(--ss-pad-x) + 8px);
+  border-bottom: 1px solid var(--ss-bd-soft);
+  font-size: 16px; font-weight: 500; color: var(--ss-ink);
+}
+
+/* 머리 폼 + 저장 — 좌: 작은 필드(152px, 좌측 정렬, 2열 줄바꿈) / 우: 저장. 편집 그리드 위에 둔다 */
+.ss-edithead { display: flex; align-items: flex-start; gap: 16px; }
+.ss-edithead__fields { flex: 1; display: grid; grid-template-columns: repeat(2, 152px); gap: 12px 16px; }
+.ss-edithead__fields .ss-field > label { font-size: 13px; }
+.ss-edithead__fields .ss-input, .ss-edithead__fields .ss-select { width: 100%; font-size: 13px; }
+
+/* 편집 그리드 — 셀 안 입력칸은 테두리 없이 글자처럼 보이다가, 올리거나 누르면 테두리가 생긴다.
+   체크박스(사용·기본값·필수)는 가운데. 머리행 2단(TEXT1 → 한국어/English)은 colspan/rowspan 으로 */
+.ss-grid td.ss-cell--input { padding: 2px 4px; }
+.ss-cellinput {
+  width: 100%; height: 30px; padding: 0 6px;
+  border: 1px solid transparent; border-radius: 3px; background: transparent;
+  font: inherit; font-size: 12px; color: var(--ss-ink-2); text-align: inherit;
+}
+.ss-cellinput:hover { border-color: var(--ss-bd-input); }
+.ss-cellinput:focus { outline: 0; border-color: var(--ss-link); background: #FFFFFF; }
+.ss-cellinput:disabled { color: #8A8A8A; }
+.ss-cellinput[readonly] { color: #8A8A8A; }
+select.ss-cellinput { cursor: pointer; }
+.ss-grid input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--ss-ink-3); cursor: pointer; }
+.ss-grid tr.is-new td { background: #FFFDF2; }   /* 저장 전 새 행 */
 
 /* ── 화면 내 탭 ────────────────────────────────── */
 

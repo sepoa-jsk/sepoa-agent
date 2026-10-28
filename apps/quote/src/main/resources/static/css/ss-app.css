@@ -72,14 +72,9 @@
 .ss-railview { flex: 1; display: flex; min-height: 0; margin: -16px calc(-1 * var(--ss-pad-x)); }
 .ss-railview > .ss-rail { overflow: auto; }
 .ss-railview__body { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 16px var(--ss-pad-x); }
-.ss-rail__item--active { color: var(--ss-ink); font-weight: 500; }
-
-/* 그리드 안 행 버튼 — 39px 행에 들어가는 작은 크기 */
-.ss-btn--sm { height: 26px; padding: 0 10px; }
-.ss-rowbtns { display: inline-flex; gap: 4px; }
-.ss-grid tbody tr.is-dim td { color: #94A3B8; }
-.ss-grid td.is-clickable { cursor: pointer; }
-.ss-grid td.is-clickable:hover { text-decoration: underline; }
+/* 레일 머리가 화면 제목을 맡는 화면 — 셸 제목 바를 숨긴다 (app.js 가 화면 전환 때 되돌림) */
+.ss-app--railtitle > .ss-title { display: none; }
+.ss-railview .ss-detailbar__note:empty { display: none; }
 
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
