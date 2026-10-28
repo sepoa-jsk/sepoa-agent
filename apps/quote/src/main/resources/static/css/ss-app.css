@@ -4,18 +4,9 @@
 /* hidden 속성이 display:flex 클래스에 지지 않게 */
 [hidden] { display: none !important; }
 
-/* ── GNB: 클릭 가능한 아이콘·사용자·로그아웃 ── */
+/* ── GNB ── 아이콘·링크 모양은 ss-base.css(스킬)에 있다. 여기서는 메뉴판 자리만 잡는다 */
 .ss-gnb { position: relative; z-index: 50; }
-.ss-gnb__btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; padding: 0;
-  background: none; border: 0; cursor: pointer; color: var(--ss-ink-2);
-}
-.ss-gnb__btn:hover { color: var(--ss-primary); }
-.ss-gnb__btn svg { width: 20px; height: 20px; }
 .ss-gnb__logo { cursor: pointer; }
-.ss-gnb__link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--ss-ink-3); cursor: pointer; }
-.ss-gnb__link:hover { color: var(--ss-primary); }
 
 /* 햄버거 메뉴 — 그룹별 열 */
 .ss-menu {
@@ -46,7 +37,7 @@
 
 /* ── 본문 ──
    #view 는 화면이 그리는 자리. L1 그리드가 남은 높이를 채우도록 세로 flex 로 둔다. */
-.ss-view { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-bottom: 16px; }
+.ss-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
 /* 아직 SingleSuite 로 바꾸지 않은 화면의 액션 버튼 — L2 규칙대로 본문 우측 상단 */
 .ss-pageactions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 12px; }
@@ -70,8 +61,9 @@
 .ss-dropdown__item:hover { background: var(--ss-head-bg); }
 .ss-dropdown__item.is-active { color: var(--ss-primary); font-weight: 600; }
 
-/* 상세 검색 팝오버 — 필터 버튼 아래 */
-.ss-popover { top: 36px; left: 0; z-index: 45; }
+/* 상세 검색 팝오버 — 필터 버튼 아래. 도구가 툴바 우측에 있으므로 오른쪽 끝을 맞춘다 */
+.ss-popover { top: 36px; right: 0; z-index: 45; }
+.ss-dropdown__menu { right: 0; left: auto; }
 .ss-popover[hidden] { display: none; }
 .ss-popover__close { background: none; border: 0; color: #FFFFFF; font-size: 16px; cursor: pointer; }
 

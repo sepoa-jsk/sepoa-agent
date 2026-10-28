@@ -1,6 +1,7 @@
-// 견적 목록 — SingleSuite L1 조회형 (툴바 + 요약 카운트 + 그리드).
-//   툴바 좌: Search(입력하면 바로 걸린다) · 필터(상세 검색) · 상태
-//   툴바 우: 신규  — 이 화면에 원래 있던 액션은 "새 견적" 하나뿐이다
+// 견적 목록 — SingleSuite L1 조회형 (툴바 + 명세바 + 그리드 상자). toray 적용 화면 기준.
+//   툴바 좌: Search 만 (입력하면 바로 걸린다)
+//   툴바 우: 필터(상세 검색) · 상태 → 신규  — 이 화면에 원래 있던 액션은 "새 견적" 하나뿐이다
+//   건수: 그리드 바로 위 명세바 우측
 //   기간 선택기는 두지 않는다 — 목록 API 에 기간 조건이 없다
 import { api } from '../api.js';
 import { h, won, toast, clear, debounce } from '../ui.js';
@@ -89,9 +90,10 @@ export async function renderList(root) {
 
   root.appendChild(h('div', { class: 'ss-toolbar' },
     search,
-    h('div', { class: 'ss-dropdown' }, filterBtn, popover),
-    h('div', { class: 'ss-dropdown' }, statusBtn, statusMenu),
     h('div', { class: 'ss-toolbar__spacer' }),
+    h('div', { class: 'ss-toolbar__tools' },
+      h('div', { class: 'ss-dropdown' }, filterBtn, popover),
+      h('div', { class: 'ss-dropdown' }, statusBtn, statusMenu)),
     h('div', { class: 'ss-actions' },
       h('button', { class: 'ss-btn ss-btn--save', onclick: () => { location.hash = '#/quotes/new'; } }, '신규'))));
 
@@ -99,9 +101,9 @@ export async function renderList(root) {
   const chips = h('div', { class: 'ss-chips' });
   root.appendChild(chips);
 
-  // ── 요약 카운트 (배지 아님, 텍스트) ──
-  const summary = h('div', { class: 'ss-summary' });
-  root.appendChild(summary);
+  // ── 명세바: 건수는 우측 텍스트 (배지 아님) ──
+  const count = h('span', { class: 'ss-detailbar__count' });
+  root.appendChild(h('div', { class: 'ss-detailbar' }, h('div', { class: 'ss-detailbar__spacer' }), count));
 
   // ── 그리드 ──
   const tbody = h('tbody');
@@ -171,7 +173,7 @@ export async function renderList(root) {
           h('td', { class: 'ss-cell--emphasis' }, STATUS[q.status] || q.status),
           h('td', {}, q.created_by_name || '-')));
       }
-      paintSummary(quotes, total);
+      paintCount(quotes, total);
       paintPager(total);
     } catch (err) {
       clear(tbody).appendChild(emptyRow(err.message));
@@ -179,12 +181,10 @@ export async function renderList(root) {
     }
   }
 
-  // n 건 / 전체 건, 합계금액 합 — 숫자만 Primary 색
-  function paintSummary(quotes, total) {
-    const sum = quotes.reduce((a, q) => a + (Number(q.total_amount) || 0), 0);
-    clear(summary).append(
-      h('span', {}, h('b', {}, String(quotes.length)), ' 건 / ', h('b', {}, String(total)), ' 건'),
-      h('span', {}, '합계금액 ', h('b', {}, won(sum)), ' KRW'));
+  // n 건 — 숫자만 Primary 색. 한 페이지에 다 안 들어올 때만 "보이는 건수 / 전체"
+  function paintCount(quotes, total) {
+    clear(count).append(h('b', {}, String(total)), ' 건');
+    if (quotes.length < total) count.prepend(h('b', {}, String(quotes.length)), ' / ');
   }
 
   function paintPager(total) {

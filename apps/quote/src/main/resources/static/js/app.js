@@ -148,9 +148,8 @@ async function bootstrap() {
   };
 
   // GNB 로고·홈 → 견적 목록
-  for (const id of ['gnb-home', 'gnb-home-logo']) {
-    document.getElementById(id).onclick = () => { location.hash = '#/quotes'; };
-  }
+  document.getElementById('gnb-home-logo').onclick = () => { location.hash = '#/quotes'; };
+  document.getElementById('gnb-help').onclick = () => toast('도움말은 준비 중입니다.', 'ok');
 
   // dev 로그인
   const devForm = document.getElementById('login-dev');

@@ -41,16 +41,14 @@
   <div id="app-shell" class="ss-app hidden">
     <header class="ss-gnb">
       <span class="ss-gnb__logo" id="gnb-home-logo">SepoaSoft Single Suite</span>
-      <button class="ss-gnb__btn" id="gnb-home" title="홈" aria-label="홈">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10.5 12 3l9 7.5V21H3z"/></svg>
-      </button>
-      <button class="ss-gnb__btn" id="gnb-menu-btn" title="전체 메뉴" aria-label="전체 메뉴" aria-expanded="false">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-      </button>
+      <a class="ss-gnb__home" id="gnb-home" href="#/quotes" title="홈"><svg class="ss-gnb__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+      <svg class="ss-gnb__icon" id="gnb-menu-btn" role="button" aria-label="전체 메뉴" aria-expanded="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
       <span class="ss-gnb__spacer"></span>
       <div class="ss-gnb__right">
+        <span>English</span>
+        <svg class="ss-gnb__icon ss-gnb__icon--sm" id="gnb-help" role="button" aria-label="도움말" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
         <span id="gnb-username"></span>
-        <button class="ss-gnb__link" id="logout-btn">로그아웃</button>
+        <svg class="ss-gnb__icon ss-gnb__icon--sm" id="logout-btn" role="button" aria-label="로그아웃" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><title>로그아웃</title><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
       </div>
       <nav class="ss-menu" id="gnb-menu" hidden><!-- layout/sidebar.js 가 채운다 --></nav>
     </header>
