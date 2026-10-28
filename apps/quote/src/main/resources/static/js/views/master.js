@@ -65,7 +65,7 @@ const MASTERS = [
     type: 'solutions', label: '솔루션', pk: 'code', scoped: false,
     list: ['code', 'name', 'sort'],
     fields: [
-      { key: 'code', label: '코드', type: 'text', pk: true, mono: true },
+      { key: 'code', label: '코드', type: 'text', pk: true, mono: true, required: true, unique: true },
       { key: 'name', label: '이름', type: 'text' },
       { key: 'sort', label: '정렬', type: 'number' }, // V2 에서 추가
     ],
@@ -74,7 +74,7 @@ const MASTERS = [
     type: 'deployments', label: '구축형태', pk: 'code', scoped: false,
     list: ['code', 'name', 'sort'],
     fields: [
-      { key: 'code', label: '코드', type: 'text', pk: true, mono: true },
+      { key: 'code', label: '코드', type: 'text', pk: true, mono: true, required: true, unique: true },
       { key: 'name', label: '이름', type: 'text' },
       { key: 'sort', label: '정렬', type: 'number' }, // V2 에서 추가
     ],
@@ -98,7 +98,7 @@ const MASTERS = [
     ],
   },
   {
-    // 상주여부: 다른 마스터처럼 코드 · 이름을 직접 입력한다 (코드는 PK — 저장 후 잠김).
+    // 상주여부: 다른 마스터처럼 코드 · 이름을 직접 입력한다 (코드는 PK — 바꾸면 서버가 PK 도 바꾼다. 네고율의 옛 코드는 따라오지 않는다).
     // 네고율 표의 상주/비상주 탭은 ONSITE_PRESET(ONSITE/REMOTE) 코드를 쓴다.
     type: 'onsite_types', label: '상주여부', pk: 'code', scoped: false,
     list: ['code', 'name', 'sort'],
@@ -520,7 +520,7 @@ export async function renderMaster(root) {
     let value = form[f.key];
     if (f.type === 'percent') value = value == null || value === '' ? '' : +(Number(value) * 100).toFixed(4);
     const attrs = {
-      class: 'ss-cellinput', disabled: off, readOnly: !!((f.pk || f.lockOnEdit) && !r.isNew), 'aria-label': f.label,
+      class: 'ss-cellinput', disabled: off, readOnly: !!(f.lockOnEdit && !r.isNew), 'aria-label': f.label,
       // 숫자는 우측 정렬. 단, 정렬(sort) 순번은 가운데 (사용자 지정)
       style: f.key === 'sort' || f.mono ? 'text-align:center' : isNum ? 'text-align:right' : null,
     };

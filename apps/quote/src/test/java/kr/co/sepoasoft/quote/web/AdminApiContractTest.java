@@ -70,8 +70,12 @@ class AdminApiContractTest {
                 .andExpect(jsonPath("$.message").doesNotExist());
         mvc.perform(json(post("/api/master/nope"), "ADMIN", "{}"))
                 .andExpect(status().isNotFound()).andExpect(jsonPath("$.error").value("UNKNOWN_MASTER"));
-        mvc.perform(json(put("/api/master/solutions/X"), "ADMIN", "{\"code\":\"Y\"}"))
+        // 코드(PK)만 같은 값으로 보내면 Node 처럼 바꿀 것이 없다
+        mvc.perform(json(put("/api/master/solutions/X"), "ADMIN", "{\"code\":\"X\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("NOTHING_TO_UPDATE"));
+        // 다른 코드면 코드를 바꾸려 한다(API-spec 3절 J, Node 와 다름) — 없는 행이라 404
+        mvc.perform(json(put("/api/master/solutions/ZZ_NO_SUCH"), "ADMIN", "{\"code\":\"ZZ_NEW\"}"))
+                .andExpect(status().isNotFound());
         mvc.perform(json(post("/api/templates"), "ADMIN", "{\"code\":\"T\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("code/solution/name 은 필수입니다."));
         mvc.perform(json(put("/api/settings"), "ADMIN", "{\"settings\":\"x\"}"))

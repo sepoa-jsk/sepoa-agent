@@ -124,14 +124,22 @@ public class MasterController {
         return ResponseEntity.status(HttpStatus.CREATED).body(row(m, idVal));
     }
 
-    /** #9 수정 — PK 는 바꾸지 않는다 */
+    /**
+     * #9 수정. 코드가 PK 인 마스터(솔루션·구축형태·상주여부)는 body 의 코드가 경로의 코드와 다르면
+     * 코드도 바꾼다(2026-10-28 화면 요청 — Node 는 PK 를 바꾸지 않는다, API-spec 3절 J).
+     * 다른 테이블에 남은 옛 코드는 따라 바꾸지 않는다. 같은 코드면 예전처럼 PK 는 건드리지 않는다.
+     */
     @PutMapping("/{type}/{id}")
     @Access(Level.ADMIN)
     public Map<String, Object> update(@PathVariable String type, @PathVariable String id,
             @RequestBody(required = false) Map<String, Object> body) {
         Meta m = meta(type);
         Map<String, Object> b = body == null ? Map.of() : body;
-        List<String> editable = m.cols().stream().filter(c -> !c.equals(m.pk()) && b.containsKey(c)).toList();
+        Object newPk = b.get(m.pk());
+        boolean renamePk = m.cols().contains(m.pk()) && newPk != null && !String.valueOf(newPk).isBlank()
+                && !String.valueOf(newPk).equals(id);
+        List<String> editable = m.cols().stream()
+                .filter(c -> (renamePk || !c.equals(m.pk())) && b.containsKey(c)).toList();
         if (editable.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NOTHING_TO_UPDATE", null);
         List<Object> params = new ArrayList<>();
         for (String c : editable) params.add(b.get(c));
@@ -144,7 +152,7 @@ public class MasterController {
             throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE", null);
         }
         if (r == 0) throw ApiException.notFound();
-        return row(m, id);
+        return row(m, renamePk ? newPk : id);
     }
 
     /** #10 삭제 — active 컬럼이 있으면 active=0, 없으면 실삭제 */
