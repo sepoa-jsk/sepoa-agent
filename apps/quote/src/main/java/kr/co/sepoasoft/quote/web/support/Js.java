@@ -60,6 +60,22 @@ public final class Js {
         return d == Math.rint(d) && Math.abs(d) < 9.007199254740992E15 ? (Number) (long) d : (Number) d;
     }
 
+    /** JS {@code String(v)} — JSON 으로 받은 값 용. 객체는 {@code [object Object]}, 배열은 쉼표로 잇는다 */
+    public static String string(Object v) {
+        if (v == null) return "null";
+        if (v instanceof Number n) return String.valueOf(json(n.doubleValue()));
+        if (v instanceof java.util.Map<?, ?>) return "[object Object]";
+        if (v instanceof java.util.List<?> l) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < l.size(); i++) {
+                if (i > 0) sb.append(',');
+                if (l.get(i) != null) sb.append(string(l.get(i)));
+            }
+            return sb.toString();
+        }
+        return String.valueOf(v);
+    }
+
     /** 엔진의 BigDecimal 을 JSON 숫자로 — {@code 1E+7} 같은 지수 표기를 피한다 */
     public static Number json(BigDecimal d) {
         if (d == null) return null;

@@ -4,9 +4,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.util.ArrayList;
+
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,7 +25,7 @@ import kr.co.sepoasoft.quote.web.auth.Access.Level;
 import kr.co.sepoasoft.quote.web.support.Rows;
 
 /**
- * {@code /api/master} — Node {@code routes/master.js} 이식. 명세 2-3절 (#6~#10). J5-2 는 조회(#6·#7)만.
+ * {@code /api/master} — Node {@code routes/master.js} 이식. 명세 2-3절 (#6~#10). 쓰기(#8~#10)는 관리자만.
  *
  * <p>테이블 이름·정렬은 {@link #TABLES} 화이트리스트에서만 온다. 요청 값이 SQL 문자열에 들어가지 않는다.
  */
@@ -93,5 +101,73 @@ public class MasterController {
             params = new Object[] { solution };
         }
         return Map.of("rows", db.query("SELECT * FROM " + m.table() + " " + where + " ORDER BY " + m.order(), params));
+    }
+
+    /** #8 생성 — 편집 컬럼 중 보낸 것만 넣고, 넣은 행을 다시 읽어 돌려준다 */
+    @PostMapping("/{type}")
+    @Access(Level.ADMIN)
+    public ResponseEntity<Map<String, Object>> create(@PathVariable String type,
+            @RequestBody(required = false) Map<String, Object> body) {
+        Meta m = meta(type);
+        Map<String, Object> b = body == null ? Map.of() : body;
+        List<String> cols = m.cols().stream().filter(b::containsKey).toList();
+        if (cols.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "MISSING_FIELDS", null);
+        Object idVal;
+        try {
+            long insertId = db.insert("INSERT INTO " + m.table() + " (" + String.join(",", cols.stream().map(MasterController::bt).toList())
+                    + ") VALUES (" + Rows.placeholders(cols.size()) + ")", cols.stream().map(b::get).toArray());
+            idVal = "id".equals(m.pk()) ? insertId : b.get(m.pk());
+        } catch (DuplicateKeyException e) {
+            throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE", "중복된 키입니다.");
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(row(m, idVal));
+    }
+
+    /** #9 수정 — PK 는 바꾸지 않는다 */
+    @PutMapping("/{type}/{id}")
+    @Access(Level.ADMIN)
+    public Map<String, Object> update(@PathVariable String type, @PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> body) {
+        Meta m = meta(type);
+        Map<String, Object> b = body == null ? Map.of() : body;
+        List<String> editable = m.cols().stream().filter(c -> !c.equals(m.pk()) && b.containsKey(c)).toList();
+        if (editable.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NOTHING_TO_UPDATE", null);
+        List<Object> params = new ArrayList<>();
+        for (String c : editable) params.add(b.get(c));
+        params.add(id);
+        int r;
+        try {
+            r = db.update("UPDATE " + m.table() + " SET " + String.join(", ", editable.stream().map(c -> bt(c) + " = ?").toList())
+                    + " WHERE " + bt(m.pk()) + " = ?", params.toArray());
+        } catch (DuplicateKeyException e) {
+            throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE", null);
+        }
+        if (r == 0) throw ApiException.notFound();
+        return row(m, id);
+    }
+
+    /** #10 삭제 — active 컬럼이 있으면 active=0, 없으면 실삭제 */
+    @DeleteMapping("/{type}/{id}")
+    @Access(Level.ADMIN)
+    public Map<String, Object> delete(@PathVariable String type, @PathVariable String id) {
+        Meta m = meta(type);
+        int r = m.cols().contains("active")
+                ? db.update("UPDATE " + m.table() + " SET active = 0 WHERE " + bt(m.pk()) + " = ?", id)
+                : db.update("DELETE FROM " + m.table() + " WHERE " + bt(m.pk()) + " = ?", id);
+        if (r == 0) throw ApiException.notFound();
+        return Map.of("ok", true);
+    }
+
+    /** {@code {row: rows[0]}} — 행이 없으면 Node 는 {@code row: undefined} 라 키 자체가 빠진다 */
+    private Map<String, Object> row(Meta m, Object idVal) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        Map<String, Object> r = db.first("SELECT * FROM " + m.table() + " WHERE " + bt(m.pk()) + " = ?", idVal);
+        if (r != null) out.put("row", r);
+        return out;
+    }
+
+    /** 백틱 컬럼 (예약어 key 등) */
+    private static String bt(String c) {
+        return "`" + c + "`";
     }
 }

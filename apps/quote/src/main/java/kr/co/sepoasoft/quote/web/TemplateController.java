@@ -6,8 +6,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,7 +24,7 @@ import kr.co.sepoasoft.quote.web.auth.Access.Level;
 import kr.co.sepoasoft.quote.web.support.Js;
 import kr.co.sepoasoft.quote.web.support.Rows;
 
-/** 블록·견적조건·템플릿 — Node {@code routes/templates.js} 이식. 명세 2-5절. J5-2 는 조회(#17~#20)만. */
+/** 블록·견적조건·템플릿 — Node {@code routes/templates.js} 이식. 명세 2-5절. 템플릿 쓰기(#21·#22)는 관리자만. */
 @RestController
 @RequestMapping("/api")
 @Access(Level.LOGIN)
@@ -129,5 +135,85 @@ public class TemplateController {
         out.put("conditions", conditions);
         out.put("unregistered", unregistered);
         return out;
+    }
+
+    // ── (ADMIN) 템플릿 생성/수정 — 헤더 + 블록/모듈/인건비 통째 교체 ─
+
+    private static final List<String> TPL_COLS = List.of("quote_type", "solution", "code", "name", "deployment", "brand",
+            "include_maintenance", "include_component", "condition_set", "has_labor_plan", "active", "sort");
+    private static final Map<String, Object> TPL_DEFAULTS = Map.of("quote_type", "BUILD", "has_labor_plan", 0,
+            "include_maintenance", 0, "include_component", 0, "active", 1, "sort", 0);
+
+    /** #21 생성 — code·solution·name 필수, code 중복이면 409 */
+    @PostMapping("/templates")
+    @Access(Level.ADMIN)
+    @Transactional
+    public ResponseEntity<Map<String, Object>> createTemplate(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> b = body == null ? Map.of() : body;
+        if (!Rows.truthy(b.get("code")) || !Rows.truthy(b.get("solution")) || !Rows.truthy(b.get("name"))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "MISSING", "code/solution/name 은 필수입니다.");
+        }
+        if (db.first("SELECT id FROM sq_quote_templates WHERE code = ?", b.get("code")) != null) {
+            throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_CODE", Js.string(b.get("code")) + " 는 이미 존재합니다.");
+        }
+        long tid = writeTemplate(null, b);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("id", tid);
+        out.put("code", b.get("code"));
+        return ResponseEntity.status(HttpStatus.CREATED).body(out);
+    }
+
+    /** #22 수정 — 블록·모듈·인건비는 지우고 다시 넣는다 */
+    @PutMapping("/templates/{id}")
+    @Access(Level.ADMIN)
+    @Transactional
+    public Map<String, Object> updateTemplate(@PathVariable String id, @RequestBody(required = false) Map<String, Object> body) {
+        double n = Js.number(id);
+        if (Double.isNaN(n) || db.first("SELECT id FROM sq_quote_templates WHERE id = ?", Js.json(n)) == null) {
+            throw ApiException.notFound();
+        }
+        writeTemplate((long) n, body == null ? Map.of() : body);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("id", Js.json(n));
+        return out;
+    }
+
+    /** Node {@code writeTemplate} — 보내지 않은 헤더 필드는 기본값(없으면 null). 보낸 null 은 null 그대로 */
+    private long writeTemplate(Long id, Map<String, Object> body) {
+        List<Object> vals = new ArrayList<>();
+        for (String c : TPL_COLS) vals.add(body.containsKey(c) ? body.get(c) : TPL_DEFAULTS.get(c));
+        long tid;
+        if (id != null) {
+            tid = id;
+            vals.add(id);
+            db.update("UPDATE sq_quote_templates SET " + String.join(", ", TPL_COLS.stream().map(c -> "`" + c + "` = ?").toList())
+                    + " WHERE id = ?", vals.toArray());
+            db.update("DELETE FROM sq_template_blocks WHERE template_id = ?", id);
+            db.update("DELETE FROM sq_template_items WHERE template_id = ?", id);
+            db.update("DELETE FROM sq_template_labor WHERE template_id = ?", id);
+        } else {
+            tid = db.insert("INSERT INTO sq_quote_templates (" + String.join(", ", TPL_COLS.stream().map(c -> "`" + c + "`").toList())
+                    + ") VALUES (" + Rows.placeholders(TPL_COLS.size()).replace(",", ", ") + ")", vals.toArray());
+        }
+        List<Object> blocks = QuoteCalc.asList(body.get("blocks"));
+        for (int i = 0; i < blocks.size(); i++) {
+            db.update("INSERT INTO sq_template_blocks (template_id, block_code, sort) VALUES (?, ?, ?)", tid, blocks.get(i), i);
+        }
+        List<Object> items = QuoteCalc.asList(body.get("items"));
+        for (int i = 0; i < items.size(); i++) {
+            Map<String, Object> it = QuoteCalc.asMap(items.get(i));
+            db.update("INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, sort) VALUES (?, ?, ?, ?, ?)",
+                    tid, it.get("block_code"), it.get("item_code"), QuoteCalc.nn(it.get("qty_default"), 1), i);
+        }
+        List<Object> labor = QuoteCalc.asList(body.get("labor"));
+        for (int i = 0; i < labor.size(); i++) {
+            Map<String, Object> l = QuoteCalc.asMap(labor.get(i));
+            db.update("INSERT INTO sq_template_labor (template_id, block_code, role_code, role_label, grade, task, mm_default, sort)"
+                    + " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    tid, QuoteCalc.or(l.get("block_code"), "LABOR"), l.get("role_code"), l.get("role_label"), l.get("grade"),
+                    l.get("task"), QuoteCalc.nn(l.get("mm_default"), 0), i);
+        }
+        return tid;
     }
 }
