@@ -83,3 +83,60 @@ export function debounce(fn, ms = 300) {
 }
 
 export function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); return el; }
+
+// 그리드 칸 너비 조절 — 머리 칸 오른쪽 끝을 끌어 늘이고 줄인다. 두 번 누르면 처음 너비로.
+// table 에 colgroup 이 있고 col 수와 첫 머리행 th 수가 같아야 한다. data-fixed 가 붙은 th 는 조절하지 않는다.
+// storeKey 를 주면 이 브라우저에 너비를 기억한다(저장이 막혀 있어도 조절은 된다).
+export function resizableColumns(table, storeKey) {
+  const cols = [...table.querySelectorAll('colgroup > col')];
+  const ths = [...table.querySelectorAll('thead tr:first-child > th')];
+  if (!cols.length || cols.length !== ths.length) return;
+  const initCols = cols.map((c) => c.style.width);
+  const initTable = { width: table.style.width, minWidth: table.style.minWidth };
+  const MIN = 40;
+
+  const apply = (w) => {
+    cols.forEach((c, i) => { c.style.width = w[i] + 'px'; });
+    table.style.width = w.reduce((a, b) => a + b, 0) + 'px';
+    table.style.minWidth = '';
+  };
+  const measure = () => ths.map((t) => Math.round(t.getBoundingClientRect().width));
+
+  if (storeKey) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storeKey) || 'null');
+      if (Array.isArray(saved) && saved.length === cols.length) apply(saved);
+    } catch { /* 기억 못 해도 조절은 된다 */ }
+  }
+
+  ths.forEach((th, i) => {
+    if (th.dataset.fixed != null) return;
+    const grip = document.createElement('span');
+    grip.className = 'ss-colgrip';
+    grip.title = '끌어서 너비 조절 · 두 번 누르면 처음 너비';
+    grip.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const w = measure();
+      apply(w);
+      const startX = e.clientX, start = w[i];
+      const move = (ev) => { w[i] = Math.max(MIN, start + ev.clientX - startX); apply(w); };
+      const up = (ev) => {
+        move(ev); // 움직임 없이 바로 놓아도 놓은 자리까지 반영
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        document.body.classList.remove('is-colresizing');
+        if (storeKey) { try { localStorage.setItem(storeKey, JSON.stringify(w)); } catch { /* 무시 */ } }
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      document.body.classList.add('is-colresizing');
+    });
+    grip.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      cols.forEach((c, j) => { c.style.width = initCols[j]; });
+      Object.assign(table.style, initTable);
+      if (storeKey) { try { localStorage.removeItem(storeKey); } catch { /* 무시 */ } }
+    });
+    th.appendChild(grip);
+  });
+}

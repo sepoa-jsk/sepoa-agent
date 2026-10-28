@@ -76,6 +76,11 @@
 .ss-app--railtitle > .ss-title { display: none; }
 .ss-railview .ss-detailbar__note:empty { display: none; }
 
+/* 그리드 칸 너비 조절 손잡이 — 머리 칸 오른쪽 끝 (ui.js resizableColumns) */
+.ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
+.ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
+body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
+
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
 .ss-pager[hidden] { display: none; }

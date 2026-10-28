@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, toast, clear, confirmModal } from '../ui.js';
+import { h, won, toast, clear, confirmModal, resizableColumns } from '../ui.js';
 
 // ── 마스터 정의 ────────────────────────────────────────────────
 // 영업팀(실무자) 기준 목록/모달. 개발용 컬럼(코드·솔루션 등)은 숨기고,
@@ -328,14 +328,15 @@ export async function renderMaster(root) {
       ...gf.map((f) => h('col', { style: f === flex ? null : `width:${colWidth(f)}px` })),
       ...(m.preview ? [h('col', { style: 'width:220px' })] : [])];
     tbody = h('tbody');
-    pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' },
-      h('table', { class: 'ss-grid', style: `min-width:${60 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
-        h('colgroup', {}, ...cols),
-        h('thead', {}, h('tr', {},
-          h('th', {}, '선택'),
-          ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
-          ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
-        tbody)));
+    const table = h('table', { class: 'ss-grid', style: `min-width:${60 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
+      h('colgroup', {}, ...cols),
+      h('thead', {}, h('tr', {},
+        h('th', { 'data-fixed': '' }, '선택'),
+        ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
+        ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
+      tbody);
+    pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' }, table));
+    resizableColumns(table, `quote2:master-cols:${m.type}`); // 선택 칸(60px)은 고정
     load();
   }
 
@@ -588,11 +589,12 @@ export async function renderMaster(root) {
           }));
         })));
     });
-    body.appendChild(h('div', { class: 'ss-gridwrap' },
-      h('table', { class: 'ss-grid' },
-        h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
-        h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name + ' (%)')))),
-        tb)));
+    const table = h('table', { class: 'ss-grid' },
+      h('colgroup', {}, h('col', { style: 'width:160px' }), ...CLASS_PRESET.map(() => h('col', {}))),
+      h('thead', {}, h('tr', {}, h('th', {}, '구분'), ...CLASS_PRESET.map(([, name]) => h('th', {}, name + ' (%)')))),
+      tb);
+    body.appendChild(h('div', { class: 'ss-gridwrap' }, table));
+    resizableColumns(table, 'quote2:master-cols:nego_rates');
   }
 
   async function saveNego() {
