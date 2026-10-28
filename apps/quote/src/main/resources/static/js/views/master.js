@@ -193,7 +193,7 @@ const MASTERS = [
 
 // ── 화면 배치 — SingleSuite M1 d형(코드 목록 레일) + 편집 그리드 ──
 //   레일: 머리 = 화면 제목 · 마스터 10종(이름 / 건수). 고른 항목은 회색 배경 + 오른쪽 빨간 막대
-//   본문: 제목 줄(고른 마스터) → 머리 폼(솔루션·연도) | 행추가 · 행삭제 · 저장 → n 건 → 편집 그리드
+//   본문: 제목 줄(고른 마스터) → 머리 폼(솔루션·연도) | 행추가 · 행삭제 · 저장 → 편집 그리드 (건수 줄 없음)
 //   등록·수정·삭제는 팝업 없이 그리드에서 하고, 저장 한 번에 서버로 보낸다
 //   네고율만 탭 상자(상주/비상주) + 대상 × 기업구분 행렬, 칸에 바로 입력
 
@@ -284,7 +284,7 @@ export async function renderMaster(root) {
   }
 
   // ── 일반 마스터: 머리 폼 + 편집 그리드 ──
-  let tbody, count;
+  let tbody;
   function renderTable() {
     const m = current();
     const fields = h('div', { class: 'ss-edithead__fields' });
@@ -304,10 +304,11 @@ export async function renderMaster(root) {
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
         h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
-    count = h('span', { class: 'ss-detailbar__count' });
-    pane.appendChild(h('div', { class: 'ss-detailbar' },
-      h('span', { class: 'ss-detailbar__note' }, m.type === 'modules' ? '단가는 가격정책에서 관리합니다.' : ''),
-      h('div', { class: 'ss-detailbar__spacer' }), count));
+    // 편집 그리드 위에는 건수 줄을 두지 않는다 (건수는 레일에 있다). 안내 문구가 있는 마스터만 한 줄
+    if (m.type === 'modules') {
+      pane.appendChild(h('div', { class: 'ss-detailbar' },
+        h('span', { class: 'ss-detailbar__note' }, '단가는 가격정책에서 관리합니다.')));
+    }
 
     const gf = gridFields(m);
     // 첫 칸은 '선택' — 60px 고정 (사용자 지정)
@@ -409,8 +410,6 @@ export async function renderMaster(root) {
   function paintRows() {
     const m = current();
     const total = rows.length;
-    clear(count).append(h('b', {}, String(total)), ' 건');
-    if (deleted.length) count.append(` · 삭제 예정 ${deleted.length} 건`);
     clear(tbody);
     if (!total) { tbody.appendChild(emptyRow('데이터가 없습니다. 행추가로 등록하세요.')); return; }
     rows.forEach((r) => tbody.appendChild(rowEl(m, r)));
