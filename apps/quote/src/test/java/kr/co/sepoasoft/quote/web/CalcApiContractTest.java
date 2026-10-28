@@ -29,7 +29,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * 엔진은 진짜({@link BlockPricingEngine}), DB 는 목이다.
  */
 @WebMvcTest(controllers = QuoteCalcController.class)
-@Import({ AuthSettings.class, BlockPricingEngine.class })
+@Import({ AuthSettings.class, BlockPricingEngine.class, QuoteCalc.class })
 @TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
 @DisplayName("J5-3 계산 창구")
 class CalcApiContractTest {

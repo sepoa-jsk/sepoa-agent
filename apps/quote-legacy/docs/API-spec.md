@@ -156,6 +156,7 @@ J5 에서는 2번(Google) 을 **자리만** 만든다(검증은 J8). 3·4·5 는
 | E | Node 38번은 중복 연도일 때 DB 연결을 두 번 반납한다(무해한 경고) | Java 는 트랜잭션 관리를 Spring 에 맡기므로 저절로 사라진다. 응답은 같다 |
 | F | 25번 `preview` 의 `html` 과 32·33번 파일 출력은 렌더러(J7) 가 필요하다 | J5 에서는 `calc` 만 맞추고 `html` 은 빈 문자열, 32·33 은 `501 {"error":"NOT_IMPLEMENTED"}`. J7 에서 채운다 |
 | G | 레거시 섹션형 견적(`sections` 경로) 저장 — `service.js` 의 `calcQuote` 는 Java 에 아직 없다 | 기존 11건 중 섹션형이 있는지 확인 후 결정. 새 화면(위저드)은 블록형만 쓴다 |
+| I | **(J5-4 확인)** ① #18 해결 — Java 상세는 헤더에 우산 섹션의 `solution`·`brand`·`contract_months` 를 싣고, GET 결과를 그대로 PUT 하면 Node 는 500, Java 는 200. ② 단 **할인은 왕복되지 않는다** — 상세는 `discount_type`/`discount_value`(평면)로 내고 저장은 `discount:{type,value}`(객체)로 받는다. 그대로 되돌리면 할인이 빠진 금액으로 저장된다(Node 도 같은 구조). ③ `sections` 의 가격정책 4모델 저장은 Node 도 500(`Bind parameters must not contain undefined`), Java 는 501 | ②는 위저드 편집 모드(PROGRESS 이월 19) 가 `discount`·`monthly_discount` 를 객체로 다시 담아 보낼 것. 응답 모양은 바꾸지 않는다 |
 | H | **(J5-3 확인)** 24번 `calculate` 에서 Node 와 일부러 다르게 답하는 곳. ① 음수 단가·수량·금액, 알 수 없는 특별DC 유형 → Node 는 계산(유형은 AMOUNT 로 취급), Java 는 `400 INVALID_INPUT` — 엔진 계약(ENGINE-CONTRACT 2절)이 거부한다. ② `sections` 중 블록 스냅샷이 아닌 것(가격정책 4모델 `calcQuote`) → `501 NOT_IMPLEMENTED` — 엔진 계약 3절 "이식 대상 아님, J10 대체". 화면은 24번을 부르지 않는다. ③ `month_alloc: {}`(빈 객체) + 공수>0 → Node 는 배분 오류를 내고 Java 엔진은 "배분 없음" 으로 건너뛴다. 위저드는 빈 배분을 `null` 로 보내므로 화면에는 영향이 없다 | 그대로 둔다. 기존 견적 11건·템플릿 8종으로 만든 정상 요청 139건은 Node 와 같다 |
 
 ---

@@ -19,6 +19,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import kr.co.sepoasoft.quote.domain.pricing.BlockPricingEngine;
 import kr.co.sepoasoft.quote.web.auth.AuthSettings;
 import kr.co.sepoasoft.quote.web.auth.SessionUser;
 import kr.co.sepoasoft.quote.web.support.Rows;
@@ -28,13 +29,14 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  */
 @WebMvcTest(controllers = { MasterController.class, TemplateController.class, QuoteController.class,
         SettingsController.class, LaborRateController.class })
-@Import(AuthSettings.class)
+@Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class })
 @TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
 @DisplayName("J5-2 조회 창구")
 class ReadApiContractTest {
 
     @Autowired MockMvc mvc;
     @MockitoBean Rows db;
+    @MockitoBean QuoteWriter writer;
 
     private static MockHttpSession login() {
         MockHttpSession s = new MockHttpSession();

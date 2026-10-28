@@ -53,6 +53,32 @@ public class Rows {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    /** Node {@code (await query(...)).affectedRows} — 바뀐 행이 아니라 <b>찾은</b> 행 수다(mysql2·MariaDB JDBC 기본값이 같다) */
+    public int update(String sql, Object... params) {
+        return jdbc.update(sql, params);
+    }
+
+    /** Node {@code (await conn.execute(INSERT ...)).insertId} */
+    public long insert(String sql, Object... params) {
+        org.springframework.jdbc.support.GeneratedKeyHolder keys = new org.springframework.jdbc.support.GeneratedKeyHolder();
+        jdbc.update(con -> {
+            java.sql.PreparedStatement ps = con.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS);
+            for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
+            return ps;
+        }, keys);
+        Number key = keys.getKey();
+        return key == null ? 0 : key.longValue();
+    }
+
+    /** {@code JSON.stringify(v)} — DB 에 JSON 문자열로 넣을 때 */
+    public String stringify(Object v) {
+        try {
+            return json.writeValueAsString(v);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("JSON 으로 바꿀 수 없습니다: " + e.getMessage(), e);
+        }
+    }
+
     /** {@code ?,?,?} — Node {@code ids.map(() => '?').join(',')} */
     public static String placeholders(int n) {
         return String.join(",", java.util.Collections.nCopies(n, "?"));

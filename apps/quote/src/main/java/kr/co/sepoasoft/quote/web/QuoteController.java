@@ -4,37 +4,54 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import kr.co.sepoasoft.quote.web.advice.ApiException;
 import kr.co.sepoasoft.quote.web.auth.Access;
 import kr.co.sepoasoft.quote.web.auth.Access.Level;
+import kr.co.sepoasoft.quote.web.auth.AccessInterceptor;
 import kr.co.sepoasoft.quote.web.support.Js;
 import kr.co.sepoasoft.quote.web.support.Rows;
 
 /**
- * {@code /api/quotes} — Node {@code routes/quotes.js} 이식. 명세 2-6절. J5-2 는 목록·상세(#27·#28)만.
+ * {@code /api/quotes} — Node {@code routes/quotes.js} 이식. 명세 2-6절 (#26~#33).
+ * 계산 창구(#23~#25)는 {@link QuoteCalcController}, 견적 읽기는 {@link QuoteLoader}.
  *
- * <p>{@code domain.quote.QuoteRepository} 도 같은 SQL 로 견적을 읽지만 타입이 정해진 레코드라
- * {@code SELECT *} 의 모든 컬럼을 내지 못한다. API 응답은 Node 와 키까지 같아야 하므로 여기서는
- * 행을 Map 그대로 다룬다. 레코드 쪽은 계산·렌더(J7)가 쓴다.
+ * <p>Excel·PDF(#32·#33) 는 렌더러(J7) 전까지 {@code 501 NOT_IMPLEMENTED} 다(명세 3장 F).
  */
 @RestController
 @RequestMapping("/api/quotes")
 @Access(Level.LOGIN)
 public class QuoteController {
 
-    private static final List<String> STATUSES = List.of("DRAFT", "SENT", "WON", "LOST");
+    private static final List<String> STATUSES = QuoteWriter.STATUSES;
 
     private final Rows db;
+    private final QuoteLoader loader;
+    private final QuoteCalc calc;
+    private final QuoteWriter writer;
 
-    public QuoteController(Rows db) {
+    public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer) {
         this.db = db;
+        this.loader = loader;
+        this.calc = calc;
+        this.writer = writer;
     }
 
     /** #27 목록 — 최신순, {@code size} 최대 100 */
@@ -91,86 +108,115 @@ public class QuoteController {
     /** #28 상세 */
     @GetMapping("/{id}")
     public Map<String, Object> detail(@PathVariable String id) {
-        Map<String, Object> quote = loadQuote(Js.number(id));
+        Map<String, Object> quote = loader.load(Js.number(id));
         if (quote == null) throw ApiException.notFound();
         return Map.of("quote", quote);
     }
 
-    /**
-     * Node {@code loadQuote} — 헤더 + 섹션(레거시) + 블록. 정렬·묶는 방식이 Node 와 같아야 배열 순서가 같다.
-     *
-     * <p>품목·인건비는 <b>섹션 id 로만</b> 읽는다. 섹션이 없는 견적은 블록이 있어도 품목이 비어 나온다 —
-     * Node 동작 그대로다.
-     */
-    Map<String, Object> loadQuote(double id) {
-        if (Double.isNaN(id)) return null; // Number('abc') — 어떤 견적과도 맞지 않는다
-        Map<String, Object> quote = db.first("SELECT * FROM sq_quotes WHERE id = ?", Js.json(id));
-        if (quote == null) return null;
-        Object qid = quote.get("id");
-        quote.put("conditions", db.safeJson(quote.get("conditions")));
-        List<Map<String, Object>> sections = db.query(
-                "SELECT * FROM sq_quote_sections WHERE quote_id = ? ORDER BY sort, id", qid);
-        List<Map<String, Object>> items = List.of();
-        List<Map<String, Object>> laborRows = List.of();
-        if (!sections.isEmpty()) {
-            Object[] ids = sections.stream().map(sec -> sec.get("id")).toArray();
-            String ph = Rows.placeholders(ids.length);
-            items = db.query("SELECT * FROM sq_quote_items WHERE section_id IN (" + ph + ") ORDER BY sort, id", ids);
-            laborRows = db.query("SELECT * FROM sq_quote_labor WHERE section_id IN (" + ph + ") ORDER BY sort, id", ids);
-        }
-        Map<Object, List<Map<String, Object>>> bySection = buckets(sections);
-        Map<Object, List<Map<String, Object>>> laborBySection = buckets(sections);
-        for (Map<String, Object> it : items) add(bySection, it.get("section_id"), it);
-        for (Map<String, Object> l : laborRows) add(laborBySection, l.get("section_id"), l);
-        List<Map<String, Object>> outSections = new ArrayList<>();
-        for (Map<String, Object> s : sections) {
-            Map<String, Object> o = new LinkedHashMap<>(s);
-            o.put("params", Rows.truthy(s.get("params")) ? db.safeJson(s.get("params")) : null);
-            o.put("items", bySection.get(key(s.get("id"))));
-            o.put("labor", laborBySection.get(key(s.get("id"))));
-            outSections.add(o);
-        }
-        quote.put("sections", outSections);
-
-        // 블록 구조(5-C) — 블록별 품목/인건비는 block_id 로 묶는다
-        List<Map<String, Object>> blockRows = db.query(
-                "SELECT * FROM sq_quote_blocks WHERE quote_id = ? ORDER BY sort, id", qid);
-        Map<Object, List<Map<String, Object>>> itemsByBlock = buckets(blockRows);
-        Map<Object, List<Map<String, Object>>> laborByBlock = buckets(blockRows);
-        for (Map<String, Object> it : items) if (it.get("block_id") != null) add(itemsByBlock, it.get("block_id"), it);
-        for (Map<String, Object> l : laborRows) {
-            if (l.get("block_id") == null) continue;
-            Map<String, Object> copy = new LinkedHashMap<>(l);
-            copy.put("month_alloc", db.safeJson(l.get("month_alloc")));
-            add(laborByBlock, l.get("block_id"), copy);
-        }
-        List<Map<String, Object>> outBlocks = new ArrayList<>();
-        for (Map<String, Object> b : blockRows) {
-            Map<String, Object> o = new LinkedHashMap<>(b);
-            o.put("recurring", Rows.truthy(b.get("recurring")));
-            o.put("items", itemsByBlock.get(key(b.get("id"))));
-            o.put("labor", laborByBlock.get(key(b.get("id"))));
-            outBlocks.add(o);
-        }
-        quote.put("blocks", outBlocks);
-        return quote;
+    /** #26 생성 — 블록형({@code blocks}) 또는 레거시 섹션형({@code sections}). 견적번호를 채번한다 */
+    @PostMapping
+    public ResponseEntity<Map<String, Object>> create(@RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        Map<String, Object> b = body == null ? Map.of() : body;
+        boolean blockMode = isBlocksBody(b);
+        requireBlocksOrSections(b, blockMode);
+        Map<String, Object> result = calcFor(b, blockMode);
+        String quoteDate = Rows.truthy(b.get("quote_date")) ? date10(b.get("quote_date"))
+                : LocalDate.now(ZoneOffset.UTC).toString(); // Node: new Date().toISOString() — UTC 날짜
+        Map<String, Object> header = new LinkedHashMap<>(b);
+        header.put("quote_date", quoteDate);
+        long id = writer.create(header, result, blockMode, AccessInterceptor.currentUser(req).id());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("quote", loader.load(id)));
     }
 
-    /** 부모 id 마다 빈 목록 — Node {@code new Map(parents.map((p) => [p.id, []]))} */
-    private static Map<Object, List<Map<String, Object>>> buckets(List<Map<String, Object>> parents) {
-        Map<Object, List<Map<String, Object>>> m = new LinkedHashMap<>();
-        for (Map<String, Object> p : parents) m.put(key(p.get("id")), new ArrayList<>());
-        return m;
+    /** #29 수정 — 섹션/블록 전체 교체 + 재계산, quote_no 유지 */
+    @PutMapping("/{id}")
+    public Map<String, Object> update(@PathVariable String id, @RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> b = body == null ? Map.of() : body;
+        boolean blockMode = isBlocksBody(b);
+        requireBlocksOrSections(b, blockMode);
+        double n = Js.number(id);
+        Map<String, Object> existing = Double.isNaN(n) ? null
+                : db.first("SELECT id, quote_date FROM sq_quotes WHERE id = ?", Js.json(n));
+        if (existing == null) throw ApiException.notFound();
+        long qid = ((Number) existing.get("id")).longValue();
+        Map<String, Object> result = calcFor(b, blockMode);
+        Object quoteDate = Rows.truthy(b.get("quote_date")) ? date10(b.get("quote_date")) : existing.get("quote_date");
+        if (blockMode) {
+            Map<String, Object> header = new LinkedHashMap<>(b);
+            header.put("quote_date", quoteDate);
+            writer.updateBlocks(qid, header, result);
+        } else {
+            writer.updateSections(qid, b, quoteDate, result);
+        }
+        return Map.of("quote", loader.load(qid));
     }
 
-    /** 부모 목록에 없는 id 의 자식은 버린다 — Node {@code map.get(id)?.push(...)} */
-    private static void add(Map<Object, List<Map<String, Object>>> m, Object parentId, Map<String, Object> row) {
-        List<Map<String, Object>> bucket = m.get(key(parentId));
-        if (bucket != null) bucket.add(row);
+    /** #30 상태 변경 */
+    @PatchMapping("/{id}/status")
+    public Map<String, Object> status(@PathVariable String id, @RequestBody(required = false) Map<String, Object> body) {
+        Object status = body == null ? null : body.get("status");
+        if (!(status instanceof String s) || !STATUSES.contains(s)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_STATUS",
+                    "status는 " + String.join("/", STATUSES) + " 중 하나여야 합니다.");
+        }
+        double n = Js.number(id);
+        int r = Double.isNaN(n) ? 0 : db.update("UPDATE sq_quotes SET status = ? WHERE id = ?", status, Js.json(n));
+        if (r == 0) throw ApiException.notFound();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("ok", true);
+        out.put("status", status);
+        return out;
     }
 
-    /** id 를 숫자 종류(Integer/Long/BigInteger)와 무관하게 비교한다 */
-    private static Object key(Object id) {
-        return id instanceof Number n ? (Object) n.longValue() : id;
+    /** #31 삭제 — 섹션·블록·품목·인건비는 FK CASCADE 로 함께 지워진다 */
+    @DeleteMapping("/{id}")
+    public Map<String, Object> delete(@PathVariable String id) {
+        double n = Js.number(id);
+        int r = Double.isNaN(n) ? 0 : db.update("DELETE FROM sq_quotes WHERE id = ?", Js.json(n));
+        if (r == 0) throw ApiException.notFound();
+        return Map.of("ok", true);
+    }
+
+    /** #32 Excel — J7 */
+    @GetMapping("/{id}/excel")
+    public Map<String, Object> excel(@PathVariable String id) {
+        return notYet(id, "Excel");
+    }
+
+    /** #33 PDF — J7 */
+    @GetMapping("/{id}/pdf")
+    public Map<String, Object> pdf(@PathVariable String id) {
+        return notYet(id, "PDF");
+    }
+
+    private Map<String, Object> notYet(String id, String what) {
+        if (loader.load(Js.number(id)) == null) throw ApiException.notFound();
+        throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "NOT_IMPLEMENTED", what + " 출력은 Java 이식 J7 에서 연결됩니다.");
+    }
+
+    // ── 공통 ───────────────────────────────────────────────────────
+
+    /** Node {@code isBlocksBody} — blocks 가 비어 있지 않은 배열 */
+    private static boolean isBlocksBody(Map<String, Object> b) {
+        return b.get("blocks") instanceof List<?> l && !l.isEmpty();
+    }
+
+    private static void requireBlocksOrSections(Map<String, Object> b, boolean blockMode) {
+        if (!blockMode && !(b.get("sections") instanceof List<?> l && !l.isEmpty())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "NO_SECTIONS", "최소 1개 섹션 또는 블록이 필요합니다.");
+        }
+    }
+
+    private Map<String, Object> calcFor(Map<String, Object> b, boolean blockMode) {
+        return blockMode
+                ? calc.calcBlocks((List<?>) b.get("blocks"), b.get("discount"), b.get("monthly_discount"), b.get("round_unit"))
+                : calc.calcSections((List<?>) b.get("sections"), b.get("discount"));
+    }
+
+    /** {@code String(v).slice(0, 10)} */
+    private static String date10(Object v) {
+        String s = v instanceof Number n ? String.valueOf(Js.json(n.doubleValue())) : String.valueOf(v);
+        return s.length() > 10 ? s.substring(0, 10) : s;
     }
 }
