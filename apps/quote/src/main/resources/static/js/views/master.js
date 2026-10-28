@@ -310,16 +310,20 @@ export async function renderMaster(root) {
       h('div', { class: 'ss-detailbar__spacer' }), count));
 
     const gf = gridFields(m);
-    const cols = [h('col', { style: 'width:44px' }),
-      ...gf.map((f) => h('col', { style: `width:${colWidth(f)}px` })),
+    // 첫 칸은 '선택' — 60px 고정 (사용자 지정)
+    // 표가 본문보다 좁으면 남는 폭은 비고(없으면 이름 → 고르는 칸) 칸이 받는다 — 다른 칸 폭은 그대로
+    const flex = gf.find((f) => f.key === 'note')
+      || gf.find((f) => ['name', 'role_name', 'revenue_cond'].includes(f.key))
+      || gf.find((f) => f.type === 'preset') || gf[gf.length - 1];
+    const cols = [h('col', { style: 'width:60px' }),
+      ...gf.map((f) => h('col', { style: f === flex ? null : `width:${colWidth(f)}px` })),
       ...(m.preview ? [h('col', { style: 'width:220px' })] : [])];
     tbody = h('tbody');
-    const allCheck = h('input', { type: 'checkbox', 'aria-label': '전체 선택', onchange: (e) => { rows.forEach((r) => { r.checked = e.target.checked; }); paintRows(); } });
     pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill' },
-      h('table', { class: 'ss-grid', style: `min-width:${44 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
+      h('table', { class: 'ss-grid', style: `min-width:${60 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
         h('colgroup', {}, ...cols),
         h('thead', {}, h('tr', {},
-          h('th', {}, allCheck),
+          h('th', {}, '선택'),
           ...gf.map((f) => h('th', { class: f.required || f.pk ? 'req' : null }, f.label)),
           ...(m.preview ? [h('th', {}, '기준단가 (참고)')] : []))),
         tbody)));
