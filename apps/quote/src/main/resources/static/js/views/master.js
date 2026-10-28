@@ -18,7 +18,7 @@ const CLASS_PRESET = [
   ['MID', '중견기업'], ['SMALL', '중소기업'],
 ];
 const ONSITE_PRESET = [['ONSITE', '상주'], ['REMOTE', '비상주']];
-const NEGO_TARGETS = [['MODULE', '모듈(솔루션)'], ['LABOR', '인력']];
+const NEGO_TARGETS = [['MODULE', '솔루션'], ['LABOR', '인건비']]; // 네고율 상단 선택 상자
 
 // 숫자 칸 — 보일 때는 정수부에 3자리 콤마, 누르면(포커스) 콤마 없는 값으로 고친다.
 // 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자 · 점 · 빼기 외의 글자는 받지 않는다.
@@ -162,13 +162,12 @@ const MASTERS = [
     ],
   },
   {
-    // 네고율: 전 솔루션 공통. 한 줄 = 상주구분 · 기업구분 · 네고율 · 정렬 (사용자 지정 — 구분 칸 없음).
-    // DB 에는 구분(target: MODULE/LABOR)별로 두 행이 있고 견적 작성이 그 둘을 따로 찾는다. 그래서
-    // mergeTargets: 화면은 두 행을 한 줄로 합쳐 보여주고, 저장·추가·삭제는 두 행에 똑같이 한다(V3 참조).
-    // 상주구분 · 기업구분 조합은 겹칠 수 없다(uniqueCombo). 기업구분 선택지는 기업구분 마스터의 사용 중인 행.
-    // 행삭제는 실제 삭제(사용 컬럼 없음).
+    // 네고율: 전 솔루션 공통. 상단 선택 상자로 솔루션(MODULE) / 인건비(LABOR) 를 고르고(filterTarget),
+    // 한 줄 = 상주구분 · 기업구분 · 네고율 · 정렬 (사용자 지정). 새 행은 고른 구분으로 저장된다.
+    // 고른 구분 안에서 상주구분 · 기업구분 조합은 겹칠 수 없다(uniqueCombo).
+    // 기업구분 선택지는 기업구분 마스터의 사용 중인 행. 행삭제는 실제 삭제(사용 컬럼 없음).
     type: 'nego_rates', label: '네고율', pk: 'id', scoped: false,
-    mergeTargets: NEGO_TARGETS.map(([k]) => k),
+    filterTarget: NEGO_TARGETS,
     uniqueCombo: ['onsite_key', 'company_key'],
     list: ['onsite_key', 'company_key', 'rate', 'sort'],
     fields: [
@@ -246,7 +245,7 @@ export async function renderMaster(root) {
   const solutions = master.solutions || [];
 
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
-  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null };
+  const state = { type: MASTERS[0].type, solution: defaultSolution, year: null, target: NEGO_TARGETS[0][0] };
   let rows = [];     // [{ orig, form, isNew, checked }] — 지금 그리드에 있는 행
   let deleted = [];  // 행삭제한 기존 행 (저장할 때 서버에서 지운다)
   let companyOpts = CLASS_PRESET; // 네고율의 기업구분 선택지 — 기업구분 마스터의 사용 중인 행으로 채운다
@@ -289,9 +288,7 @@ export async function renderMaster(root) {
       const all = await api.masterAll();
       MASTERS.forEach((m) => {
         if (!Array.isArray(all[m.type])) return;
-        const live = all[m.type].filter((r) => !hasActive(m) || r.active);
-        // 구분별 행을 한 줄로 합치는 마스터(네고율)는 줄 수로 센다
-        counts[m.type] = m.mergeTargets ? new Set(live.map((r) => r.onsite_key + '|' + r.company_key)).size : live.length;
+        counts[m.type] = all[m.type].filter((r) => !hasActive(m) || r.active).length;
       });
     } catch { /* 건수는 참고용 */ }
     paintRail();
@@ -306,6 +303,7 @@ export async function renderMaster(root) {
     state.type = type;
     state.solution = defaultSolution;
     state.year = null;
+    state.target = NEGO_TARGETS[0][0];
     refresh();
   }
 
@@ -332,6 +330,11 @@ export async function renderMaster(root) {
       fields.appendChild(h('div', { class: 'ss-field' },
         h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => { if (!confirmLeave(e, state.solution)) return; state.solution = e.target.value; load(); } },
           ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
+    }
+    if (m.filterTarget) {
+      fields.appendChild(h('div', { class: 'ss-field' },
+        h('select', { class: 'ss-select', 'aria-label': '구분', onchange: (e) => { if (!confirmLeave(e, state.target)) return; state.target = e.target.value; load(); } },
+          ...m.filterTarget.map(([v, label]) => h('option', { value: v, selected: v === state.target }, label)))));
     }
     if (m.filterYear) {
       fields.appendChild(h('div', { class: 'ss-field' },
@@ -437,20 +440,8 @@ export async function renderMaster(root) {
           if (opts.length) companyOpts = opts;
         } catch { /* 못 받으면 기본 5종 */ }
       }
-      if (m.mergeTargets) {
-        // 구분(target)별 행들을 상주구분 · 기업구분 한 줄로 합친다. 대표 값은 첫 구분(MODULE) 행.
-        // 서버가 sort 순으로 주므로 처음 나온 순서를 그대로 쓴다.
-        const groups = new Map();
-        for (const r of data) {
-          const k = r.onsite_key + '|' + r.company_key;
-          if (!groups.has(k)) groups.set(k, []);
-          groups.get(k).push(r);
-        }
-        data = [...groups.values()].map((g) => {
-          const lead = g.find((r) => r.target === m.mergeTargets[0]) || g[0];
-          return { ...lead, _rows: g };
-        });
-      }
+      // 네고율: 상단에서 고른 구분(솔루션/인건비)의 행만
+      if (m.filterTarget) data = data.filter((r) => r.target === state.target);
       rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false, seq: seq++ }));
       applySort();
       paintRows();
@@ -589,6 +580,7 @@ export async function renderMaster(root) {
     if (m.inject) Object.assign(payload, m.inject);
     if (isNew && m.injectOnCreate) Object.assign(payload, m.injectOnCreate);
     if (isNew && m.scoped) payload.solution = state.solution;
+    if (isNew && m.filterTarget) payload.target = state.target;
     return { payload, missing };
   }
 
@@ -638,28 +630,9 @@ export async function renderMaster(root) {
     }))) return;
     let done = 0;
     try {
-      if (m.mergeTargets) {
-        // 한 줄 = 구분별 여러 행 — 같은 값을 모든 구분 행에 쓴다. 없는 구분 행은 새로 만든다
-        for (const o of deleted) { for (const x of o._rows) await api.masterDelete(m.type, x[m.pk]); done++; }
-        for (const r of creates) {
-          const p = payloadOf(m, r.form, true).payload;
-          for (const t of m.mergeTargets) await api.masterCreate(m.type, { ...p, target: t });
-          done++;
-        }
-        for (const r of updates) {
-          const p = payloadOf(m, r.form, false).payload;
-          for (const t of m.mergeTargets) {
-            const x = r.orig._rows.find((y) => y.target === t);
-            if (x) await api.masterUpdate(m.type, x[m.pk], p);
-            else await api.masterCreate(m.type, { ...p, target: t });
-          }
-          done++;
-        }
-      } else {
-        for (const o of deleted) { await api.masterDelete(m.type, o[m.pk]); done++; }
-        for (const r of creates) { await api.masterCreate(m.type, payloadOf(m, r.form, true).payload); done++; }
-        for (const r of updates) { await api.masterUpdate(m.type, r.orig[m.pk], payloadOf(m, r.form, false).payload); done++; }
-      }
+      for (const o of deleted) { await api.masterDelete(m.type, o[m.pk]); done++; }
+      for (const r of creates) { await api.masterCreate(m.type, payloadOf(m, r.form, true).payload); done++; }
+      for (const r of updates) { await api.masterUpdate(m.type, r.orig[m.pk], payloadOf(m, r.form, false).payload); done++; }
       toast(`저장되었습니다. (${done}건)`, 'ok');
     } catch (err) {
       toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
