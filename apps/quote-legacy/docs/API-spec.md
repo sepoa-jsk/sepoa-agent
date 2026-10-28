@@ -158,6 +158,7 @@ J5 에서는 2번(Google) 을 **자리만** 만든다(검증은 J8). 3·4·5 는
 | G | 레거시 섹션형 견적(`sections` 경로) 저장 — `service.js` 의 `calcQuote` 는 Java 에 아직 없다 | 기존 11건 중 섹션형이 있는지 확인 후 결정. 새 화면(위저드)은 블록형만 쓴다 |
 | I | **(J5-4 확인)** ① #18 해결 — Java 상세는 헤더에 우산 섹션의 `solution`·`brand`·`contract_months` 를 싣고, GET 결과를 그대로 PUT 하면 Node 는 500, Java 는 200. ② 단 **할인은 왕복되지 않는다** — 상세는 `discount_type`/`discount_value`(평면)로 내고 저장은 `discount:{type,value}`(객체)로 받는다. 그대로 되돌리면 할인이 빠진 금액으로 저장된다(Node 도 같은 구조). ③ `sections` 의 가격정책 4모델 저장은 Node 도 500(`Bind parameters must not contain undefined`), Java 는 501 | ②는 위저드 편집 모드(PROGRESS 이월 19) 가 `discount`·`monthly_discount` 를 객체로 다시 담아 보낼 것. 응답 모양은 바꾸지 않는다 |
 | H | **(J5-3 확인)** 24번 `calculate` 에서 Node 와 일부러 다르게 답하는 곳. ① 음수 단가·수량·금액, 알 수 없는 특별DC 유형 → Node 는 계산(유형은 AMOUNT 로 취급), Java 는 `400 INVALID_INPUT` — 엔진 계약(ENGINE-CONTRACT 2절)이 거부한다. ② `sections` 중 블록 스냅샷이 아닌 것(가격정책 4모델 `calcQuote`) → `501 NOT_IMPLEMENTED` — 엔진 계약 3절 "이식 대상 아님, J10 대체". 화면은 24번을 부르지 않는다. ③ `month_alloc: {}`(빈 객체) + 공수>0 → Node 는 배분 오류를 내고 Java 엔진은 "배분 없음" 으로 건너뛴다. 위저드는 빈 배분을 `null` 로 보내므로 화면에는 영향이 없다 | 그대로 둔다. 기존 견적 11건·템플릿 8종으로 만든 정상 요청 139건은 Node 와 같다 |
+| J | **(2026-10-28 화면 요청)** `sq_solutions`·`sq_deployments` 에 `sort` 컬럼을 추가했다(Java `V2__solutions_deployments_sort.sql`, test_01 에는 사용자 승인 후 수동 적용). Java 마스터 API(#6~#10)는 두 테이블을 `sort, code` 순으로 내고 `sort` 를 받아 저장한다. Node 는 여전히 `code` 순이고 `sort` 를 저장하지 않는다 — 지금 값(코드 순 1,2,3…)에서는 순서가 같다 | 정렬값을 바꾸면 Node 와 순서가 달라진다. Node 는 참조 앱이라 고치지 않는다 |
 
 ---
 

@@ -63,18 +63,20 @@ const STD_ROLE_NAME = Object.fromEntries(STD_ROLES);
 const MASTERS = [
   {
     type: 'solutions', label: '솔루션', pk: 'code', scoped: false,
-    list: ['code', 'name'],
+    list: ['code', 'name', 'sort'],
     fields: [
       { key: 'code', label: '코드', type: 'text', pk: true, mono: true },
       { key: 'name', label: '이름', type: 'text' },
+      { key: 'sort', label: '정렬', type: 'number' }, // V2 에서 추가
     ],
   },
   {
     type: 'deployments', label: '구축형태', pk: 'code', scoped: false,
-    list: ['name'],
+    list: ['code', 'name', 'sort'],
     fields: [
       { key: 'code', label: '코드', type: 'text', pk: true, mono: true },
       { key: 'name', label: '이름', type: 'text' },
+      { key: 'sort', label: '정렬', type: 'number' }, // V2 에서 추가
     ],
   },
   {

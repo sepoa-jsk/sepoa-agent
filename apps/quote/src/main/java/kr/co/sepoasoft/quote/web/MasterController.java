@@ -41,8 +41,9 @@ public class MasterController {
     /** Node {@code TABLES} — 순서가 #6 응답의 키 순서다 */
     static final Map<String, Meta> TABLES = new LinkedHashMap<>();
     static {
-        TABLES.put("solutions", new Meta("sq_solutions", "code", "code", List.of("code", "name", "source")));
-        TABLES.put("deployments", new Meta("sq_deployments", "code", "code", List.of("code", "name")));
+        // 솔루션 · 구축형태는 V2 에서 sort 를 추가했다 (Node 는 아직 code 순 — API-spec 차이 J 참조)
+        TABLES.put("solutions", new Meta("sq_solutions", "code", "sort, code", List.of("code", "name", "source", "sort")));
+        TABLES.put("deployments", new Meta("sq_deployments", "code", "sort, code", List.of("code", "name", "sort")));
         TABLES.put("company_classes", new Meta("sq_company_classes", "id", "solution, deployment, sort",
                 List.of("solution", "deployment", "key", "label", "revenue_cond", "onsite", "active", "sort")));
         TABLES.put("onsite_types", new Meta("sq_onsite_types", "code", "sort", List.of("code", "name", "sort")));
