@@ -225,6 +225,7 @@ export async function renderMaster(root) {
   // 그리드에 입력칸으로 나오는 필드 — 솔루션은 머리 폼에서 고르므로 뺀다
   const gridFields = (m) => m.fields.filter((f) => f.type !== 'solution');
   const visible = (f, form) => !f.showIf || f.showIf(form);
+  const hasActive = (m) => m.fields.some((f) => f.key === 'active');
   const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r)) || Object.keys(negoEdits).length > 0;
 
   // ── 셸: 화면 제목은 레일 머리가 맡는다 (셸 제목 바는 이 화면에서만 숨김) ──
@@ -254,7 +255,9 @@ export async function renderMaster(root) {
   async function loadCounts() {
     try {
       const all = await api.masterAll();
-      MASTERS.forEach((m) => { if (Array.isArray(all[m.type])) counts[m.type] = all[m.type].length; });
+      MASTERS.forEach((m) => {
+        if (Array.isArray(all[m.type])) counts[m.type] = all[m.type].filter((r) => !hasActive(m) || r.active).length;
+      });
     } catch { /* 건수는 참고용 */ }
     paintRail();
   }
@@ -382,6 +385,8 @@ export async function renderMaster(root) {
         if (sel) clear(sel).append(...years.map((y) => h('option', { value: y, selected: y === state.year }, y + '년')));
         data = data.filter((r) => Number(r.year) === state.year);
       }
+      // 사용 중지한 행은 보이지 않는다 (사용자 지정 — 되살리기는 DB 에서 active=1)
+      if (hasActive(m)) data = data.filter((r) => r.active);
       rows = data.map((r) => ({ orig: r, form: toForm(m, r), isNew: false, checked: false }));
       paintRows();
     } catch (err) {
