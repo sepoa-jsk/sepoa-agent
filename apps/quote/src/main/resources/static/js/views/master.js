@@ -71,11 +71,13 @@ const MASTERS = [
     ],
   },
   {
-    // 상주여부: 2종 고정. 드롭다운으로 상주/비상주 선택 → code/name 세팅.
+    // 상주여부: 다른 마스터처럼 코드 · 이름을 직접 입력한다 (코드는 PK — 저장 후 잠김).
+    // 네고율 표의 상주/비상주 탭은 ONSITE_PRESET(ONSITE/REMOTE) 코드를 쓴다.
     type: 'onsite_types', label: '상주여부', pk: 'code', scoped: false,
-    list: ['name', 'sort'],
+    list: ['code', 'name', 'sort'],
     fields: [
-      { key: 'code', label: '상주여부', type: 'preset', labelField: 'name', required: true, unique: true, options: ONSITE_PRESET },
+      { key: 'code', label: '코드', type: 'text', pk: true, mono: true, required: true, unique: true },
+      { key: 'name', label: '이름', type: 'text', required: true },
       { key: 'sort', label: '정렬', type: 'number' },
     ],
   },
@@ -128,7 +130,7 @@ const MASTERS = [
     },
     fields: [
       { key: 'code', label: '코드', type: 'text', mono: true },
-      { key: 'name', label: '직군명', type: 'text' },
+      { key: 'name', label: '이름', type: 'text' },
       { key: 'standard_role_code', label: '협회직군 (노임단가 연동)', type: 'preset', options: STD_ROLES },
       { key: 'std_mm', label: '표준 M/M', type: 'number' },
       { key: 'required', label: '필수여부', type: 'checkbox' },
@@ -183,9 +185,10 @@ const MASTERS = [
       ['work_days', '근무일', (v) => v + '일'],
     ],
     fields: [
+      // 코드 · 이름을 맨 앞에 (다른 마스터와 같게). 연도는 그 뒤 — 위 연도 선택값이 새 행에 들어간다
+      { key: 'role_code', label: '코드', type: 'text', mono: true },
+      { key: 'role_name', label: '이름', type: 'text' },
       { key: 'year', label: '연도', type: 'number' },
-      { key: 'role_code', label: '직군코드', type: 'text', mono: true },
-      { key: 'role_name', label: '직군명', type: 'text' },
       { key: 'daily_rate', label: '노임단가 (M/D, 원)', type: 'money' },
       { key: 'work_days', label: '근무일 (M/M 환산)', type: 'number', step: '0.1', default: 20.5 },
       { key: 'overhead_rate', label: '제경비율 (기본 1.1)', type: 'number', step: '0.001', default: 1.1 },
