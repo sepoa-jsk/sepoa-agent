@@ -193,7 +193,7 @@ const MASTERS = [
 
 // ── 화면 배치 — SingleSuite M1 d형(코드 목록 레일) + 편집 그리드 ──
 //   레일: 머리 = 화면 제목 · 마스터 10종(이름 / 건수). 고른 항목은 회색 배경 + 오른쪽 빨간 막대
-//   본문: 제목 줄(고른 마스터) → 머리 폼(솔루션·연도) | 저장 → 행추가 · 행삭제 · n 건 → 편집 그리드
+//   본문: 제목 줄(고른 마스터) → 머리 폼(솔루션·연도) | 행추가 · 행삭제 · 저장 → n 건 → 편집 그리드
 //   등록·수정·삭제는 팝업 없이 그리드에서 하고, 저장 한 번에 서버로 보낸다
 //   네고율만 탭 상자(상주/비상주) + 대상 × 기업구분 행렬, 칸에 바로 입력
 
@@ -297,13 +297,15 @@ export async function renderMaster(root) {
       fields.appendChild(h('div', { class: 'ss-field' }, h('label', {}, '연도'),
         h('select', { class: 'ss-select', id: 'master-year', onchange: (e) => { state.year = Number(e.target.value); load(); } })));
     }
+    // 행추가 · 행삭제는 저장 바로 왼쪽에 붙인다 (사용자 요청 — 캡처의 명세바 좌측 배치 대신)
     pane.appendChild(h('div', { class: 'ss-edithead' }, fields,
-      h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
+      h('div', { class: 'ss-actions' },
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
+        h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
     count = h('span', { class: 'ss-detailbar__count' });
     pane.appendChild(h('div', { class: 'ss-detailbar' },
-      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
-      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
       h('span', { class: 'ss-detailbar__note' }, m.type === 'modules' ? '단가는 가격정책에서 관리합니다.' : ''),
       h('div', { class: 'ss-detailbar__spacer' }), count));
 
