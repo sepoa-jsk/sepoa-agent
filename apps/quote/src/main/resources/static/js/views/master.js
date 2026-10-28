@@ -270,14 +270,12 @@ export async function renderMaster(root) {
   const pane = h('div', { class: 'ss-railview__body' });
   root.appendChild(h('div', { class: 'ss-railview' }, rail, pane));
 
-  async function go(type) {
-    if (type === state.type) return;
-    if (isDirty() && !(await confirmModal({
-      title: '저장하지 않은 변경',
-      message: '저장하지 않은 변경이 있습니다. 버리고 이동하시겠습니까?',
-      okLabel: '이동', danger: true,
-    }))) return;
+  // 레일 항목을 누르면 무조건 오른쪽을 처음 상태로 다시 그린다 (사용자 지정) —
+  // 같은 항목을 다시 눌러도, 저장 안 한 변경이 있어도 묻지 않고 버린다. 솔루션·연도·정렬도 처음 값으로
+  function go(type) {
     state.type = type;
+    state.solution = defaultSolution;
+    state.year = null;
     refresh();
   }
 
