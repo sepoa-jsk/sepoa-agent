@@ -47,7 +47,8 @@ export async function renderStep1(root, state, wiz) {
       fld('이메일', inp('email', { ph: '예) name@company.co.kr' })),
       fld('기업구분', ro(''), '마스터 연동 예정 — 현재 고객사 마스터가 없습니다'),
       fld('채널', ro(''), '마스터 연동 예정'),
-      fld('견적번호', ro(state.quoteNo || '저장 시 자동 채번 (QTYYYYMMDD_NNN)'), state.quoteNo ? '저장된 견적 — 번호는 바뀌지 않습니다' : '임시저장 또는 발행 시 채번'))));
+      fld('견적번호', ro(state.quoteNo || '저장 시 자동 채번 (QTYYYYMMDD_NNN)'), state.quoteNo ? '저장된 견적 — 번호는 바뀌지 않습니다' : '임시저장 또는 발행 시 채번'),
+      h('div', { 'data-keep': '' }, fld('상태', wiz.statusSelect(), wiz.readOnly ? '상세에서도 바로 바뀝니다' : '저장할 때 함께 저장됩니다')))));
 
   // ── 견적 조건 ──
   root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },

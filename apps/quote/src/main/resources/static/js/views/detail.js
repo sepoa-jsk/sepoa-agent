@@ -1,8 +1,10 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, fmtDate, toast, loading, clear, confirmModal, openModal } from '../ui.js';
+import { h, won, fmtDate, toast, loading, clear } from '../ui.js';
+import { copyQuote, viewQuote, deleteQuote } from './quote/quote-actions.js';
 
-// 견적 상세 — 2026-10-29 다시 만듦. L2 읽기 전용 변형.
+// 구 견적(섹션형) 상세 — 블록형 견적의 상세는 견적 작성 화면을 읽기 전용으로 연다(wizard/index.js readOnly).
+// 2026-10-29 다시 만듦. L2 읽기 전용 변형.
 // 우상단 액션(목록 · 수정 · 복사 · 견적서 보기 · 삭제) → 섹션 폼(기본 정보 / 견적 유형 / 금액) → 견적조건 → 견적 구성 그리드.
 // 상태만 이 화면에서 바로 바꾼다(PATCH /status). 나머지 값은 수정(위저드)에서 고친다.
 // 복사는 같은 내용으로 새 견적(새 번호 · 작성중 · 견적일 오늘)을 만들고 바로 수정 화면을 연다.
@@ -154,41 +156,8 @@ export async function renderDetail(root, id) {
       h('thead', {}, h('tr', {}, ...['블록', '구분', '품목 · 역할', '세부내역', '수량', '기준단가 (원)', '제안단가 (원)', '금액 (원)'].map((t) => h('th', {}, t)))),
       tbody)));
 
-  // ── 액션 ──
-  async function onCopy() {
-    const ok = await confirmModal({ title: '견적 복사', message: `${quote.quote_no} 견적을 같은 내용으로 새로 만듭니다. 새 견적번호가 붙고 견적일은 오늘이 됩니다. 만든 뒤 바로 수정 화면이 열립니다.`, okLabel: '복사' });
-    if (!ok) return;
-    try {
-      const { quote: nq } = await api.copyQuote(id);
-      toast(`${nq.quote_no} 견적을 만들었습니다.`, 'ok');
-      location.hash = `#/quotes/${nq.id}/edit`;
-    } catch (err) { toast(err.message, 'err'); }
-  }
-
-  async function onView() {
-    const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
-    const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
-    const m = openModal({
-      title: `견적서 — ${quote.quote_no}`,
-      body: frame,
-      footer: [printBtn, h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
-    });
-    const box = m.back.querySelector('.modal');
-    box.style.width = '880px';
-    box.querySelector('.modal-body').style.padding = '12px';
-    try {
-      const r = await api.quoteHtml(id);
-      frame.srcdoc = r.html;
-      printBtn.disabled = false;
-    } catch (err) {
-      frame.replaceWith(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, err.message));
-    }
-  }
-
-  async function onDelete() {
-    const ok = await confirmModal({ title: '견적 삭제', message: `${quote.quote_no} 견적을 삭제하시겠습니까? 되돌릴 수 없습니다.`, okLabel: '삭제', danger: true });
-    if (!ok) return;
-    try { await api.deleteQuote(id); toast('삭제되었습니다.', 'ok'); location.hash = '#/quotes'; }
-    catch (err) { toast(err.message, 'err'); }
-  }
+  // 복사 · 견적서 보기 · 삭제는 견적 작성(읽기 전용) 화면과 같이 쓴다
+  function onCopy() { return copyQuote(quote); }
+  function onView() { return viewQuote(quote); }
+  function onDelete() { return deleteQuote(quote); }
 }

@@ -14,6 +14,7 @@ export function quotePayload(s) {
     discount: discountPayload(s),
     monthly_discount: monthlyDiscountPayload(s),
     round_unit: num(s.round_unit ?? 100000),
+    status: s.status || undefined,
   };
 }
 
@@ -53,7 +54,7 @@ export function renderStep5(root, state, wiz) {
       : h('div', { class: 'banner inf' }, h('div', {},
           h('b', {}, '기본 확인 통과'),
           '정합성 검증 규칙 R-01~R-16 은 작업 16 에서 서버 측으로 들어옵니다.'));
-  root.appendChild(banner);
+  if (!wiz.readOnly) root.appendChild(banner); // 상세(읽기 전용)에서는 발행 전 확인이 필요 없다
 
   const layout = h('div', { style: 'display:grid;grid-template-columns:1fr 440px;gap:14px;align-items:start' });
   const left = h('div', { style: 'min-width:0' });
@@ -87,7 +88,8 @@ export function renderStep5(root, state, wiz) {
   const outBox = h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' });
   const savedNote = h('div', { class: 'sub', style: 'padding:0 14px 12px;color:var(--text-3)' },
     '산출물은 발행(저장) 후 내려받을 수 있습니다.');
-  left.appendChild(h('div', { class: 'card' },
+  // 상세(읽기 전용)에서는 발행 · 산출물 칸을 두지 않는다 — 견적서는 위쪽 [견적서 보기] 에서 본다
+  if (!wiz.readOnly) left.appendChild(h('div', { class: 'card' },
     h('div', { class: 'card-h' }, h('h2', {}, '산출물')),
     outBox, savedNote));
 

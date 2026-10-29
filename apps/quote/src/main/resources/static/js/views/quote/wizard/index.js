@@ -10,7 +10,11 @@
 //      처음엔 POST 로 견적번호를 받고, 그 뒤로는 같은 견적을 PUT 으로 덮어쓴다.
 // 수정: #/quotes/:id/edit 은 저장된 견적을 읽어 위저드 상태로 되돌린 뒤 STEP③ 에서 연다.
 //      수정 중에는 브라우저 자동 보관을 하지 않는다(새 견적 작성분과 섞이지 않게).
+// 상세: #/quotes/:id 는 같은 화면을 읽기 전용(readOnly)으로 연다 — 입력은 모두 잠그고 단계 이동만 된다.
+//      상태(작성중 · 발송 · 수주 · 실주)만 상세에서도 바로 바꾼다(PATCH /status).
+//      상세 ↔ 수정을 오갈 때 보던 단계를 이어서 연다(sessionStorage).
 import { api as http } from '../../../api.js';
+import { copyQuote, viewQuote, deleteQuote } from '../quote-actions.js';
 import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
@@ -21,6 +25,8 @@ import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
 
 const DRAFT_KEY = 'sq.wizard.draft.v1';
+const OPEN_STEP_KEY = 'sq.wizard.openStep'; // 상세 ↔ 수정 전환 때 이어서 열 단계
+export const STATUS_OPTS = [['DRAFT', '작성중'], ['SENT', '발송'], ['WON', '수주'], ['LOST', '실주']];
 
 const STEPS = [
   { n: 1, label: '기본정보', render: renderStep1 },
@@ -55,6 +61,7 @@ function blankState() {
     conds: [], riskFactors: [],
     savedAt: null,
     quoteId: null, quoteNo: null, // 서버에 저장된 견적이면 채워진다 (임시저장 또는 수정)
+    status: 'DRAFT',
   };
 }
 
@@ -100,6 +107,7 @@ function fromQuote(q, tpl) {
   st.monthly_discount = dcOf(q.monthly_discount_type, q.monthly_discount_value);
   st.conds = (q.conditions || []).map((c) => ({ text: typeof c === 'string' ? c : c.text || '' }));
   st.quoteId = q.id; st.quoteNo = q.quote_no;
+  st.status = q.status || 'DRAFT';
   st.step = 3;
   return st;
 }
@@ -116,6 +124,7 @@ function loadDraft() {
 export async function renderWizard(root, opts = {}) {
   resetTemplateCache(); // 견적 템플릿 화면에서 바꾼 내용을 다시 받는다
   const editMode = !!opts.quote;
+  const readOnly = !!opts.readOnly;
   let state;
   if (editMode) {
     let tpl = null;
@@ -123,6 +132,10 @@ export async function renderWizard(root, opts = {}) {
       try { ({ template: tpl } = await http.templateDetail(opts.quote.template_code)); } catch { /* 템플릿이 없어도 수정은 된다 */ }
     }
     state = fromQuote(opts.quote, tpl);
+    // 상세 ↔ 수정 전환이면 보던 단계에서, 아니면 상세는 1단계 · 수정은 3단계(구성)
+    const keep = Number(sessionStorage.getItem(OPEN_STEP_KEY));
+    sessionStorage.removeItem(OPEN_STEP_KEY);
+    state.step = keep >= 1 && keep <= STEPS.length ? keep : readOnly ? 1 : 3;
   } else {
     const draft = loadDraft();
     state = draft || blankState();
@@ -134,8 +147,8 @@ export async function renderWizard(root, opts = {}) {
     get() { return state; },
     go(n) {
       if (n < 1 || n > STEPS.length) return;
-      // 앞으로 갈 때만 검증한다. 뒤로 가기는 항상 허용.
-      if (n > state.step) {
+      // 앞으로 갈 때만 검증한다. 뒤로 가기는 항상 허용. 상세(읽기 전용)는 검증하지 않는다.
+      if (n > state.step && !readOnly) {
         const err = validate(state.step, state);
         if (err) return toast(err, 'err');
       }
@@ -151,7 +164,30 @@ export async function renderWizard(root, opts = {}) {
     },
     addDays,
     focusCustomer: () => focusCustomer(), // STEP⑤ 가 수신처 없음 오류에서 쓴다
+    readOnly,
+    // 상태 — 상세에서는 바로 서버에 반영하고, 작성 · 수정 중에는 저장할 때 같이 보낸다
+    async setStatus(v) {
+      if (!readOnly) { api.patch({ status: v }); return true; }
+      try {
+        await http.setStatus(state.quoteId, v);
+        state.status = v;
+        toast('상태가 변경되었습니다.', 'ok');
+        return true;
+      } catch (err) { toast(err.message, 'err'); return false; }
+    },
+    statusSelect: () => statusSelect(),
   };
+
+  // 상태 선택 상자 — data-keep 이라 상세(읽기 전용)에서도 잠그지 않는다
+  function statusSelect(attrs = {}) {
+    const sel = h('select', { class: 'input', 'data-keep': '', ...attrs, onchange: async (e) => {
+      const ok = await api.setStatus(e.target.value);
+      if (!ok) e.target.value = state.status;
+      document.querySelectorAll('select[data-status]').forEach((x) => { x.value = state.status; });
+    } }, ...STATUS_OPTS.map(([v, l]) => h('option', { value: v, selected: v === state.status }, l)));
+    sel.setAttribute('data-status', '');
+    return sel;
+  }
 
   function persist() {
     if (editMode) return;
@@ -214,13 +250,30 @@ export async function renderWizard(root, opts = {}) {
     } });
   }
 
+  // 상세 ↔ 수정 — 보던 단계를 넘겨 준다
+  const switchTo = (hash) => { sessionStorage.setItem(OPEN_STEP_KEY, String(state.step)); location.hash = hash; };
+
   function paintTitle() {
-    const head = editMode ? '견적 수정' : '견적 작성';
+    const head = readOnly ? '견적 상세' : editMode ? '견적 수정' : '견적 작성';
+    const path = `견적관리 / ${head}${state.quoteNo ? ' ' + state.quoteNo : ''} / ${state.step}. ${STEPS[state.step - 1].label}`;
+    if (readOnly) {
+      const q = { id: state.quoteId, quote_no: state.quoteNo };
+      setPage({ title: head, path, actions: [
+        { label: '목록', onClick: () => { location.hash = '#/quotes'; } },
+        { label: '수정', onClick: () => switchTo(`#/quotes/${state.quoteId}/edit`) },
+        { label: '복사', onClick: () => copyQuote(q) },
+        { label: '견적서 보기', onClick: () => viewQuote(q) },
+        { label: '삭제', onClick: () => deleteQuote(q) },
+        { label: '이전', onClick: () => api.prev() },
+        { label: '다음', primary: true, onClick: () => api.next() },
+      ] });
+      return;
+    }
     setPage({
       title: head,
-      path: `견적관리 / ${head}${state.quoteNo ? ' ' + state.quoteNo : ''} / ${state.step}. ${STEPS[state.step - 1].label}`,
+      path,
       actions: [
-        ...(editMode ? [{ label: '취소', onClick: () => { location.hash = `#/quotes/${state.quoteId}`; } }] : []),
+        ...(editMode ? [{ label: '취소', onClick: () => switchTo(`#/quotes/${state.quoteId}`) }] : []),
         { label: '템플릿 불러오기', onClick: pickTemplate },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },
@@ -274,6 +327,7 @@ export async function renderWizard(root, opts = {}) {
           onchange: () => { if (state.step === 5) paint(); } }), true),
         cell('담당자', inp('customer_contact', '예) 김OO 책임', '150px')),
         cell('견적용도', inp('purpose', '예) 전자구매시스템 구축 견적 (SaaS)', '320px')),
+        h('span', { 'data-keep': '' }, cell('상태', statusSelect({ style: 'width:96px' }))),
         list));
   }
 
@@ -296,6 +350,22 @@ export async function renderWizard(root, opts = {}) {
     paintTitle(); // GNB 액션 — 작업 7 의 setPage 인터페이스
 
     STEPS[state.step - 1].render(body, state, api);
+    if (readOnly) {
+      lock(body);
+      const bar = root.querySelector('.card');
+      if (bar && state.step >= 2) lock(bar);
+    }
+  }
+
+  // 읽기 전용 — 입력 · 버튼을 모두 잠근다(상태 상자 data-keep 은 뺀다). 단계가 늦게 그리는 부분도 따라 잠근다.
+  // 2단계의 유형 · 템플릿 카드는 버튼이 아니라서 누르지 못하게 막는다.
+  function lock(el) {
+    const apply = () => {
+      el.querySelectorAll('input, select, textarea, button').forEach((c) => { if (!c.closest('[data-keep]') && !c.disabled) c.disabled = true; });
+      el.querySelectorAll('.factor').forEach((c) => { c.style.pointerEvents = 'none'; });
+    };
+    apply();
+    new MutationObserver(apply).observe(el, { childList: true, subtree: true });
   }
 
   paint();

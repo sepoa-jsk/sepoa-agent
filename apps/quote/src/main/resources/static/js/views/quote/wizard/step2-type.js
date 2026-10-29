@@ -40,6 +40,7 @@ function comboCards(combos, state, root, wiz) {
         h('span', {}, DEP_DESC[c.deployment] || ''),
         h('span', { class: 'src' }, `${TYPE_LABEL[c.quote_type] || c.quote_type} · 템플릿 ${c.count}종`)));
     card.addEventListener('click', () => {
+      if (wiz.readOnly) return; // 상세(읽기 전용)
       // 구축형태를 바꾸면 템플릿 선택이 무효가 되므로 블록도 함께 비운다.
       wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null },
         blocks: [], applied: null, conds: [] });
@@ -59,6 +60,7 @@ function tplCards(list, state, root, wiz) {
         h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
       tpl.has_labor_plan ? h('span', { class: 'badge badge-yellow' }, '인력투입계획') : null);
     card.addEventListener('click', () => {
+      if (wiz.readOnly) return; // 상세(읽기 전용)
       // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
       // STEP③ 은 `!state.blocks.length` 일 때만 apply-template 을 부르므로,
       // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.

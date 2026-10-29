@@ -51,7 +51,7 @@ const routes = [
   { re: /^#\/quotes\/new$/, view: () => renderWizard(viewEl()) },
   // 편집 — 블록형 견적은 위저드 수정 모드, 섹션형(구 견적)은 editor.js.
   { re: /^#\/quotes\/(\d+)\/edit$/, view: (m) => openEdit(viewEl(), Number(m[1])) },
-  { re: /^#\/quotes\/(\d+)$/, view: (m) => renderDetail(viewEl(), Number(m[1])) },
+  { re: /^#\/quotes\/(\d+)$/, view: (m) => openDetail(viewEl(), Number(m[1])) },
   { re: /^#\/quotes$/, view: () => renderList(viewEl()) },
   { re: /^#\/master$/, admin: true, view: () => renderMaster(viewEl()) },
   { re: /^#\/pricing$/, admin: true, view: () => renderPricing(viewEl()) },
@@ -75,6 +75,17 @@ async function openEdit(el, id) {
   if (!quote) { toast('견적을 찾을 수 없습니다.', 'err'); location.hash = '#/quotes'; return; }
   if ((quote.blocks || []).length) return renderWizard(el, { quote });
   return renderEditor(el, { mode: 'edit', id });
+}
+
+// 상세 — 블록형 견적은 견적 작성 화면을 읽기 전용으로 연다(작성 · 수정 · 상세가 같은 단계 화면).
+//   구 섹션형 견적(블록 없음)은 위저드로 그릴 수 없어 예전 상세 화면(detail.js)을 쓴다.
+async function openDetail(el, id) {
+  let quote = null;
+  try { ({ quote } = await api.getQuote(id)); }
+  catch (err) { toast(err.message, 'err'); location.hash = '#/quotes'; return; }
+  if (!quote) { toast('견적을 찾을 수 없습니다.', 'err'); location.hash = '#/quotes'; return; }
+  if ((quote.blocks || []).length) return renderWizard(el, { quote, readOnly: true });
+  return renderDetail(el, id);
 }
 
 async function router() {
