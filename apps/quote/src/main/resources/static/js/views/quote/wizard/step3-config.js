@@ -444,9 +444,10 @@ export async function renderStep3(root, state, wiz) {
         h('div', { class: 'banner inf' }, h('div', {},
           h('b', {}, '옵션 라인 자동 생성은 아직 없습니다'),
           '서버이중화·계열사 추가 등은 규칙 마스터(sq_mst_rule)가 들어오는 작업 13 이후 연동됩니다. 지금은 항목을 직접 추가하세요.')))));
-    left.appendChild(condCard());
+    // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
     const pay = payPlanCard();
     if (pay) left.appendChild(pay);
+    left.appendChild(condCard());
     left.appendChild(summaryCard(c));
     wiz.patch({});
     preview.schedule(wiz);
