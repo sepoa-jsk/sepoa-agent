@@ -437,67 +437,44 @@ export async function renderStep3(root, state, wiz) {
     return card;
   }
 
+  // 합계 — 두 줄 그리드(일시불 · 월 사용료). 계산 순서는 견적서와 같다: 소계 → 특별 DC → 절사(일시불만) → 부가세 별도.
+  // 특별 DC 는 방식(최종금액 지정 · 할인액 · 할인율) + 값. 값을 비우면 DC 없음.
   function summaryCard(c) {
-    const dc = wiz.get().discount || { mode: 'TARGET', value: 0 };
-    els.one = h('span', { class: 'num' }, won(c.onetime));
-    els.dc = h('span', { class: 'num' }); els.tr = h('span', { class: 'num' });
-    els.fin = h('span', { class: 'num', style: 'font-weight:700' });
-    els.vat = h('span', { class: 'num' }); els.mon = h('span', { class: 'num' });
-    els.warn = h('div', { style: 'display:none;margin-top:10px;padding:8px;background:var(--warn-bg);border:1px solid #FFE380;font-size:12px' });
-    const modeSel = h('select', { class: 'select', style: 'width:100%' },
-      h('option', { value: 'TARGET', selected: dc.mode === 'TARGET' }, '최종금액 지정'),
-      h('option', { value: 'AMOUNT', selected: dc.mode === 'AMOUNT' }, '할인액 (원)'),
-      h('option', { value: 'RATE', selected: dc.mode === 'RATE' }, '할인율 (%)'));
-    modeSel.addEventListener('change', (e) => { dc.mode = e.target.value; wiz.patch({ discount: dc }); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); });
-    const valInp = h('input', {
-      class: 'input', type: 'number', step: 'any', style: 'width:100%;text-align:right', value: dc.value == null ? 0 : dc.value,
-      oninput: (e) => { dc.value = e.target.value; wiz.patch({ discount: dc }); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); },
-    });
-    // 절사 단위 — 실측은 전부 십만단위지만 구 화면과 동일하게 선택 가능해야 한다.
-    const ru = String(num(wiz.get().round_unit ?? 100000));
-    const roundSel = h('select', { class: 'select', style: 'width:100%' },
-      h('option', { value: '100000', selected: ru === '100000' }, '십만단위 절사'),
-      h('option', { value: '10000', selected: ru === '10000' }, '만단위 절사'),
-      h('option', { value: '0', selected: ru === '0' }, '절사 안 함'));
-    roundSel.addEventListener('change', (e) => {
-      wiz.patch({ round_unit: num(e.target.value) });
-      syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz);
-    });
-
-    // 월 특별DC — 일시불과 별도로 건다. 월 금액이 있는 견적(SaaS·PCloud)에서만 노출한다.
-    const mdc = wiz.get().monthly_discount || { mode: 'TARGET', value: null };
-    els.mdc = h('span', { class: 'num' }); els.monFin = h('span', { class: 'num', style: 'font-weight:700' });
-    const mModeSel = h('select', { class: 'select', style: 'width:100%' },
-      h('option', { value: 'TARGET', selected: mdc.mode === 'TARGET' }, '최종금액 지정'),
-      h('option', { value: 'AMOUNT', selected: mdc.mode === 'AMOUNT' }, '할인액 (원)'),
-      h('option', { value: 'RATE', selected: mdc.mode === 'RATE' }, '할인율 (%)'));
-    const mValInp = h('input', {
-      class: 'input', type: 'number', step: 'any', style: 'width:100%;text-align:right',
-      placeholder: '미입력 = DC 없음', value: mdc.value == null ? '' : mdc.value,
-    });
-    const mTouch = () => { wiz.patch({ monthly_discount: mdc }); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); };
-    mModeSel.addEventListener('change', (e) => { mdc.mode = e.target.value; mTouch(); });
-    mValInp.addEventListener('input', (e) => { mdc.value = e.target.value === '' ? null : e.target.value; mTouch(); });
-
-    const row = (k, v) => h('div', { style: 'display:flex;justify-content:space-between;padding:6px 0;font-size:12.5px' }, h('span', { style: 'color:var(--text-2)' }, k), v);
-    const monthlyRows = c.monthly
-      ? [h('div', { style: 'border-top:1px solid var(--line-2);margin-top:10px;padding-top:8px' }),
-        row('월 사용료 소계 (원)', els.mon),
-        h('div', { class: 'fld', style: 'margin-top:8px' }, h('label', {}, '월 특별 DC'),
-          h('div', { style: 'display:flex;gap:6px' }, mModeSel, mValInp)),
-        row('월 DC 금액 (원)', els.mdc),
-        row('월 사용료 (특별DC 적용, 원)', els.monFin)]
-      : [row('월 사용료 (원)', els.mon)];
-    const card = h('div', { class: 'card' },
-      h('div', { class: 'card-h' }, h('h2', {}, '합계')),
-      h('div', { class: 'card-b' },
-        row('일시불 소계 (원)', els.one),
-        h('div', { class: 'fld', style: 'margin-top:8px' }, h('label', {}, '특별 DC'),
-          h('div', { style: 'display:flex;gap:6px' }, modeSel, valInp)),
-        h('div', { class: 'fld', style: 'margin-top:8px' }, h('label', {}, '절사 단위'), roundSel),
-        row('DC 금액 (원)', els.dc), row('절사액 (원)', els.tr),
-        row('최종견적금액 (원)', els.fin), row('부가세 (원, 별도 10%)', els.vat),
-        ...monthlyRows, els.warn));
+    const s0 = wiz.get();
+    const dc = s0.discount || { mode: 'TARGET', value: null };
+    const mdc = s0.monthly_discount || { mode: 'TARGET', value: null };
+    const recalc = () => syncTotals(recalcBlocks(wiz.get()));
+    const dcCell = (obj, key) => {
+      const sel = h('select', { class: 'ss-cellinput', style: 'width:118px', onchange: (e) => { obj.mode = e.target.value; wiz.patch({ [key]: obj }); recalc(); } },
+        ...[['TARGET', '최종금액 지정'], ['AMOUNT', '할인액'], ['RATE', '할인율 (%)']].map(([v, l]) => h('option', { value: v, selected: obj.mode === v }, l)));
+      const val = numInput(obj.value ?? '', (v) => { obj.value = v === '' ? null : v; wiz.patch({ [key]: obj }); recalc(); },
+        { class: 'ss-cellinput', style: 'flex:1;text-align:right', placeholder: '비우면 DC 없음' });
+      return h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px' }, sel, val));
+    };
+    const ru = String(num(s0.round_unit ?? 100000));
+    const roundSel = h('select', { class: 'ss-cellinput', style: 'width:96px', onchange: (e) => { wiz.patch({ round_unit: num(e.target.value) }); recalc(); } },
+      ...[['100000', '십만단위'], ['10000', '만단위'], ['0', '절사 없음']].map(([v, l]) => h('option', { value: v, selected: ru === v }, l)));
+    const amt = (key, strong) => (els[key] = h('span', { style: strong ? 'font-weight:700' : '' }));
+    const td = (el, cls = 'ss-cell--amount') => h('td', { class: cls }, el);
+    const cols = [['구분', 110], ['소계 (원)', 140], ['특별 DC', 290], ['DC 금액 (원)', 130], ['절사', 190], ['최종 금액 (원)', 150], ['부가세 10% (원)', 130]];
+    const hasMonthly = c.monthly || wiz.get().blocks.some((b) => b.recurring);
+    const tbody = h('tbody', {},
+      h('tr', {}, h('td', { style: 'text-align:center;font-weight:600' }, '일시불'), td(amt('one')), dcCell(dc, 'discount'), td(amt('dc')),
+        h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:6px;align-items:center;justify-content:flex-end' }, roundSel, amt('tr'))),
+        td(amt('fin', true)), td(amt('vat'))),
+      hasMonthly ? h('tr', {}, h('td', { style: 'text-align:center;font-weight:600' }, '월 사용료'), td(amt('mon')), dcCell(mdc, 'monthly_discount'), td(amt('mdc')),
+        h('td', { style: 'text-align:center;color:var(--text-3)' }, '절사 안 함'), td(amt('monFin', true)), h('td', { style: 'text-align:center;color:var(--text-3)' }, '별도')) : null);
+    els.warn = h('div', { style: 'display:none;margin-top:8px;padding:8px;background:var(--warn-bg);border:1px solid #FFE380;font-size:12px' });
+    const card = h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 합계'),
+        h('span', { class: 'ss-detailbar__note' }, '소계 → 특별 DC → 절사 → 부가세 별도')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px;min-width:100%` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          tbody)),
+      els.warn);
     syncTotals(c);
     return card;
   }
@@ -510,12 +487,19 @@ export async function renderStep3(root, state, wiz) {
     const btn = h('button', { class: 'ss-btn ss-btn--save' }, '블록 추가');
     blockDefs().then((defs) => {
       const have = new Set(blocks.map((x) => x.block_code));
-      const opts = defs.filter((d) => d.code !== 'SUMMARY' && !have.has(d.code));
-      sel.replaceChildren(...(opts.length ? opts.map((d) => h('option', { value: d.code }, `${d.name}${d.recurring ? ' (월)' : ''}`))
+      const opts = defs.filter((d) => d.code !== 'SUMMARY' && !have.has(d.code)).map((d) => [d.code, `${d.name}${d.recurring ? ' (월)' : ''}`]);
+      if (!payOn()) opts.push(['__PAY', '결제 방안']); // 뺀 결제 방안을 다시 넣는다
+      sel.replaceChildren(...(opts.length ? opts.map(([v, l]) => h('option', { value: v }, l))
         : [h('option', { value: '' }, '더할 블록이 없습니다')]));
       btn.disabled = !opts.length;
     });
     btn.addEventListener('click', async () => {
+      if (sel.value === '__PAY') {
+        setPay({ enabled: true });
+        repaintLeft();
+        document.getElementById('blk-PAY')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
       const d = (await blockDefs()).find((x) => x.code === sel.value);
       if (!d) return;
       // 새 블록은 맨 아래에 붙인다 — 자리는 ▲ ▼ 로 옮긴다
@@ -523,16 +507,18 @@ export async function renderStep3(root, state, wiz) {
       repaintLeft();
       document.getElementById('blk-' + d.code)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    const chips = blocks.map((x, i) => h('button', {
+    const chip = (label, id) => h('button', {
       class: 'ss-chip', style: 'cursor:pointer;border:1px solid #DCE3EC;background:#F8FAFC',
-      title: '이 블록으로 가기', onclick: () => document.getElementById('blk-' + x.block_code)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    }, `${i + 1}. ${x.name}`));
+      title: '이 블록으로 가기', onclick: () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    }, label);
+    const chips = blocks.map((x, i) => chip(`${i + 1}. ${x.name}`, 'blk-' + x.block_code));
+    if (payOn()) chips.push(chip(`${blocks.length + 1}. 결제 방안`, 'blk-PAY'));
+    chips.push(chip(`${blocks.length + (payOn() ? 2 : 1)}. 견적조건`, 'blk-CONDS'));
     return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap;gap:8px' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적 구성'),
-        blocks.length
-          ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, ...chips)
-          : h('span', { class: 'ss-detailbar__note' }, '견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 · 개발인건비 등)을 먼저 추가하세요.'),
+        h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, ...chips),
+        blocks.length ? null : h('span', { class: 'ss-detailbar__note' }, '견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 · 개발인건비 등)을 먼저 추가하세요.'),
         h('div', { class: 'ss-detailbar__spacer' }), sel, btn));
   }
 
@@ -541,10 +527,14 @@ export async function renderStep3(root, state, wiz) {
     left.replaceChildren();
     left.appendChild(blockBar());
     for (const b of wiz.get().blocks) left.appendChild(blockCard(b, repaintLeft));
+    // 견적서 순서대로 번호 — 블록들 다음 결제 방안(넣는 경우), 그다음 견적조건
+    const n = wiz.get().blocks.length;
+    const payNo = payOn() ? n + 1 : null;
+    const condNo = n + (payOn() ? 2 : 1);
     // 옵션(서버이중화 · 계열사 추가 등 규칙 마스터 연동) 안내 칸은 뺐다 — 기능이 생기면 그때 넣는다
     // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
-    left.appendChild(payPlanCard());
-    left.appendChild(condCard());
+    if (payNo) left.appendChild(payPlanCard(payNo)); else els.payPlan = null;
+    left.appendChild(condCard(condNo));
     left.appendChild(summaryCard(c));
     wiz.patch({});
     preview.schedule(wiz);
@@ -552,7 +542,7 @@ export async function renderStep3(root, state, wiz) {
 
   // 견적조건 — 템플릿 조건셋으로 채워지고, 여기서 문구를 고치거나 줄을 더한다.
   // 견적서 하단 "▣ 견적조건" 블록이 이 배열을 그대로 싣는다.
-  function condCard() {
+  function condCard(no) {
     const conds = wiz.get().conds || [];
     const list = h('div', {});
     const touch = () => { wiz.patch({ conds }); preview.schedule(wiz); };
@@ -569,14 +559,16 @@ export async function renderStep3(root, state, wiz) {
       return row;
     };
     conds.forEach((c) => list.appendChild(rowOf(c)));
-    const add = h('button', { class: 'btn btn-sm' }, '+ 조건 추가');
+    const add = h('button', { class: 'ss-btn ss-btn--gridrow' }, '행추가');
     add.addEventListener('click', () => {
       const c = { text: '' }; conds.push(c); list.appendChild(rowOf(c)); touch();
     });
-    return h('div', { class: 'card', style: 'margin-bottom:12px' },
-      h('div', { class: 'card-h' }, h('h2', {}, '견적조건'),
-        h('span', { class: 'sub' }, '견적서 하단에 그대로 인쇄됩니다')),
-      h('div', { class: 'card-b' }, list, add));
+    return h('div', { class: 'card', id: 'blk-CONDS', style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 견적조건`),
+        h('span', { class: 'ss-detailbar__note' }, '견적서 하단에 그대로 인쇄됩니다'),
+        h('div', { class: 'ss-detailbar__spacer' }), add),
+      h('div', { style: 'margin-top:8px' }, list));
   }
 
   // ── 결제 방안 ───────────────────────────────────────────────
@@ -613,11 +605,10 @@ export async function renderStep3(root, state, wiz) {
     return Array.isArray(pp.rows) && pp.rows.length ? pp.rows : payPlanDefault(c.final, c.monthlyFinal, pp.ratio ?? 50);
   };
 
-  function payPlanCard() {
-    const on = payOn();
+  // 결제 방안을 넣는 견적에서만 그린다(repaintLeft). 빼면 맨 위 [블록 추가] 목록에 '결제 방안' 이 나온다
+  function payPlanCard(no) {
     const pp = payState();
     const picked = new Set();
-    const onBox = h('input', { type: 'checkbox', checked: on, onchange: (e) => { setPay({ enabled: e.target.checked }); repaintLeft(); } });
     const gbtn = (label, onclick) => h('button', { class: 'ss-btn ss-btn--gridrow', onclick }, label);
     // 처음 고치는 순간 지금 보이는 기본 문구를 견적에 옮겨 담는다 — 그 뒤로는 금액이 바뀌어도 그대로 둔다
     const materialize = () => {
@@ -634,11 +625,10 @@ export async function renderStep3(root, state, wiz) {
         toast(`계약체결 ${v}% / 구축완료 ${100 - v}% 로 다시 만들었습니다.`, 'ok');
       } });
     const bar = h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap' },
-      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안'),
-      h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:8px' }, onBox, '견적서에 넣기'),
-      on ? h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '계약체결 시', ratio, '%') : null,
+      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 결제 방안`),
+      h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '계약체결 시', ratio, '%'),
       h('div', { class: 'ss-detailbar__spacer' }),
-      ...(on ? [
+      ...([
         gbtn('행추가', () => { const rows = materialize(); rows.push(['', '', '', '']); setPay({ rows }); repaintLeft(); }),
         gbtn('행삭제', () => {
           if (!picked.size) return toast('삭제할 행을 선택하세요.', 'err');
@@ -646,14 +636,10 @@ export async function renderStep3(root, state, wiz) {
           setPay({ rows }); repaintLeft();
         }),
         gbtn('기본값으로', () => { setPay({ rows: null }); repaintLeft(); toast('금액과 비율로 기본 문구를 다시 만들었습니다.', 'ok'); }),
-      ] : []));
-    const card = h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' }, bar);
-    if (!on) {
-      card.appendChild(h('div', { class: 'ss-detailbar__note', style: 'margin-top:6px' },
-        '견적서에 클라우드서비스 결제 방안 표를 넣지 않습니다. 넣으려면 [견적서에 넣기] 를 켜세요.'));
-      els.payPlan = null;
-      return card;
-    }
+        // 빼면 견적서에서 결제 방안 표가 빠진다. 다시 넣을 때는 맨 위 [블록 추가] 에서 '결제 방안'
+        h('button', { class: 'ss-btn ss-btn--delete', onclick: () => { setPay({ enabled: false }); repaintLeft(); toast('결제 방안을 뺐습니다. 맨 위 [블록 추가] 에서 다시 넣을 수 있습니다.', 'ok'); } }, '블록 빼기'),
+      ]));
+    const card = h('div', { class: 'card', id: 'blk-PAY', style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' }, bar);
     const tbody = h('tbody');
     els.payPlan = { tbody, picked };
     paintPayPlan(recalcBlocks(wiz.get()));
