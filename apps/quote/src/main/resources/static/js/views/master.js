@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, toast, clear, confirmModal, resizableColumns } from '../ui.js';
+import { h, won, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
 
 // ── 마스터 정의 ────────────────────────────────────────────────
 // 영업팀(실무자) 기준 목록/모달. 개발용 컬럼(코드·솔루션 등)은 숨기고,
@@ -19,30 +19,6 @@ const CLASS_PRESET = [
 ];
 const ONSITE_PRESET = [['ONSITE', '상주'], ['REMOTE', '비상주']];
 const NEGO_TARGETS = [['MODULE', '솔루션'], ['LABOR', '인건비']]; // 네고율 상단 선택 상자
-
-// 숫자 칸 — 보일 때는 정수부에 3자리 콤마, 누르면(포커스) 콤마 없는 값으로 고친다.
-// 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자 · 점 · 빼기 외의 글자는 받지 않는다.
-const comma = (v) => {
-  if (v == null || v === '') return '';
-  const m = String(v).match(/^(-?)(\d+)(.*)$/);
-  return m ? m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + m[3] : String(v);
-};
-// plain 이면(연도 등) 콤마를 넣지 않는다
-function numInput(raw, onRaw, attrs, plain = false) {
-  let cur = raw == null ? '' : String(raw);
-  const show = (v) => (plain ? v : comma(v));
-  return h('input', {
-    ...attrs, type: 'text', inputMode: 'decimal', value: show(cur),
-    onfocus: (e) => { if (!e.target.readOnly) e.target.value = cur; },
-    onblur: (e) => { e.target.value = show(cur); },
-    oninput: (e) => {
-      const t = e.target.value.replace(/[^\d.-]/g, '');
-      if (t !== e.target.value) e.target.value = t;
-      cur = t;
-      onRaw(t);
-    },
-  });
-}
 
 // SW협회 노임단가 → 기준단가 (lib/labor-standard.js 와 동일 로직).
 function calcStandardRate(std) {

@@ -143,3 +143,27 @@ export function resizableColumns(table, storeKey) {
     th.appendChild(grip);
   });
 }
+
+// 숫자 칸 — 보일 때는 정수부에 3자리 콤마, 누르면(포커스) 콤마 없는 값으로 고친다.
+// 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자 · 점 · 빼기 외의 글자는 받지 않는다.
+export const comma = (v) => {
+  if (v == null || v === '') return '';
+  const m = String(v).match(/^(-?)(\d+)(.*)$/);
+  return m ? m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + m[3] : String(v);
+};
+// plain 이면(연도 등) 콤마를 넣지 않는다
+export function numInput(raw, onRaw, attrs, plain = false) {
+  let cur = raw == null ? '' : String(raw);
+  const show = (v) => (plain ? v : comma(v));
+  return h('input', {
+    ...attrs, type: 'text', inputMode: 'decimal', value: show(cur),
+    onfocus: (e) => { if (!e.target.readOnly) e.target.value = cur; },
+    onblur: (e) => { e.target.value = show(cur); },
+    oninput: (e) => {
+      const t = e.target.value.replace(/[^\d.-]/g, '');
+      if (t !== e.target.value) e.target.value = t;
+      cur = t;
+      onRaw(t);
+    },
+  });
+}
