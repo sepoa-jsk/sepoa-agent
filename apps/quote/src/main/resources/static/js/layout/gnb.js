@@ -50,6 +50,7 @@ export const PAGE_META = {
   detail: { title: '견적 상세', path: '견적관리 / 견적 목록 / 상세' },
   pricing: { title: '가격정책', path: '기준정보 / 가격정책' },
   master: { title: '마스터 관리', path: '기준정보 / 마스터 관리' },
+  customer: { title: '고객사', path: '기준정보 / 고객사' },
   'labor-rates': { title: '노임단가', path: '기준정보 / 노임단가' },
   templates: { title: '메일·문서 템플릿', path: '기준정보 / 메일·문서 템플릿' },
   settings: { title: '설정', path: '시스템관리 / 설정' },

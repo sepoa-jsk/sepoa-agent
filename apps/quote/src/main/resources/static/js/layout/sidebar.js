@@ -18,7 +18,7 @@ export const MENU = [
   { group: '기준정보', items: [
     { nav: 'pricing', label: '가격정책', href: '#/pricing', admin: true },
     { nav: 'master', label: '마스터 관리', href: '#/master', admin: true },
-    { nav: 'customer', label: '고객사' },
+    { nav: 'customer', label: '고객사', href: '#/customers', admin: true },
     { nav: 'risk', label: '리스크 계수' },
     { nav: 'labor-rates', label: '노임단가', href: '#/labor-rates', admin: true },
     { nav: 'code', label: '공통코드' },

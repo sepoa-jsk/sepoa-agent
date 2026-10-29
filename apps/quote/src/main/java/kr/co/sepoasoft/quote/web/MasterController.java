@@ -67,6 +67,10 @@ public class MasterController {
         TABLES.put("labor_standards", new Meta("sq_labor_standards", "id", "year DESC, sort",
                 List.of("year", "role_code", "role_name", "daily_rate", "work_days", "overhead_rate", "tech_rate",
                         "sort")));
+        // 고객사는 V4 에서 새로 만든 표다 (Node 에는 없다 — API-spec 3절 J ④)
+        TABLES.put("customers", new Meta("sq_mst_customer", "id", "sort, name",
+                List.of("code", "name", "company_key", "channel", "contact_name", "contact_phone", "contact_email",
+                        "payment_terms", "note", "active", "sort")));
     }
 
     private final Rows db;

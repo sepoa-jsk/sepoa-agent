@@ -76,6 +76,11 @@ class AdminApiContractTest {
         // 다른 코드면 코드를 바꾸려 한다(API-spec 3절 J, Node 와 다름) — 없는 행이라 404
         mvc.perform(json(put("/api/master/solutions/ZZ_NO_SUCH"), "ADMIN", "{\"code\":\"ZZ_NEW\"}"))
                 .andExpect(status().isNotFound());
+        // 고객사(V4) — 일반 사용자는 쓸 수 없고, 빈 값은 다른 마스터와 같은 오류
+        mvc.perform(json(post("/api/master/customers"), "USER", "{}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("FORBIDDEN"));
+        mvc.perform(json(post("/api/master/customers"), "ADMIN", "{\"x\":1}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("MISSING_FIELDS"));
         mvc.perform(json(post("/api/templates"), "ADMIN", "{\"code\":\"T\"}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").value("code/solution/name 은 필수입니다."));
         mvc.perform(json(put("/api/settings"), "ADMIN", "{\"settings\":\"x\"}"))
