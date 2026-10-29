@@ -3,7 +3,19 @@
 // 계산 로직은 바꾸지 않는다: 서버 calcQuoteBlocks 와 같은 순서를 그대로 옮겨 왔다.
 //   블록소계 합 → 특별DC → 절사(십만) → VAT. 일시불/월(recurring) 분리.
 import { api as http } from '../../../api.js';
-import { h, won, toast, openModal } from '../../../ui.js';
+import { h, won, toast, openModal, confirmModal } from '../../../ui.js';
+import { pickItems, pickRole, itemRow } from '../pickers.js';
+
+// 블록 정의(sq_blocks) — 블록 추가 목록. 한 번 받아 둔다
+let blockDefsCache = null;
+async function blockDefs() {
+  if (!blockDefsCache) {
+    try { blockDefsCache = ((await http.blocks()).blocks || []).sort((a, b) => a.sort - b.sort); } catch { blockDefsCache = []; }
+  }
+  return blockDefsCache;
+}
+// 견적 구축형태 → 가격정책 품목 구축형태(품목 선택 팝업의 첫 거르기). 구축형은 공통·일시불이 섞여 있어 전체로 연다
+const ITEM_DEP = { SAAS: 'SAAS', PCLOUD: 'PCLOUD' };
 
 const num = (v) => Number(v) || 0;
 
@@ -209,12 +221,13 @@ export async function openPreview(wiz) {
 export async function renderStep3(root, state, wiz) {
   root.replaceChildren();
 
-  if (!state.type.template_code) {
+  // 두 가지로 쓴다 — ① 템플릿을 불러와 고치기 ② 직접 작성(블록 · 품목 · 인력을 모두 손으로). 어느 쪽이든 모든 칸을 고칠 수 있다
+  if (!state.type.template_code && !state.type.manual) {
     root.appendChild(h('div', { class: 'banner wrn' },
-      h('div', {}, h('b', {}, 'STEP② 에서 템플릿을 먼저 선택하세요.'))));
+      h('div', {}, h('b', {}, 'STEP② 에서 템플릿을 고르거나 [직접 작성] 을 선택하세요.'), ' 위쪽 [템플릿 불러오기] 로 바로 불러와도 됩니다.')));
     return;
   }
-  if (!state.blocks.length) {
+  if (!state.blocks.length && state.type.template_code) {
     root.appendChild(h('div', { class: 'empty' }, '템플릿을 적용하는 중…'));
     try { await applyTemplate(state, wiz); }
     catch (err) { root.replaceChildren(h('div', { class: 'empty' }, err.message)); return; }
@@ -242,18 +255,11 @@ export async function renderStep3(root, state, wiz) {
   }
   function touched() { wiz.patch({}); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); }
 
+  // 행 — 모든 칸을 고칠 수 있다. 품목: 구분 · 모듈명 · 세부기능 · 수량 · 단위 · 기준단가 · 제안단가.
+  // 인력(개발인건비): [직무 선택] 팝업(노임단가 적용단가 → 기준단가) · 표시명 · 등급 · 업무 · 공수 · 기준단가 · 제안단가.
   function rowEl(b, r, isLabor, repaint) {
     const amtCell = h('td', { class: 'num' }, num(r.qty) === 0 && !isLabor ? '-' : won(r.amount || 0));
     const qtyKey = isLabor ? 'mm' : 'qty';
-    const nameInp = h('input', {
-      class: 'input', style: 'width:100%',
-      value: (isLabor ? (r.role_label || r.role_name) : r.name) || '',
-      oninput: (e) => { if (isLabor) r.role_label = e.target.value; else r.name = e.target.value; touched(); },
-    });
-    const specInp = h('input', {
-      class: 'input', style: 'width:100%', value: (isLabor ? r.task : r.spec) || '',
-      oninput: (e) => { if (isLabor) r.task = e.target.value; else r.spec = e.target.value; touched(); },
-    });
     const upd = () => {
       const c = recalcBlocks(wiz.get());
       amtCell.textContent = num(r.qty) === 0 && !isLabor ? '-' : won(r.amount || 0);
@@ -261,34 +267,46 @@ export async function renderStep3(root, state, wiz) {
       if (sub) sub.textContent = won(b._sub || 0);
       wiz.patch({}); syncTotals(c); preview.schedule(wiz);
     };
-    const qtyInp = h('input', {
-      class: 'input', type: 'number', step: 'any', style: 'width:76px;text-align:right', value: r[qtyKey],
-      oninput: (e) => { r[qtyKey] = e.target.value; upd(); },
-    });
-    const propInp = h('input', {
-      class: 'input', type: 'number', step: 'any',
-      style: 'width:118px;text-align:right;background:var(--primary-weak);color:var(--primary);font-weight:600',
-      value: r.proposed_price,
-      oninput: (e) => { r.proposed_price = e.target.value; upd(); },
-    });
-    const del = h('button', { class: 'btn btn-sm btn-danger' }, '×');
+    const txt = (key, ph, style = 'width:100%') => h('input', { class: 'input', style, value: r[key] ?? '', placeholder: ph,
+      oninput: (e) => { r[key] = e.target.value; touched(); } });
+    const numIn = (key, style) => h('input', { class: 'input', type: 'number', step: 'any', style, value: r[key] ?? '',
+      oninput: (e) => { r[key] = e.target.value === '' ? null : e.target.value; upd(); } });
+    const specKey = isLabor ? 'task' : 'spec';
+    const spec = h('textarea', { class: 'input', rows: 2, style: 'width:100%;min-height:52px;resize:vertical;line-height:1.5',
+      placeholder: isLabor ? '업무' : '세부기능', oninput: (e) => { r[specKey] = e.target.value; touched(); } });
+    spec.value = r[specKey] || '';
+    const del = h('button', { class: 'btn btn-sm btn-danger', title: '행 삭제' }, '×');
     del.addEventListener('click', () => {
       const arr = isLabor ? b.labor : b.items;
       const i = arr.indexOf(r); if (i >= 0) arr.splice(i, 1);
       repaint();
     });
+    let first;
+    if (isLabor) {
+      const roleBtn = h('button', { class: 'btn btn-sm', style: 'width:100%;text-align:left', title: '노임단가에서 직무 선택' },
+        r.role_code ? `${r.role_name || r.role_code} ▾` : '직무 선택 ▾');
+      roleBtn.addEventListener('click', async () => {
+        const x = await pickRole();
+        if (!x) return;
+        r.role_code = x.role_code; r.role_name = x.role_name;
+        if (!r.role_label) r.role_label = x.role_name;
+        if (!r.grade) r.grade = x.grade || '';
+        r.base_price = x.apply_price != null ? Number(x.apply_price) : null;
+        if (!num(r.proposed_price)) r.proposed_price = r.base_price || 0;
+        repaint();
+      });
+      first = h('div', { style: 'display:flex;flex-direction:column;gap:4px' }, roleBtn, txt('role_label', '표시명 (예: PM, 개발#1)'), txt('grade', '등급'));
+    } else {
+      first = h('div', { style: 'display:flex;flex-direction:column;gap:4px' }, txt('category', '구분'), txt('name', '모듈명'),
+        r.item_code ? h('div', { class: 'sub', style: 'color:var(--text-3)' }, r.item_code) : null);
+    }
     return h('tr', {},
-      h('td', {}, isLabor
-        ? h('div', {}, h('span', { class: 'tag' }, r.role_code),
-            r.grade ? h('span', { class: 'sub', style: 'margin-left:4px;color:var(--text-3)' }, r.grade) : null, nameInp)
-        : (r.item_code
-            ? h('div', {}, r.category ? h('div', { class: 'sub', style: 'color:var(--text-3)' }, r.category) : null,
-                h('strong', {}, r.name), h('div', { class: 'sub', style: 'color:var(--text-3)' }, r.item_code))
-            : nameInp)),
-      h('td', {}, specInp),
-      h('td', { class: 'num' }, qtyInp, r.unit ? h('span', { class: 'sub' }, ' ' + r.unit) : null),
-      h('td', { class: 'num' }, r.base_price != null ? won(r.base_price) : h('span', { class: 'sub' }, '-')),
-      h('td', { class: 'num' }, propInp),
+      h('td', { style: 'width:230px' }, first),
+      h('td', {}, spec),
+      h('td', { class: 'num', style: 'white-space:nowrap' }, numIn(qtyKey, 'width:70px;text-align:right'),
+        isLabor ? h('span', { class: 'sub' }, ' MM') : txt('unit', '단위', 'width:58px;margin-left:4px')),
+      h('td', { class: 'num' }, numIn('base_price', 'width:118px;text-align:right')),
+      h('td', { class: 'num' }, numIn('proposed_price', 'width:118px;text-align:right;background:var(--primary-weak);color:var(--primary);font-weight:600')),
       amtCell,
       h('td', { class: 'ctr' }, del));
   }
@@ -327,21 +345,47 @@ export async function renderStep3(root, state, wiz) {
 
   function blockCard(b, repaint) {
     const card = h('div', { class: 'card', style: 'margin-bottom:12px' });
+    const dropBlock = h('button', { class: 'btn btn-sm', style: 'margin-left:10px', title: '이 블록을 견적에서 뺀다' }, '블록 빼기');
+    dropBlock.addEventListener('click', async () => {
+      const n = (b.items || []).length + (b.labor || []).length;
+      if (n && !(await confirmModal({ title: '블록 빼기', danger: true, okLabel: '빼기', message: `'${b.name}' 블록과 행 ${n}개를 견적에서 뺍니다.` }))) return;
+      const blocks = wiz.get().blocks;
+      const i = blocks.indexOf(b); if (i >= 0) blocks.splice(i, 1);
+      repaint();
+    });
     card.appendChild(h('div', { class: 'card-h' }, h('h2', {}, b.name),
       b.recurring ? h('span', { class: 'badge badge-yellow' }, '월정액') : null,
       h('span', { class: 'sp' }), h('span', { class: 'sub' }, '소계 '),
-      h('span', { class: 'num', id: 'sub-' + b.block_code, style: 'font-weight:600' }, won(b._sub || 0))));
+      h('span', { class: 'num', id: 'sub-' + b.block_code, style: 'font-weight:600' }, won(b._sub || 0)), dropBlock));
 
     const mkTable = (isLabor) => {
       const rows = isLabor ? b.labor : b.items;
       if (!rows) return null;
       const tb = h('tbody');
       rows.forEach((r) => tb.appendChild(rowEl(b, r, isLabor, repaint)));
-      const add = h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 14px' }, isLabor ? '+ 인력 추가' : '+ 항목 추가');
+      const add = h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 14px' }, '+ 빈 행');
       add.addEventListener('click', () => {
         rows.push(isLabor
-          ? { role_code: 'DEV', role_label: '', grade: '', task: '', mm: 1, base_price: null, proposed_price: 0, amount: 0, month_alloc: {} }
-          : { item_code: '', category: '', name: '항목', spec: '', qty: 1, base_price: null, proposed_price: 0, amount: 0 });
+          ? { role_code: '', role_name: '', role_label: '', grade: '', task: '', mm: 1, base_price: null, proposed_price: 0, amount: 0, month_alloc: {} }
+          : { item_code: '', category: '', name: '', spec: '', unit: '', qty: 1, base_price: null, proposed_price: 0, amount: 0 });
+        repaint();
+      });
+      // 고르는 값은 팝업에서 — 품목은 가격정책 품목, 인력은 노임단가 직무
+      const pick = h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 6px' }, isLabor ? '직무 선택' : '품목 선택');
+      pick.addEventListener('click', async () => {
+        const s0 = wiz.get();
+        if (isLabor) {
+          const x = await pickRole();
+          if (!x) return;
+          const base = x.apply_price != null ? Number(x.apply_price) : null;
+          rows.push({ role_code: x.role_code, role_name: x.role_name, role_label: x.role_name, grade: x.grade || '', task: '', mm: 1,
+            base_price: base, proposed_price: base || 0, amount: 0, month_alloc: {} });
+        } else {
+          const list = await pickItems({ solution: s0.applied && s0.applied.solution, deployment: ITEM_DEP[s0.type.deployment] || '' });
+          if (!list.length) return;
+          list.forEach((i) => rows.push(itemRow(i)));
+          toast(`${list.length}개 품목을 넣었습니다.`, 'ok');
+        }
         repaint();
       });
       const paste = isLabor ? null : h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 6px' }, '엑셀 붙여넣기');
@@ -351,12 +395,12 @@ export async function renderStep3(root, state, wiz) {
           ? h('div', { class: 'sub', style: 'padding:10px 14px 0;color:var(--text-3)' }, '산정 근거(공수)') : null,
         h('div', { class: 'table-wrap' }, h('table', { class: 'grid' },
           h('thead', {}, h('tr', {},
-            h('th', {}, isLabor ? '역할(등급)' : '구분/모듈'), h('th', {}, '세부내역'),
-            h('th', { class: 'num' }, isLabor ? '공수 (MM)' : '수량'),
+            h('th', {}, isLabor ? '직무 · 표시명 · 등급' : '구분 · 모듈명'), h('th', {}, isLabor ? '업무' : '세부기능'),
+            h('th', { class: 'num' }, isLabor ? '공수 (MM)' : '수량 · 단위'),
             h('th', { class: 'num' }, '기준단가 (원)'), h('th', { class: 'num' }, '제안단가 (원)'),
             h('th', { class: 'num' }, b.recurring ? '제안금액 (원/월)' : '제안금액 (원)'), h('th', {}, ''))),
           tb)),
-        h('div', { style: 'padding:0 0 12px' }, add, paste));
+        h('div', { style: 'padding:0 0 12px' }, add, pick, paste));
     };
     if (b.items) card.appendChild(mkTable(false));
     // 인건비 표는 LABOR 블록에만 둔다. 비-LABOR 블록의 인건비 행은 금액이 아니라
@@ -434,10 +478,39 @@ export async function renderStep3(root, state, wiz) {
     return card;
   }
 
+  // 블록 추가 — 직접 작성은 여기서 블록부터 만든다. 템플릿을 불러온 견적도 블록을 더하거나 뺄 수 있다
+  function addBlockBar() {
+    const sel = h('select', { class: 'select', style: 'width:240px' });
+    const btn = h('button', { class: 'btn btn-sm btn-primary' }, '블록 추가');
+    blockDefs().then((defs) => {
+      const have = new Set(wiz.get().blocks.map((b) => b.block_code));
+      const opts = defs.filter((d) => d.code !== 'SUMMARY' && !have.has(d.code));
+      sel.replaceChildren(...opts.map((d) => h('option', { value: d.code }, `${d.name}${d.recurring ? ' (월)' : ''}`)));
+      btn.disabled = !opts.length;
+    });
+    btn.addEventListener('click', async () => {
+      const d = (await blockDefs()).find((x) => x.code === sel.value);
+      if (!d) return;
+      const isLaborBlock = d.code === 'LABOR';
+      const blocks = wiz.get().blocks;
+      blocks.push({ block_code: d.code, name: d.name, recurring: !!d.recurring, ...(isLaborBlock ? { labor: [] } : { items: [] }) });
+      // 블록 정의 순서대로
+      blocks.sort((x, y) => (blockDefsCache.findIndex((q) => q.code === x.block_code)) - (blockDefsCache.findIndex((q) => q.code === y.block_code)));
+      repaintLeft();
+    });
+    const empty = !wiz.get().blocks.length;
+    return h('div', { class: 'card', style: 'margin-bottom:12px' },
+      h('div', { class: 'card-b', style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
+        h('span', { style: 'font-size:12.5px;color:var(--text-2)' }, empty
+          ? '직접 작성 — 견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 등)을 먼저 추가하세요.'
+          : '블록 추가'), sel, btn));
+  }
+
   function repaintLeft() {
     const c = recalcBlocks(wiz.get());
     left.replaceChildren();
     for (const b of wiz.get().blocks) left.appendChild(blockCard(b, repaintLeft));
+    left.appendChild(addBlockBar());
     left.appendChild(h('div', { class: 'card', style: 'margin-bottom:12px' },
       h('div', { class: 'card-h' }, h('h2', {}, '옵션'), h('span', { class: 'sub' }, '작업 11~13 이후 연동')),
       h('div', { class: 'card-b' },

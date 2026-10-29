@@ -24,7 +24,8 @@ function localChecks(state) {
   const out = [];
   const b = state.basic;
   if (!b.customer_name || !b.customer_name.trim()) out.push({ level: 'ERROR', msg: '수신처(고객사명)가 비어 있습니다.' });
-  if (!state.type.template_code) out.push({ level: 'ERROR', msg: '템플릿이 선택되지 않았습니다.' });
+  if (!state.type.template_code && !state.type.manual) out.push({ level: 'ERROR', msg: '템플릿을 고르거나 직접 작성을 선택하세요.' });
+  if (!(state.applied && state.applied.solution)) out.push({ level: 'ERROR', msg: '솔루션이 정해지지 않았습니다.' });
   if (!state.blocks || !state.blocks.length) out.push({ level: 'ERROR', msg: '견적 구성이 비어 있습니다.' });
   const c = recalcBlocks(state);
   if (c.onetime === 0 && c.monthly === 0) out.push({ level: 'ERROR', msg: '금액이 0원입니다.' });

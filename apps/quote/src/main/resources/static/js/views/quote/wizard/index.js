@@ -85,7 +85,7 @@ function fromQuote(q, tpl) {
     purpose: memo.purpose || '', phone: memo.phone || '', email: memo.email || '',
     pay_terms: memo.pay_terms && memo.pay_terms !== '-' ? memo.pay_terms : '',
   });
-  st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code };
+  st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code, manual: !q.template_code };
   st.blocks = (q.blocks || []).map((b) => ({
     block_code: b.block_code, name: b.title, recurring: !!b.recurring,
     items: (b.items || []).map((it) => ({

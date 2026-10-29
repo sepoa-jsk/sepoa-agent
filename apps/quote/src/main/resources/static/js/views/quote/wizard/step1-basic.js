@@ -1,6 +1,7 @@
 // STEP① 기본정보 — 시안 #s4 구조.
 // 자사 정보는 sq_settings 값을 읽기 전용으로 보여준다. 견적서마다 다르게 입력되는 것을 막는 게 목적이다.
 import { api as http } from '../../../api.js';
+import { pickCustomer } from '../pickers.js';
 import { h } from '../../../ui.js';
 
 let settingsCache = null;
@@ -39,7 +40,15 @@ export async function renderStep1(root, state, wiz) {
     h('div', { class: 'card-h' }, h('h2', {}, '고객 정보'),
       h('span', { class: 'sub' }, '고객사 마스터는 작업 13에서 연동됩니다')),
     h('div', { class: 'card-b', style: 'display:grid;grid-template-columns:repeat(3,1fr);gap:0 14px' },
-      fld('수신처 (고객사명)', inp('customer_name', { ph: '예) 솔브레인' })),
+      // 직접 입력하거나 [고객사 선택] 팝업(고객사 마스터)에서 골라 담당자 · 연락처 · 이메일까지 채운다
+      fld('수신처 (고객사명)', h('div', { style: 'display:flex;gap:6px' }, inp('customer_name', { ph: '예) 솔브레인' }),
+        h('button', { class: 'btn', style: 'white-space:nowrap', onclick: async () => {
+          const c = await pickCustomer();
+          if (!c) return;
+          wiz.patch({ basic: { customer_name: c.name || '', customer_contact: c.contact_name || '',
+            phone: c.contact_phone || '', email: c.contact_email || '' } });
+          renderStep1(root, wiz.get(), wiz);
+        } }, '고객사 선택'))),
       fld('담당자', inp('customer_contact', { ph: '예) 김OO 책임' })),
       fld('견적용도', inp('purpose', { ph: '예) 전자계약관리 시스템 견적_구축형' })),
       // 연락처·이메일은 견적서 본문이 아니라 메모에 실린다(구 화면과 동일).

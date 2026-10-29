@@ -1,6 +1,7 @@
 // STEP② 유형 선택 — quote_type × deployment 조합을 카드로 제시하고 템플릿을 붙인다.
 // 조합은 임의로 만들지 않는다. sq_quote_templates 에 실제로 존재하는 것만 노출한다.
 import { api as http } from '../../../api.js';
+import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
 
 const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
@@ -42,7 +43,7 @@ function comboCards(combos, state, root, wiz) {
     card.addEventListener('click', () => {
       if (wiz.readOnly) return; // 상세(읽기 전용)
       // 구축형태를 바꾸면 템플릿 선택이 무효가 되므로 블록도 함께 비운다.
-      wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null },
+      wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null, manual: false },
         blocks: [], applied: null, conds: [] });
       renderStep2(root, wiz.get(), wiz);
     });
@@ -66,12 +67,37 @@ function tplCards(list, state, root, wiz) {
       // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.
       // (구 화면 quote-block.js 의 "템플릿 다시 적용" 버튼에 해당한다)
       const changed = state.type.template_code && state.type.template_code !== tpl.code;
-      wiz.patch({ type: { template_code: tpl.code },
+      wiz.patch({ type: { template_code: tpl.code, manual: false },
         ...(changed ? { blocks: [], applied: null, conds: [] } : {}) });
       renderStep2(root, wiz.get(), wiz);
     });
     return card;
   });
+}
+
+// 직접 작성 — 템플릿 없이 솔루션 · 구축형태만 정하고, 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
+function manualCard(state, root, wiz) {
+  const sols = (store.master && store.master.solutions) || [];
+  const on = !!state.type.manual;
+  const solSel = h('select', { class: 'select', style: 'width:160px' },
+    ...sols.map((s) => h('option', { value: s.code, selected: s.code === (state.applied && state.applied.solution) }, s.name || s.code)));
+  const depSel = h('select', { class: 'select', style: 'width:170px' },
+    ...Object.entries(DEP_LABEL).map(([v, l]) => h('option', { value: v, selected: v === state.type.deployment }, l)));
+  const start = h('button', { class: 'btn btn-primary' }, on ? '직접 작성 중 — 다시 적용' : '직접 작성으로 시작');
+  start.addEventListener('click', () => {
+    const changed = !on || state.type.deployment !== depSel.value || (state.applied && state.applied.solution) !== solSel.value;
+    wiz.patch({
+      type: { quote_type: 'BUILD', deployment: depSel.value, template_code: null, manual: true },
+      applied: { solution: solSel.value, brand: '', has_pay_plan: false },
+      hasLaborPlan: false,
+      ...(changed ? { blocks: [], conds: [] } : {}),
+    });
+    wiz.go(3);
+  });
+  return h('div', { class: 'card', style: 'margin-bottom:14px' + (on ? ';outline:2px solid var(--primary)' : '') },
+    h('div', { class: 'card-h' }, h('h2', {}, '직접 작성'), h('span', { class: 'sub' }, '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다')),
+    h('div', { class: 'card-b', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
+      h('span', { style: 'font-size:12.5px' }, '솔루션'), solSel, h('span', { style: 'font-size:12.5px' }, '구축형태'), depSel, start));
 }
 
 export async function renderStep2(root, state, wiz) {
@@ -101,6 +127,7 @@ export async function renderStep2(root, state, wiz) {
       style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px',
     }, ...comboCards(combos, state, root, wiz)));
   root.appendChild(typeCard);
+  root.appendChild(manualCard(state, root, wiz));
 
   if (state.type.deployment) {
     const list = all.filter((x) => x.quote_type === state.type.quote_type && x.deployment === state.type.deployment);
@@ -126,6 +153,7 @@ export async function renderStep2(root, state, wiz) {
 // 다음 단계로 가기 전 확인
 export function validateStep2(state) {
   if (!state.type.deployment) return '구축형태를 선택하세요.';
-  if (!state.type.template_code) return '템플릿을 선택하세요.';
+  if (!state.type.template_code && !state.type.manual) return '템플릿을 선택하거나 [직접 작성으로 시작] 을 누르세요.';
+  if (state.type.manual && !(state.applied && state.applied.solution)) return '솔루션을 선택하세요.';
   return null;
 }
