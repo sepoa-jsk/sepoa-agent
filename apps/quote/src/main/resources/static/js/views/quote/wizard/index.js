@@ -17,7 +17,6 @@ import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
 import { renderStep3, appliedPatch } from './step3-config.js';
 import { openTemplatePicker } from './template-picker.js';
-import { askCustomer } from './ask-customer.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
 
@@ -151,8 +150,7 @@ export async function renderWizard(root, opts = {}) {
       if (!editMode || (d && d.quoteId === id)) localStorage.removeItem(DRAFT_KEY);
     },
     addDays,
-    askCustomer: () => askCustomer(state.basic), // STEP⑤ 가 수신처 없음 오류에서 쓴다
-    repaint: () => paint(),
+    focusCustomer: () => focusCustomer(), // STEP⑤ 가 수신처 없음 오류에서 쓴다
   };
 
   function persist() {
@@ -167,12 +165,11 @@ export async function renderWizard(root, opts = {}) {
     if (!state.blocks.length) return toast('3단계(구성)에서 템플릿이 적용된 뒤부터 임시저장할 수 있습니다.', 'err');
     saving = true;
     try {
-      // 템플릿 불러오기로 1단계를 건너뛰면 수신처가 비어 있다 — 그 자리에서 받는다
+      // 템플릿 불러오기로 1단계를 건너뛰면 수신처가 비어 있다 — 화면 위 기본정보 줄의 수신처 칸으로 안내한다
       if (!state.basic.customer_name.trim()) {
-        const c = await askCustomer(state.basic);
-        if (!c) return;
-        api.patch({ basic: c });
-        if (state.step === 1 || state.step === 5) paint(); // 수신처가 보이는 화면이면 다시 그린다
+        toast('수신처(고객사명)를 입력하세요.', 'err');
+        focusCustomer();
+        return;
       }
       const payload = quotePayload(state);
       const { quote } = state.quoteId
@@ -240,9 +237,58 @@ export async function renderWizard(root, opts = {}) {
     }));
   }
 
+  // 기본정보 줄 — 2단계부터 화면 위에 수신처 · 담당자 · 견적용도를 늘 보여 준다.
+  // 템플릿 불러오기로 1단계를 건너뛰어도 여기서 바로 입력한다. 나머지 기본정보(연락처 · 일자 등)는 1단계에서.
+  let customers = null;
+  function basicBar() {
+    const b = state.basic;
+    const list = h('datalist', { id: 'wiz-customer-list' });
+    const loadCustomers = () => {
+      if (customers) return fill();
+      customers = [];
+      http.masterList('customers').then((r) => { customers = (r.rows || []).filter((c) => c.active !== 0); fill(); }).catch(() => {});
+    };
+    const fill = () => list.replaceChildren(...customers.map((c) => h('option', { value: c.name })));
+    const inp = (key, ph, width, extra = {}) => h('input', {
+      class: 'input', id: `wiz-basic-${key}`, value: b[key] || '', placeholder: ph, style: `width:${width}`, ...extra,
+      oninput: (e) => {
+        const patch = { basic: { [key]: e.target.value } };
+        // 고객사 마스터의 이름을 고르면 담당자를 채운다(비어 있을 때만)
+        const c = key === 'customer_name' && (customers || []).find((x) => x.name === e.target.value.trim());
+        if (c && c.contact_name && !state.basic.customer_contact) {
+          patch.basic.customer_contact = c.contact_name;
+          const ct = document.getElementById('wiz-basic-customer_contact');
+          if (ct) ct.value = c.contact_name;
+        }
+        e.target.style.borderColor = '';
+        api.patch(patch);
+      },
+    });
+    const cell = (label, el, req) => h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);white-space:nowrap' },
+      label, req ? h('span', { style: 'color:var(--danger)' }, '*') : null, el);
+    loadCustomers();
+    return h('div', { class: 'card', style: 'margin-bottom:12px' },
+      h('div', { class: 'card-b', style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px' },
+        // 5단계는 수신처 유무로 발행 가능 여부가 바뀐다 — 입력을 마치면(포커스가 나가면) 다시 그린다
+        cell('수신처', inp('customer_name', '고객사명 (예: 솔브레인)', '220px', { list: 'wiz-customer-list',
+          onchange: () => { if (state.step === 5) paint(); } }), true),
+        cell('담당자', inp('customer_contact', '예) 김OO 책임', '150px')),
+        cell('견적용도', inp('purpose', '예) 전자구매시스템 구축 견적 (SaaS)', '320px')),
+        list));
+  }
+
+  function focusCustomer() {
+    const el = document.getElementById('wiz-basic-customer_name');
+    if (!el) return;
+    el.style.borderColor = 'var(--danger)';
+    el.scrollIntoView({ block: 'center' });
+    el.focus();
+  }
+
   function paint() {
     clear(root);
     root.appendChild(stepsBar());
+    if (state.step >= 2) root.appendChild(basicBar());
     const body = h('div', {});
     root.appendChild(body);
     root.appendChild(h('div', { class: 'page-sub', id: 'wizard-saved', style: 'margin-top:10px;text-align:right' },
