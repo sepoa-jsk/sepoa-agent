@@ -46,12 +46,14 @@ public class QuoteController {
     private final QuoteLoader loader;
     private final QuoteCalc calc;
     private final QuoteWriter writer;
+    private final QuoteHtml html;
 
-    public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer) {
+    public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer, QuoteHtml html) {
         this.db = db;
         this.loader = loader;
         this.calc = calc;
         this.writer = writer;
+        this.html = html;
     }
 
     /** #27 목록 — 최신순, {@code size} 최대 100 */
@@ -176,6 +178,89 @@ public class QuoteController {
         int r = Double.isNaN(n) ? 0 : db.update("DELETE FROM sq_quotes WHERE id = ?", Js.json(n));
         if (r == 0) throw ApiException.notFound();
         return Map.of("ok", true);
+    }
+
+    /**
+     * 견적 복사 — 같은 내용으로 새 견적을 만든다. 새 번호 · 작성중 · 견적일 오늘 · 유효일 +30일.
+     * 단가는 원본 견적의 스냅샷을 그대로 쓴다(지금 가격정책으로 다시 계산하지 않는다).
+     * 블록형만 된다 — 구 섹션형 견적은 위저드로 고칠 수 없어서 복사본도 쓸 데가 없다.
+     */
+    @PostMapping("/{id}/copy")
+    public ResponseEntity<Map<String, Object>> copy(@PathVariable String id, HttpServletRequest req) {
+        Map<String, Object> q = loader.load(Js.number(id));
+        if (q == null) throw ApiException.notFound();
+        List<Map<String, Object>> blocks = maps(q.get("blocks"));
+        if (blocks.isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEGACY_QUOTE", "구 견적(섹션형)은 복사할 수 없습니다.");
+        }
+        Map<String, Object> b = new LinkedHashMap<>();
+        for (String k : List.of("quote_type", "deployment", "template_code", "solution", "brand",
+                "customer_name", "customer_contact", "memo", "conditions")) b.put(k, q.get(k));
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        b.put("quote_date", today.toString());
+        b.put("valid_until", today.plusDays(30).toString());
+        List<Object> outBlocks = new ArrayList<>();
+        for (Map<String, Object> blk : blocks) {
+            boolean isLabor = "LABOR".equals(blk.get("block_code"));
+            Map<String, Object> ob = new LinkedHashMap<>();
+            ob.put("block_code", blk.get("block_code"));
+            ob.put("name", blk.get("title"));
+            ob.put("recurring", Rows.truthy(blk.get("recurring")) ? 1 : 0);
+            List<Object> items = new ArrayList<>();
+            for (Map<String, Object> it : maps(blk.get("items"))) {
+                Map<String, Object> o = new LinkedHashMap<>();
+                for (String k : List.of("item_code", "category", "name", "spec", "qty", "unit", "months", "note",
+                        "base_price", "proposed_price", "amount")) o.put(k, it.get(k));
+                items.add(o);
+            }
+            List<Object> labor = new ArrayList<>();
+            for (Map<String, Object> l : maps(blk.get("labor"))) {
+                Map<String, Object> o = new LinkedHashMap<>();
+                for (String k : List.of("role_code", "role_name", "role_label", "grade", "task", "mm", "month_alloc")) o.put(k, l.get(k));
+                // 비-LABOR 블록의 인력은 공수 배분용이다 — 단가를 싣지 않는다(위저드 저장과 같은 규칙)
+                if (isLabor) for (String k : List.of("base_price", "proposed_price", "amount")) o.put(k, l.get(k));
+                labor.add(o);
+            }
+            // 빈 labor 배열을 함께 보내면 인건비 블록으로 오인된다 — 값이 있는 쪽만 싣는다
+            if (!items.isEmpty()) ob.put("items", items);
+            if (!labor.isEmpty()) ob.put("labor", labor);
+            if (items.isEmpty() && labor.isEmpty()) ob.put("items", items);
+            outBlocks.add(ob);
+        }
+        b.put("blocks", outBlocks);
+        b.put("discount", dc(q.get("discount_type"), q.get("discount_value")));
+        b.put("monthly_discount", dc(q.get("monthly_discount_type"), q.get("monthly_discount_value")));
+        b.put("round_unit", q.get("round_unit"));
+        Map<String, Object> result = calcFor(b, true);
+        long newId = writer.create(b, result, true, AccessInterceptor.currentUser(req).id());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("quote", loader.load(newId)));
+    }
+
+    /** 저장된 특별DC → 계산 입력. 할인 없음은 type 이 null 로 남는다 */
+    private static Map<String, Object> dc(Object type, Object value) {
+        if (!Rows.truthy(type)) return null;
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("type", type);
+        m.put("value", Js.json(Js.toNumber(value)));
+        return m;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> maps(Object v) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (v instanceof List<?> l) for (Object o : l) if (o instanceof Map<?, ?> m) out.add((Map<String, Object>) m);
+        return out;
+    }
+
+    /** 저장된 견적의 견적서 HTML — 상세 화면의 '견적서 보기'. PDF(#33)도 이 HTML 을 인쇄하게 된다 */
+    @GetMapping("/{id}/html")
+    public Map<String, Object> html(@PathVariable String id, @RequestParam(required = false) String cover) {
+        Map<String, Object> q = loader.load(Js.number(id));
+        if (q == null) throw ApiException.notFound();
+        if (maps(q.get("blocks")).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEGACY_QUOTE", "구 견적(섹션형)은 견적서 보기를 지원하지 않습니다.");
+        }
+        return Map.of("html", html.render(q, html.settings(), html.masters(q, null), !"0".equals(cover)));
     }
 
     /** #32 Excel — J7 */

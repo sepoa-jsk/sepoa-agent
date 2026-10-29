@@ -1,8 +1,18 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, wonSuffix, fmtDate, statusBadge, toast, loading, clear, confirmModal } from '../ui.js';
+import { h, won, fmtDate, toast, loading, clear, confirmModal, openModal } from '../ui.js';
+
+// 견적 상세 — 2026-10-29 다시 만듦. L2 읽기 전용 변형.
+// 우상단 액션(목록 · 수정 · 복사 · 견적서 보기 · 삭제) → 섹션 폼(기본 정보 / 견적 유형 / 금액) → 견적조건 → 견적 구성 그리드.
+// 상태만 이 화면에서 바로 바꾼다(PATCH /status). 나머지 값은 수정(위저드)에서 고친다.
+// 복사는 같은 내용으로 새 견적(새 번호 · 작성중 · 견적일 오늘)을 만들고 바로 수정 화면을 연다.
+// 견적서 보기는 PDF 와 같은 렌더러로 그린 견적서를 띄우고, 인쇄로 PDF 를 저장할 수 있다.
+// 구 섹션형 견적(블록 없음)은 수정만 예전 화면으로 가고, 복사 · 견적서 보기는 막는다.
 
 const STATUS_FLOW = [['DRAFT', '작성중'], ['SENT', '발송'], ['WON', '수주'], ['LOST', '실주']];
+const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
+const DEP_LABEL = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', SAAS: 'SaaS', PCLOUD: 'Private Cloud', ONPREM: '구축형' };
+const num = (v) => Number(v) || 0;
 
 export async function renderDetail(root, id) {
   root.appendChild(loading());
@@ -14,124 +24,166 @@ export async function renderDetail(root, id) {
     return;
   }
   clear(root);
+  const isBlock = (quote.blocks || []).length > 0;
 
-  const statusSel = h('select', { class: 'select', onchange: async () => {
-    try { await api.setStatus(id, statusSel.value); quote.status = statusSel.value; badgeSlot.replaceChildren(statusBadge(quote.status)); toast('상태가 변경되었습니다.', 'ok'); }
+  // 메모에 접어 둔 값 — [견적용도] … 형식
+  const memoStr = String(quote.memo || '');
+  const tag = (t) => { const m = memoStr.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
+
+  // ── 우상단 액션 ──
+  const btn = (label, onclick, attrs = {}) => h('button', { class: 'ss-btn ss-btn--save', onclick, ...attrs }, label);
+  root.appendChild(h('div', { class: 'ss-formhead' }, h('div', { class: 'ss-actions' },
+    btn('목록', () => { location.hash = '#/quotes'; }),
+    btn('수정', () => { location.hash = `#/quotes/${id}/edit`; }),
+    btn('복사', onCopy, isBlock ? {} : { disabled: true, title: '구 견적(섹션형)은 복사할 수 없습니다' }),
+    btn('견적서 보기', onView, isBlock ? {} : { disabled: true, title: '구 견적(섹션형)은 지원하지 않습니다' }),
+    h('button', { class: 'ss-btn ss-btn--delete', onclick: onDelete }, '삭제'))));
+
+  // ── 섹션 폼 ──
+  const ro = (v, amount) => h('input', { class: 'ss-input' + (amount ? ' ss-input--amount' : ''), value: v ?? '', disabled: true });
+  const field = (label, ctrl, cls = '') => h('div', { class: 'ss-field ' + cls }, h('label', {}, label), ctrl);
+  const section = (legend, ...fields) => h('fieldset', { class: 'ss-section' }, h('legend', {}, legend), h('div', { class: 'ss-fields' }, ...fields));
+
+  const statusSel = h('select', { class: 'ss-select', onchange: async () => {
+    try { await api.setStatus(id, statusSel.value); quote.status = statusSel.value; toast('상태가 변경되었습니다.', 'ok'); }
     catch (err) { toast(err.message, 'err'); statusSel.value = quote.status; }
   } }, ...STATUS_FLOW.map(([v, l]) => h('option', { value: v, selected: v === quote.status }, l)));
 
-  const badgeSlot = h('span', {}, statusBadge(quote.status));
+  const form = h('div', { class: 'ss-form ss-form--cols4' }); // 섹션 안 4칸 격자, 폼 블록은 가운데 944px
+  form.appendChild(section('견적 기본 정보',
+    field('견적번호', ro(quote.quote_no)),
+    field('상태', statusSel),
+    field('견적일자', ro(fmtDate(quote.quote_date))),
+    field('견적유효일', ro(quote.valid_until ? fmtDate(quote.valid_until) : '견적일로부터 30일')),
+    field('수신처 (고객사)', ro(quote.customer_name), 'ss-field--w2'),
+    field('담당자', ro(quote.customer_contact)),
+    field('작성자', ro(quote.created_by_name || '')),
+    field('연락처', ro(tag('연락처'))),
+    field('이메일', ro(tag('이메일'))),
+    field('결제조건', ro(tag('결제조건'))),
+    field('특별 DC', ro(tag('특별DC'))),
+    field('견적용도', ro(tag('견적용도')), 'ss-field--full')));
 
-  root.appendChild(h('div', { class: 'page-head' },
-    h('div', {},
-      h('div', { class: 'page-title' }, h('span', {}, quote.quote_no), ' ', badgeSlot),
-      h('div', { class: 'page-sub' }, `${quote.customer_name || '고객사 미지정'} · 견적일 ${fmtDate(quote.quote_date)}`)
-    ),
-    h('div', { class: 'page-actions' },
-      statusSel,
-      h('a', { class: 'btn', href: `#/quotes/${id}/edit` }, '수정'),
-      h('a', { class: 'btn btn-navy', href: api.excelUrl(id), download: true }, 'Excel 다운로드'),
-      h('a', { class: 'btn', href: api.pdfUrl(id), target: '_blank', rel: 'noopener' }, 'PDF 다운로드'),
-      h('button', { class: 'btn btn-danger', onclick: onDelete }, '삭제')
-    )
-  ));
+  if (isBlock) {
+    form.appendChild(section('견적 유형',
+      field('유형', ro(TYPE_LABEL[quote.quote_type] || quote.quote_type)),
+      field('구축형태', ro(DEP_LABEL[quote.deployment] || quote.deployment)),
+      field('솔루션', ro(store.solutionName(quote.solution) || '')),
+      field('템플릿', ro(quote.template_code)),
+      field('브랜드', ro(quote.brand))));
+  }
 
-  // 메타
-  root.appendChild(h('div', { class: 'panel' },
-    h('div', { class: 'panel-body' },
-      h('div', { class: 'detail-meta' },
-        meta('견적번호', quote.quote_no),
-        meta('견적일', fmtDate(quote.quote_date)),
-        meta('유효기간', quote.valid_until ? fmtDate(quote.valid_until) : '견적일로부터 30일'),
-        meta('고객사', quote.customer_name || '-'),
-        meta('담당자', quote.customer_contact || '-'),
-        meta('작성자', quote.created_by_name || '-')
-      )
-    )
-  ));
+  // 금액 — 블록형은 일시불/월 분리(소계 → 특별DC → 절사 → 부가세), 구 견적은 공급가 · 할인 · 부가세 · 합계
+  if (isBlock) {
+    const oneSub = quote.blocks.filter((b) => !b.recurring).reduce((a, b) => a + num(b.subtotal), 0);
+    const monSub = quote.blocks.filter((b) => b.recurring).reduce((a, b) => a + num(b.subtotal), 0);
+    const one = num(quote.onetime_total), mon = num(quote.monthly_total);
+    form.appendChild(section('금액 (원, 부가세 별도)',
+      field('일시불 소계', ro(won(oneSub), true)),
+      field('특별 DC · 절사', ro(oneSub - one ? '-' + won(oneSub - one) : '0', true)),
+      field('최종견적금액', ro(one === 0 && oneSub ? '무상제공' : won(one), true)),
+      field('부가세 (10%)', ro(won(quote.vat_amount), true)),
+      ...(monSub ? [
+        field('월 사용료 소계', ro(won(monSub), true)),
+        field('월 특별 DC', ro(monSub - mon ? '-' + won(monSub - mon) : '0', true)),
+        field('월 사용료', ro(won(mon), true)),
+      ] : [])));
+  } else {
+    form.appendChild(section('금액 (원)',
+      field('공급가액', ro(won(quote.supply_amount), true)),
+      field('할인', ro(quote.discount_amount ? '-' + won(quote.discount_amount) : '0', true)),
+      field('부가세 (10%)', ro(won(quote.vat_amount), true)),
+      field('합계금액', ro(won(quote.total_amount), true))));
+  }
 
-  // 섹션별 품목
-  for (const sec of quote.sections) {
-    const tbody = h('tbody');
-    for (const it of sec.items) {
-      tbody.appendChild(h('tr', {},
-        h('td', {}, h('span', { class: 'tag' }, it.category || '-')),
-        h('td', {}, h('div', {}, h('strong', {}, it.name)), it.spec ? h('div', { class: 'page-sub' }, it.spec) : null),
-        h('td', { class: 'center nowrap' }, it.unit || '-'),
-        h('td', { class: 'center' }, Number(it.qty)),
-        h('td', { class: 'center' }, it.months > 1 ? `${it.months}개월` : '-'),
-        h('td', { class: 'num' }, won(it.unit_price)),
-        h('td', { class: 'num' }, h('strong', {}, won(it.amount))),
-        h('td', {}, it.note ? h('span', { class: 'page-sub' }, it.note) : '')
-      ));
+  const conds = (Array.isArray(quote.conditions) ? quote.conditions : []).map((c) => (typeof c === 'string' ? c : c.text)).filter(Boolean);
+  form.appendChild(h('fieldset', { class: 'ss-section' }, h('legend', {}, '견적조건'),
+    h('div', { style: 'padding-top:8px;font-size:13px;line-height:1.8;color:var(--ss-ink-2)' },
+      ...(conds.length ? conds.map((c) => h('div', {}, '-. ' + c)) : [h('div', { style: 'color:var(--ss-ink-3)' }, '저장된 견적조건이 없습니다. 견적서에는 템플릿의 견적조건이 들어갑니다.')]))));
+  root.appendChild(form);
+
+  // ── 견적 구성 그리드 ──
+  const groups = isBlock
+    ? quote.blocks.map((b) => ({
+      title: b.title || b.block_code, recurring: b.recurring, subtotal: b.subtotal,
+      rows: [
+        ...(b.items || []).map((it) => ({ gubun: it.category || '', name: it.name, spec: it.spec, qty: it.qty, unit: it.unit,
+          base: it.base_price, price: it.proposed_price ?? it.unit_price, amount: it.amount })),
+        // 금액이 되는 인력은 개발인건비(LABOR) 블록뿐이다 — 다른 블록의 인력은 공수 배분(인력투입계획)용
+        ...(b.block_code === 'LABOR' ? (b.labor || []).map((l) => ({
+          gubun: '개발인건비', name: (l.role_label || l.role_name || l.role_code) + (l.grade ? ` (${l.grade})` : ''),
+          spec: l.task, qty: l.mm, unit: 'MM', base: l.base_price, price: l.proposed_price, amount: l.amount })) : []),
+      ],
+    }))
+    : (quote.sections || []).map((s) => ({
+      title: `${store.solutionName(s.solution)} - ${store.deploymentName(s.deployment)}`, subtotal: s.subtotal,
+      rows: (s.items || []).map((it) => ({ gubun: it.category || '', name: it.name, spec: it.spec, qty: it.qty, unit: it.unit,
+        base: it.base_price, price: it.unit_price, amount: it.amount })),
+    }));
+  const rowCount = groups.reduce((a, g) => a + g.rows.length, 0);
+
+  root.appendChild(h('div', { class: 'ss-detailbar' },
+    h('span', { style: 'font-size:15px;font-weight:500;color:var(--ss-ink-2)' }, '견적 구성'),
+    h('div', { class: 'ss-detailbar__spacer' }),
+    h('span', { class: 'ss-detailbar__count' }, h('b', {}, String(rowCount)), ' 건')));
+
+  const widths = [170, 120, 220, 360, 90, 130, 130, 140];
+  const tbody = h('tbody');
+  for (const g of groups) {
+    g.rows.forEach((r, i) => tbody.appendChild(h('tr', {},
+      h('td', { class: 'ss-cell--left', style: 'font-weight:500' }, i === 0 ? g.title + (g.recurring ? ' (월)' : '') : ''),
+      h('td', { class: 'ss-cell--left' }, r.gubun),
+      h('td', { class: 'ss-cell--left' }, r.name || ''),
+      h('td', { class: 'ss-cell--left', title: r.spec || '' }, r.spec || ''),
+      h('td', { style: 'text-align:right' }, `${num(r.qty)}${r.unit === 'MM' ? ' MM' : ''}`),
+      h('td', { style: 'text-align:right' }, r.base != null && num(r.base) > 0 ? won(r.base) : ''),
+      h('td', { style: 'text-align:right' }, won(r.price)),
+      h('td', { class: 'ss-cell--amount' }, num(r.qty) === 0 ? '-' : won(r.amount)))));
+    if (!g.rows.length) {
+      tbody.appendChild(h('tr', {}, h('td', { class: 'ss-cell--left', style: 'font-weight:500' }, g.title),
+        h('td', { colspan: 7, class: 'ss-cell--empty' }, '항목 없음')));
     }
-    root.appendChild(h('div', { class: 'panel' },
-      h('div', { class: 'panel-head' },
-        h('span', {}, `[${store.solutionName(sec.solution)} - ${store.deploymentName(sec.deployment)}]`
-          + (sec.company_class ? ` · ${sec.company_class}` : '')
-          + (sec.contract_months > 1 ? ` · 계약 ${sec.contract_months}개월` : '')),
-        h('span', { class: 'num' }, '소계 ', h('strong', {}, wonSuffix(sec.subtotal)))
-      ),
-      h('div', { class: 'table-wrap' },
-        h('table', { class: 'grid' },
-          h('thead', {}, h('tr', {},
-            h('th', {}, '구분'), h('th', {}, '품목 / 규격'), h('th', { class: 'center' }, '단위'),
-            h('th', { class: 'center' }, '수량'), h('th', { class: 'center' }, '개월'),
-            h('th', { class: 'num' }, '단가'), h('th', { class: 'num' }, '금액'), h('th', {}, '비고')
-          )),
-          tbody
-        )
-      )
-    ));
+    tbody.appendChild(h('tr', { style: 'background:#F8FAFC;font-weight:600' },
+      h('td', { class: 'ss-cell--left' }, `소계${g.recurring ? ' (월)' : ''}`), h('td', { colspan: 6 }),
+      h('td', { class: 'ss-cell--amount' }, won(g.subtotal))));
+  }
+  if (!groups.length) tbody.appendChild(h('tr', {}, h('td', { colspan: 8, class: 'ss-cell--empty' }, '견적 구성이 없습니다.')));
+  root.appendChild(h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;margin-bottom:24px' },
+    h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((a, w) => a + w, 0)}px` },
+      h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
+      h('thead', {}, h('tr', {}, ...['블록', '구분', '품목 · 역할', '세부내역', '수량', '기준단가 (원)', '제안단가 (원)', '금액 (원)'].map((t) => h('th', {}, t)))),
+      tbody)));
+
+  // ── 액션 ──
+  async function onCopy() {
+    const ok = await confirmModal({ title: '견적 복사', message: `${quote.quote_no} 견적을 같은 내용으로 새로 만듭니다. 새 견적번호가 붙고 견적일은 오늘이 됩니다. 만든 뒤 바로 수정 화면이 열립니다.`, okLabel: '복사' });
+    if (!ok) return;
+    try {
+      const { quote: nq } = await api.copyQuote(id);
+      toast(`${nq.quote_no} 견적을 만들었습니다.`, 'ok');
+      location.hash = `#/quotes/${nq.id}/edit`;
+    } catch (err) { toast(err.message, 'err'); }
   }
 
-  // 합계
-  root.appendChild(h('div', { class: 'panel' },
-    h('div', { class: 'panel-body' },
-      h('div', { style: 'max-width:340px;margin-left:auto' },
-        sumRow('공급가액', won(quote.supply_amount)),
-        sumRow('할인' + (quote.discount_type === 'RATE' ? ` (${quote.discount_value}%)` : ''), quote.discount_amount ? '-' + won(quote.discount_amount) : '0'),
-        sumRow('부가세 (VAT 10%)', won(quote.vat_amount)),
-        h('div', { class: 'summary-row total' }, h('span', {}, '합계금액'), h('span', {}, wonSuffix(quote.total_amount)))
-      )
-    )
-  ));
-
-  // 견적조건 (저장된 conditions)
-  if (Array.isArray(quote.conditions) && quote.conditions.length) {
-    root.appendChild(h('div', { class: 'panel' },
-      h('div', { class: 'panel-head' }, '견적조건'),
-      h('div', { class: 'panel-body' },
-        h('div', { style: 'display:flex;flex-direction:column;gap:7px' },
-          ...quote.conditions.map((c) => h('div', { style: 'color:var(--text-2);font-size:13px;line-height:1.5' }, '-. ' + (c.text || '')))))
-    ));
+  async function onView() {
+    const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
+    const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
+    const m = openModal({
+      title: `견적서 — ${quote.quote_no}`,
+      body: frame,
+      footer: [printBtn, h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
+    });
+    const box = m.back.querySelector('.modal');
+    box.style.width = '880px';
+    box.querySelector('.modal-body').style.padding = '12px';
+    try {
+      const r = await api.quoteHtml(id);
+      frame.srcdoc = r.html;
+      printBtn.disabled = false;
+    } catch (err) {
+      frame.replaceWith(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, err.message));
+    }
   }
-
-  // 견적 정보 (memo 태그 파싱) — 태그 원문을 그대로 뿌리지 않고 라벨로 표시
-  const memoStr = String(quote.memo || '');
-  const tag = (t) => { const m = memoStr.match(new RegExp('\\[' + t + '\\]\\s*(.+)')); return m ? m[1].trim() : ''; };
-  const MEMO_FIELDS = [
-    ['견적용도', '견적용도'], ['결제조건', '결제조건'], ['부가세', '부가세'],
-    ['상주', '상주여부'], ['특별DC', '특별 DC'], ['연락처', '연락처'], ['이메일', '이메일'],
-  ];
-  const infoRows = MEMO_FIELDS.map(([t, label]) => { const v = tag(t); return v ? meta(label, v) : null; }).filter(Boolean);
-  if (infoRows.length) {
-    root.appendChild(h('div', { class: 'panel' },
-      h('div', { class: 'panel-head' }, '견적 정보'),
-      h('div', { class: 'panel-body' }, h('div', { class: 'detail-meta' }, ...infoRows))
-    ));
-  }
-  // 태그가 아닌 자유 비고 줄만 별도 표시
-  const freeMemo = memoStr.split(/\r?\n/).filter((l) => l.trim() && !/^\s*\[[^\]]+\]/.test(l)).join('\n');
-  if (freeMemo) {
-    root.appendChild(h('div', { class: 'panel' },
-      h('div', { class: 'panel-head' }, '비고'),
-      h('div', { class: 'panel-body', style: 'white-space:pre-wrap;color:var(--text-2)' }, freeMemo)
-    ));
-  }
-
-  function meta(k, v) { return h('div', { class: 'meta-item' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v)); }
-  function sumRow(k, v) { return h('div', { class: 'summary-row' }, h('span', { class: 'lbl' }, k), h('span', {}, v)); }
 
   async function onDelete() {
     const ok = await confirmModal({ title: '견적 삭제', message: `${quote.quote_no} 견적을 삭제하시겠습니까? 되돌릴 수 없습니다.`, okLabel: '삭제', danger: true });

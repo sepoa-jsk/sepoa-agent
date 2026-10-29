@@ -70,6 +70,8 @@ export const api = {
   updateQuote: (id, payload) => req('PUT', `/api/quotes/${id}`, payload),
   setStatus: (id, status) => req('PATCH', `/api/quotes/${id}/status`, { status }),
   deleteQuote: (id) => req('DELETE', `/api/quotes/${id}`),
+  copyQuote: (id) => req('POST', `/api/quotes/${id}/copy`),
+  quoteHtml: (id) => req('GET', `/api/quotes/${id}/html`),
   excelUrl: (id) => `${BASE}/api/quotes/${id}/excel`,
   pdfUrl: (id) => `${BASE}/api/quotes/${id}/pdf`,
 
