@@ -188,7 +188,14 @@ export function makePreview(frameId, stateId) {
         round_unit: num(s.round_unit ?? 100000),
       });
       const f = document.getElementById(frameId);
-      if (f) f.srcdoc = r.html;
+      if (f) {
+        // 견적서는 A4(약 800px) 폭으로 짜여 있다 — 좁은 미리보기 칸에서는 줄바꿈되지 않게 통째로 줄여 보인다
+        f.onload = () => {
+          const body = f.contentDocument && f.contentDocument.body;
+          if (body) body.style.zoom = String(Math.min(1, (f.clientWidth - 16) / 800));
+        };
+        f.srcdoc = r.html;
+      }
       if (badge) {
         badge.textContent = `일시 ${won(r.calc.onetime_total)}${r.calc.monthly_total ? ' / 월 ' + won(r.calc.monthly_total) : ''}`;
         badge.className = 'badge badge-blue';

@@ -17,6 +17,7 @@ import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
 import { renderStep3, appliedPatch } from './step3-config.js';
 import { openTemplatePicker } from './template-picker.js';
+import { askCustomer } from './ask-customer.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
 
@@ -150,6 +151,8 @@ export async function renderWizard(root, opts = {}) {
       if (!editMode || (d && d.quoteId === id)) localStorage.removeItem(DRAFT_KEY);
     },
     addDays,
+    askCustomer: () => askCustomer(state.basic), // STEP⑤ 가 수신처 없음 오류에서 쓴다
+    repaint: () => paint(),
   };
 
   function persist() {
@@ -161,10 +164,16 @@ export async function renderWizard(root, opts = {}) {
   let saving = false;
   async function saveDraft() {
     if (saving) return;
-    if (!state.basic.customer_name.trim()) return toast('수신처(고객사명)를 입력한 뒤 임시저장할 수 있습니다.', 'err');
     if (!state.blocks.length) return toast('3단계(구성)에서 템플릿이 적용된 뒤부터 임시저장할 수 있습니다.', 'err');
     saving = true;
     try {
+      // 템플릿 불러오기로 1단계를 건너뛰면 수신처가 비어 있다 — 그 자리에서 받는다
+      if (!state.basic.customer_name.trim()) {
+        const c = await askCustomer(state.basic);
+        if (!c) return;
+        api.patch({ basic: c });
+        if (state.step === 1 || state.step === 5) paint(); // 수신처가 보이는 화면이면 다시 그린다
+      }
       const payload = quotePayload(state);
       const { quote } = state.quoteId
         ? await http.updateQuote(state.quoteId, payload)
