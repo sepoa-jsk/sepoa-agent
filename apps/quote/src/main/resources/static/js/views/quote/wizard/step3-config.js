@@ -570,30 +570,34 @@ export async function renderStep3(root, state, wiz) {
   // 켜고 끄는 곳은 견적 템플릿 화면이다. 여기서는 무엇이 인쇄되는지 보여 준다.
   function payPlanCard() {
     if (!wiz.get().applied || !wiz.get().applied.has_pay_plan) return null;
-    const box = h('div', {});
-    els.payPlan = box;
+    const tbody = h('tbody');
+    els.payPlan = tbody;
     paintPayPlan(recalcBlocks(wiz.get()));
-    return h('div', { class: 'card', style: 'margin-bottom:12px' },
-      h('div', { class: 'card-h' }, h('h2', {}, '결제 방안'),
-        h('span', { class: 'sub' }, '템플릿 설정에 따라 견적서에 인쇄됩니다 · 켜고 끄기는 견적 템플릿 화면에서')),
-      h('div', { class: 'card-b', style: 'padding:0' }, box));
+    // 블록 그리드와 같은 모양 — ▣ 제목 줄 + 편집 그리드 틀. 금액은 견적 합계를 따르고 문구는 고정(견적 템플릿에서 켜고 끈다)
+    const cols = [['구분', 150], ['지급시점', 220], ['비용', 360], ['내역', 420]];
+    return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안'),
+        h('span', { class: 'ss-detailbar__note' }, '템플릿 설정에 따라 견적서에 인쇄됩니다 · 금액은 합계를 따라 바뀝니다 · 켜고 끄기는 견적 템플릿 화면에서')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px;min-width:100%` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          tbody)));
   }
 
   function paintPayPlan(c) {
-    const box = els.payPlan;
-    if (!box) return;
+    const tbody = els.payPlan;
+    if (!tbody) return;
     const one = c.final, mon = c.monthlyFinal, half = Math.round(one / 2);
-    const td = (t, st = '') => h('td', { style: 'padding:8px 10px;border-top:1px solid var(--line-2);vertical-align:top;white-space:pre-line;' + st }, t);
-    const th = (t) => h('th', { style: 'padding:7px 10px;text-align:left;font-size:12px;color:var(--text-2);background:#F8FAFC' }, t);
-    box.replaceChildren(h('table', { style: 'width:100%;border-collapse:collapse;font-size:12.5px' },
-      h('thead', {}, h('tr', {}, th('구분'), th('지급시점'), th('비용'), th('내역'))),
-      h('tbody', {},
-        h('tr', {}, td('서비스 셋업비용', 'width:120px;font-weight:600'),
-          td(one === 0 ? '1. 무상제공' : '1. 일시불\n  -. 계약체결 후 50%\n  -. 구축완료 후 50%'),
-          td(one === 0 ? '1. 셋업비용 : 무상제공' : `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 50% : ₩${won(half)}원\n   구축완료 후 50% : ₩${won(one - half)}원`),
-          td(one === 0 ? '-' : '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%')),
-        h('tr', {}, td('서비스 월 사용료', 'font-weight:600'), td('1. 매월 말'),
-          td(`1. 서비스 사용료 : ₩${won(mon)}원/매월`), td('-. 서비스 착수 후 월별로 세금계산서 발행')))));
+    const td = (t, st = '') => h('td', { class: 'ss-cell--left', style: 'white-space:pre-line;vertical-align:top;line-height:1.6;padding:6px 10px;' + st }, t);
+    tbody.replaceChildren(
+      h('tr', {}, td('서비스\n셋업비용', 'text-align:center;font-weight:600'),
+        td(one === 0 ? '1. 무상제공' : '1. 일시불\n  -. 계약체결 후 50%\n  -. 구축완료 후 50%'),
+        td(one === 0 ? '1. 셋업비용 : 무상제공' : `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 50% : ₩${won(half)}원\n   구축완료 후 50% : ₩${won(one - half)}원`),
+        td(one === 0 ? '-' : '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%')),
+      h('tr', {}, td('서비스\n월 사용료', 'text-align:center;font-weight:600'), td('1. 매월 말'),
+        td(`1. 서비스 사용료 : ₩${won(mon)}원/매월`), td('-. 서비스 착수 후 월별로 세금계산서 발행')));
   }
 
   repaintLeft();
