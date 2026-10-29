@@ -4,7 +4,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import kr.co.sepoasoft.quote.web.advice.ApiException;
 import kr.co.sepoasoft.quote.web.auth.Access;
@@ -134,6 +138,131 @@ public class LaborRateController {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("rate", db.first("SELECT * FROM sq_labor_rate_lines WHERE id = ?", Js.json(n)));
         return out;
+    }
+
+    // ── 단가표 업로드 ───────────────────────────────────────────────
+
+    /**
+     * 단가표 읽기(저장 안 함) — 한국SW산업협회 SW기술자 평균임금 PDF 에서 직무별 노임단가를 읽어 산정식으로 채운다.
+     * 직무는 이름으로 기존 직무코드와 짝짓는다(그 연도 → 없으면 가장 최근 연도의 직무). 짝이 없으면 role_code 가 null.
+     * 등급·비고는 기존 값을 쓰고, 새 직무만 문서의 비고를 쓴다.
+     */
+    @PostMapping("/parse")
+    @Access(Level.ADMIN)
+    public Map<String, Object> parse(@RequestParam(required = false) MultipartFile file, @RequestParam(required = false) String year) {
+        int y = validYear(year);
+        if (file == null || file.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NO_FILE", "단가표 파일을 선택하세요.");
+        String text;
+        try {
+            text = LaborRateSheet.text(file.getBytes());
+        } catch (IOException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_FILE", "PDF 파일을 읽을 수 없습니다. 한국SW산업협회 단가표 PDF 인지 확인하세요.");
+        }
+        Map<String, Object> out = LaborRateSheet.parse(text, y);
+
+        Map<String, Object> yr = db.first("SELECT * FROM sq_labor_rate_years WHERE `year` = ?", y);
+        Map<String, Object> base = yr != null && db.first("SELECT id FROM sq_labor_rate_lines WHERE year_id = ? LIMIT 1", yr.get("id")) != null ? yr
+                : db.first("SELECT y.* FROM sq_labor_rate_years y WHERE EXISTS (SELECT 1 FROM sq_labor_rate_lines l WHERE l.year_id = y.id) ORDER BY y.`year` DESC LIMIT 1");
+        Map<String, Map<String, Object>> known = new LinkedHashMap<>();
+        if (base != null) {
+            for (Map<String, Object> l : db.query("SELECT role_code, role_name, grade, note, sort FROM sq_labor_rate_lines WHERE year_id = ? ORDER BY sort, id", base.get("id"))) {
+                known.put(key(l.get("role_name")), l);
+            }
+        }
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) out.get("rows");
+        for (Map<String, Object> r : rows) {
+            Map<String, Object> k = known.get(key(r.get("role_name")));
+            r.put("role_code", k == null ? null : k.get("role_code"));
+            r.put("grade", k == null ? null : k.get("grade"));
+            r.put("note", k != null && QuoteCalc.truthy(k.get("note")) ? k.get("note") : r.get("doc_note"));
+            r.put("sort", k == null ? null : k.get("sort"));
+        }
+        Map<String, Object> exist = new LinkedHashMap<>();
+        exist.put("exists", yr != null);
+        if (yr != null) {
+            exist.put("active", yr.get("active"));
+            exist.put("source", yr.get("source"));
+            exist.put("rate_count", db.first("SELECT COUNT(*) AS n FROM sq_labor_rate_lines WHERE year_id = ?", yr.get("id")).get("n"));
+        }
+        out.put("existing", exist);
+        out.put("base_year", base == null ? null : base.get("year"));
+        out.put("file_name", file.getOriginalFilename());
+        return out;
+    }
+
+    /**
+     * 읽은 단가 등록 — 연도가 없으면 만들고(비활성), 있으면 직무코드가 같은 줄을 덮어쓴다. 문서에 없는 기존 직무는 그대로 둔다.
+     * 금액은 보낸 노임단가(wage_md)로 서버가 다시 계산한다.
+     * 활성 연도 지정은 따로 한다 — 등록만으로 견적 단가가 바뀌지 않는다.
+     */
+    @PostMapping("/import")
+    @Access(Level.ADMIN)
+    @Transactional
+    public Map<String, Object> importRates(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> b = body == null ? Map.of() : body;
+        int y = validYear(b.get("year") == null ? null : String.valueOf(b.get("year")));
+        List<?> rows = b.get("rows") instanceof List<?> l ? l : List.of();
+        if (rows.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NO_ROWS", "등록할 직무가 없습니다.");
+        Set<String> codes = new HashSet<>();
+        for (int i = 0; i < rows.size(); i++) {
+            Map<?, ?> r = rows.get(i) instanceof Map<?, ?> m ? m : Map.of();
+            String code = r.get("role_code") == null ? "" : String.valueOf(r.get("role_code")).trim();
+            double md = Js.toNumber(r.get("wage_md"));
+            if (code.isEmpty() || !QuoteCalc.truthy(r.get("role_name")) || Double.isNaN(md) || md <= 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_ROW", (i + 1) + "번째 행: 직무코드 · 직무명 · 노임단가를 확인하세요.");
+            }
+            if (!codes.add(code)) throw new ApiException(HttpStatus.BAD_REQUEST, "DUPLICATE_CODE", "직무코드가 겹칩니다: " + code);
+        }
+        Map<String, Object> yr = db.first("SELECT id FROM sq_labor_rate_years WHERE `year` = ?", y);
+        boolean created = yr == null;
+        Object source = QuoteCalc.truthy(b.get("source")) ? b.get("source") : "한국SW산업협회 " + y + "년 SW기술자 평균임금";
+        Object yearId = created
+                ? db.insert("INSERT INTO sq_labor_rate_years (`year`, source, active) VALUES (?, ?, 0)", y, source)
+                : yr.get("id");
+        if (!created) db.update("UPDATE sq_labor_rate_years SET source = ? WHERE id = ?", source, yearId);
+        int inserted = 0, updated = 0;
+        for (Object o : rows) {
+            Map<?, ?> r = (Map<?, ?>) o;
+            String code = String.valueOf(r.get("role_code")).trim();
+            Map<String, Object> v = LaborRateSheet.compute(Math.round(Js.toNumber(r.get("wage_md"))));
+            Object grade = blankToNull(r.get("grade")), note = blankToNull(r.get("note"));
+            Map<String, Object> ex = db.first("SELECT id FROM sq_labor_rate_lines WHERE year_id = ? AND role_code = ?", yearId, code);
+            if (ex != null) {
+                updated += db.update("UPDATE sq_labor_rate_lines SET role_name = ?, grade = ?, wage_md = ?, wage_mm = ?, overhead = ?,"
+                        + " tech_fee = ?, apply_price = ?, note = ? WHERE id = ?", r.get("role_name"), grade, v.get("wage_md"),
+                        v.get("wage_mm"), v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), note, ex.get("id"));
+            } else {
+                Object sort = r.get("sort") instanceof Number n ? n
+                        : db.first("SELECT COALESCE(MAX(sort), -1) + 1 AS s FROM sq_labor_rate_lines WHERE year_id = ?", yearId).get("s");
+                db.insert("INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort)"
+                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?)", yearId, code, r.get("role_name"), grade, v.get("wage_md"), v.get("wage_mm"),
+                        v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), note, sort);
+                inserted++;
+            }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("year", y);
+        out.put("created", created);
+        out.put("inserted", inserted);
+        out.put("updated", updated);
+        return out;
+    }
+
+    private static int validYear(String year) {
+        double y = year == null ? Double.NaN : Js.number(year.trim());
+        if (Double.isNaN(y) || y != Math.rint(y) || y < 2000 || y > 2100) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_YEAR", "연도가 올바르지 않습니다.");
+        }
+        return (int) y;
+    }
+
+    private static String key(Object name) {
+        return name == null ? "" : String.valueOf(name).replaceAll("\\s+", "");
+    }
+
+    private static Object blankToNull(Object v) {
+        return v == null || String.valueOf(v).isBlank() ? null : v;
     }
 
     /** #40 활성 연도 지정 — 나머지는 모두 해제 */

@@ -10,6 +10,11 @@
 spring:
   application:
     name: quote-automation
+  servlet:
+    multipart:
+      # 노임단가표 PDF 업로드 (기본 1MB 는 협회 원문 PDF 에 모자란다)
+      max-file-size: 20MB
+      max-request-size: 20MB
   profiles:
     # Node 의 NODE_ENV(development/production)에 대응한다.
     # SPRING_PROFILES_ACTIVE 가 있으면 그것이 우선한다.

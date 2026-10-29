@@ -2,6 +2,7 @@ package kr.co.sepoasoft.quote.web;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -14,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -96,5 +98,29 @@ class AdminApiContractTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.message").doesNotExist());
         mvc.perform(json(put("/api/pricing/items/1/variants"), "ADMIN", "{}"))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("INVALID_VARIANTS"));
+    }
+
+    @Test
+    @DisplayName("노임단가표 업로드 — 관리자만, 연도·파일·행 검증")
+    void laborUpload() throws Exception {
+        mvc.perform(json(post("/api/labor-rates/import"), "USER", "{}"))
+                .andExpect(status().isForbidden()).andExpect(jsonPath("$.error").value("FORBIDDEN"));
+        mvc.perform(multipart("/api/labor-rates/parse").param("year", "2027").session(as("USER")))
+                .andExpect(status().isForbidden());
+        mvc.perform(multipart("/api/labor-rates/parse").param("year", "2027").session(as("ADMIN")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("NO_FILE"));
+        mvc.perform(multipart("/api/labor-rates/parse").param("year", "27").session(as("ADMIN")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("INVALID_YEAR"));
+        mvc.perform(multipart("/api/labor-rates/parse").file(new MockMultipartFile("file", "x.pdf", "application/pdf", "not a pdf".getBytes()))
+                        .param("year", "2027").session(as("ADMIN")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("INVALID_FILE"));
+        mvc.perform(json(post("/api/labor-rates/import"), "ADMIN", "{\"year\":2027,\"rows\":[]}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("NO_ROWS"));
+        mvc.perform(json(post("/api/labor-rates/import"), "ADMIN",
+                        "{\"year\":2027,\"rows\":[{\"role_code\":\"\",\"role_name\":\"PM\",\"wage_md\":1}]}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("INVALID_ROW"));
+        mvc.perform(json(post("/api/labor-rates/import"), "ADMIN",
+                        "{\"year\":2027,\"rows\":[{\"role_code\":\"PM\",\"role_name\":\"A\",\"wage_md\":1},{\"role_code\":\"PM\",\"role_name\":\"B\",\"wage_md\":1}]}"))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value("DUPLICATE_CODE"));
     }
 }

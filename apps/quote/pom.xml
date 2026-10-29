@@ -56,6 +56,13 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!-- 노임단가표(PDF) 업로드 — 문서의 표를 글자로 읽어 단가를 채운다 -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.5</version>
+    </dependency>
+
     <!--
       Flyway (J4) — 자체 러너(db/migrate.js) 대체.
       flyway-mysql 은 MySQL/MariaDB 방언 모듈이며 flyway-core 만으로는 MariaDB 를 인식하지 못한다.

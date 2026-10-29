@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { h, toast, loading, clear } from '../ui.js';
+import { openLaborUpload } from './labor-upload.js';
 
 // 임금단가(개발인건비) 관리 — 연도 탭 / 단가 테이블 편집 / 새 연도 복제 / 활성 연도 지정.
 // 라우트는 ADMIN 게이트라 편집 허용(서버도 requireAdmin).
@@ -34,6 +35,7 @@ export async function renderLaborRates(root) {
         h('div', { class: 'page-title' }, '임금단가 관리'),
         h('div', { class: 'page-sub' }, '개발인건비 기준단가(한국SW산업협회 노임 기반). 연도별 이력으로 관리하며, 활성 연도의 단가가 견적에 적용됩니다.')),
       h('div', { class: 'page-actions' },
+        h('button', { class: 'btn btn-navy', onclick: upload }, '단가표 업로드'),
         h('button', { class: 'btn', onclick: newYear }, '+ 새 연도(직전 복제)'))));
 
     // 연도 탭
@@ -128,6 +130,20 @@ export async function renderLaborRates(root) {
       paint();
       toast(`${cur.year}년을 활성 연도로 지정했습니다.`, 'ok');
     } catch (err) { toast(err.message, 'err'); }
+  }
+
+  // 협회 단가표 PDF 를 읽어 그 연도 단가를 채운다 — 기본 연도는 가장 최근 연도 다음 해
+  function upload() {
+    const latest = years[0] ? years[0].year : new Date().getFullYear() - 1;
+    openLaborUpload({
+      defaultYear: latest + 1 > new Date().getFullYear() + 1 ? latest : latest + 1,
+      onDone: async (year) => {
+        for (const k of Object.keys(_edits)) delete _edits[k];
+        ({ years } = await api.laborYears());
+        await loadYear(year);
+        paint();
+      },
+    });
   }
 
   async function newYear() {

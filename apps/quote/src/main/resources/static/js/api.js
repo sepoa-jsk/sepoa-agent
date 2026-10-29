@@ -81,6 +81,17 @@ export const api = {
   createLaborYear: (body) => req('POST', '/api/labor-rates/years', body),
   updateLaborRate: (id, body) => req('PUT', `/api/labor-rates/${id}`, body),
   setActiveLaborYear: (id) => req('PATCH', `/api/labor-rates/years/${id}/active`),
+  // 단가표 PDF 읽기(저장 안 함) — 파일이라 JSON 이 아니라 FormData 로 보낸다
+  parseLaborSheet: async (year, file) => {
+    const fd = new FormData();
+    fd.append('year', year);
+    fd.append('file', file);
+    const res = await fetch(`${BASE}/api/labor-rates/parse`, { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const e = new Error(data.message || `요청 실패 (${res.status})`); e.status = res.status; throw e; }
+    return data;
+  },
+  importLaborRates: (body) => req('POST', '/api/labor-rates/import', body),
 
   // 블록/견적조건/템플릿
   blocks: () => req('GET', '/api/blocks'),
