@@ -89,10 +89,11 @@ export async function renderPricing(root) {
         h('span', { class: 'ss-detailbar__note' }, t.note)));
     }
 
-    // 첫 칸 '선택' 60px 고정, 남는 폭은 이름 칸이 받는다
-    const cols = [h('col', { style: 'width:60px' }), ...t.fields.map((f) => h('col', { style: f.width ? `width:${f.width}px` : null }))];
+    // 칸마다 정한 너비 그대로 — 남는 폭을 한 칸(이름)이 다 받아 길어지지 않게. 선택 칸은 60px 고정
+    const widths = [60, ...t.fields.map((f) => f.width || 240)];
+    const cols = widths.map((w) => h('col', { style: `width:${w}px` }));
     tbody = h('tbody');
-    const table = h('table', { class: 'ss-grid', style: `min-width:${60 + t.fields.reduce((s, f) => s + (f.width || 240), 0)}px` },
+    const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((s, w) => s + w, 0)}px` },
       h('colgroup', {}, ...cols),
       h('thead', {}, h('tr', {},
         h('th', { 'data-fixed': '' }, '선택'),

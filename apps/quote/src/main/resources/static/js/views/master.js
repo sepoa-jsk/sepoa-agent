@@ -336,15 +336,12 @@ export async function renderMaster(root) {
 
     const gf = gridFields(m);
     // 첫 칸은 '선택' — 60px 고정 (사용자 지정)
-    // 표가 본문보다 좁으면 남는 폭은 비고(없으면 이름 → 고르는 칸) 칸이 받는다 — 다른 칸 폭은 그대로
-    const flex = gf.find((f) => f.key === 'note')
-      || gf.find((f) => ['name', 'role_name', 'revenue_cond'].includes(f.key))
-      || gf.find((f) => f.type === 'preset') || gf[gf.length - 1];
-    const cols = [h('col', { style: 'width:60px' }),
-      ...gf.map((f) => h('col', { style: f === flex ? null : `width:${colWidth(f)}px` })),
-      ...(m.preview ? [h('col', { style: 'width:220px' })] : [])];
+    // 칸마다 정한 너비 그대로 만든다 — 남는 폭을 한 칸이 다 받아 길게 늘어나지 않게 (2026-10-29 사용자 지정).
+    // 표가 상자보다 좁으면 오른쪽은 비워 두고, 표 오른쪽 끝 선(ss-grid--sized)으로 마무리한다
+    const widths = [60, ...gf.map(colWidth), ...(m.preview ? [220] : [])];
+    const cols = widths.map((w) => h('col', { style: `width:${w}px` }));
     tbody = h('tbody');
-    const table = h('table', { class: 'ss-grid', style: `min-width:${60 + gf.reduce((s, f) => s + colWidth(f), 0) + (m.preview ? 220 : 0)}px` },
+    const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((s, w) => s + w, 0)}px` },
       h('colgroup', {}, ...cols),
       h('thead', {}, h('tr', {},
         h('th', { 'data-fixed': '' }, '선택'),
