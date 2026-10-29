@@ -3,7 +3,7 @@
 // 계산 로직은 바꾸지 않는다: 서버 calcQuoteBlocks 와 같은 순서를 그대로 옮겨 왔다.
 //   블록소계 합 → 특별DC → 절사(십만) → VAT. 일시불/월(recurring) 분리.
 import { api as http } from '../../../api.js';
-import { h, won, toast, openModal, confirmModal } from '../../../ui.js';
+import { h, won, toast, openModal, confirmModal, numInput } from '../../../ui.js';
 import { pickItems, pickRole, itemRow } from '../pickers.js';
 
 // 블록 정의(sq_blocks) — 블록 추가 목록. 한 번 받아 둔다
@@ -255,35 +255,44 @@ export async function renderStep3(root, state, wiz) {
   }
   function touched() { wiz.patch({}); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); }
 
-  // 행 — 모든 칸을 고칠 수 있다. 품목: 구분 · 모듈명 · 세부기능 · 수량 · 단위 · 기준단가 · 제안단가.
-  // 인력(개발인건비): [직무 선택] 팝업(노임단가 적용단가 → 기준단가) · 표시명 · 등급 · 업무 · 공수 · 기준단가 · 제안단가.
-  function rowEl(b, r, isLabor, repaint) {
-    const amtCell = h('td', { class: 'num' }, num(r.qty) === 0 && !isLabor ? '-' : won(r.amount || 0));
-    const qtyKey = isLabor ? 'mm' : 'qty';
+  // ── 블록 그리드 ─────────────────────────────────────────────
+  // 견적서 표와 같은 칸 구성으로 칸마다 따로 입력한다(SingleSuite 편집 그리드 — 선택 칸 · 행추가 · 행삭제 · 소계 행).
+  //   품목: 구분 · 모듈 · 세부기능 · 수량 · 단위 · 기준단가 · 제안단가 · 제안금액 · 품목코드
+  //   인력: 역할(표시명) · 직무(노임단가 팝업) · 등급 · 업무 · 공수 · 기준단가 · 제안단가 · 제안금액
+  // 고르는 값(품목 · 직무)은 팝업에서 고르고, 고른 뒤에도 모든 칸을 고칠 수 있다.
+  const ITEM_COLS = [['선택', 44], ['구분', 160], ['모듈', 180], ['세부기능', 360], ['수량', 76], ['단위', 72],
+    ['기준단가 (원)', 122], ['제안단가 (원)', 122], ['제안금액 (원)', 130], ['품목코드', 140]];
+  const LABOR_COLS = [['선택', 44], ['역할', 140], ['직무 (노임단가)', 190], ['등급', 90], ['업무', 340], ['공수 (MM)', 76],
+    ['기준단가 (원)', 122], ['제안단가 (원)', 122], ['제안금액 (원)', 130]];
+
+  function rowEl(b, r, isLabor, picked) {
+    const amtCell = h('td', { class: 'ss-cell--amount' }, num(r.qty) === 0 && !isLabor ? '' : won(r.amount || 0));
     const upd = () => {
       const c = recalcBlocks(wiz.get());
-      amtCell.textContent = num(r.qty) === 0 && !isLabor ? '-' : won(r.amount || 0);
+      amtCell.textContent = num(r.qty) === 0 && !isLabor ? '' : won(r.amount || 0);
       const sub = document.getElementById('sub-' + b.block_code);
       if (sub) sub.textContent = won(b._sub || 0);
       wiz.patch({}); syncTotals(c); preview.schedule(wiz);
     };
-    const txt = (key, ph, style = 'width:100%') => h('input', { class: 'input', style, value: r[key] ?? '', placeholder: ph,
-      oninput: (e) => { r[key] = e.target.value; touched(); } });
-    const numIn = (key, style) => h('input', { class: 'input', type: 'number', step: 'any', style, value: r[key] ?? '',
-      oninput: (e) => { r[key] = e.target.value === '' ? null : e.target.value; upd(); } });
+    const td = (el) => h('td', { class: 'ss-cell--input' }, el);
+    // 글자는 왼쪽(단위 · 등급만 가운데), 숫자는 오른쪽. 금액은 3자리 콤마로 입력한다(다른 편집 그리드와 같은 numInput)
+    const txt = (key, ph = '', align = 'left') => td(h('input', { class: 'ss-cellinput', value: r[key] ?? '', placeholder: ph,
+      style: `text-align:${align}`, oninput: (e) => { r[key] = e.target.value; touched(); } }));
+    const numIn = (key, style = '') => td(h('input', { class: 'ss-cellinput', type: 'number', step: 'any', value: r[key] ?? '',
+      style: 'text-align:right;' + style, oninput: (e) => { r[key] = e.target.value === '' ? null : e.target.value; upd(); } }));
+    const money = (key, style = '') => td(numInput(r[key], (v) => { r[key] = v === '' ? null : v; upd(); },
+      { class: 'ss-cellinput', style: 'text-align:right;' + style }));
+    // 세부기능 · 업무는 여러 줄 — 줄 수만큼 칸이 늘어난다
     const specKey = isLabor ? 'task' : 'spec';
-    const spec = h('textarea', { class: 'input', rows: 2, style: 'width:100%;min-height:52px;resize:vertical;line-height:1.5',
-      placeholder: isLabor ? '업무' : '세부기능', oninput: (e) => { r[specKey] = e.target.value; touched(); } });
+    const spec = h('textarea', { class: 'ss-cellinput', style: 'height:auto;resize:vertical;line-height:1.45;padding:4px 6px;text-align:left',
+      oninput: (e) => { r[specKey] = e.target.value; e.target.rows = lines(e.target.value); touched(); } });
     spec.value = r[specKey] || '';
-    const del = h('button', { class: 'btn btn-sm btn-danger', title: '행 삭제' }, '×');
-    del.addEventListener('click', () => {
-      const arr = isLabor ? b.labor : b.items;
-      const i = arr.indexOf(r); if (i >= 0) arr.splice(i, 1);
-      repaint();
-    });
-    let first;
+    spec.rows = lines(spec.value);
+    const sel = h('td', {}, h('input', { type: 'checkbox', 'aria-label': '선택', checked: picked.has(r),
+      onchange: (e) => { if (e.target.checked) picked.add(r); else picked.delete(r); } }));
+    const proposed = money('proposed_price', 'background:var(--primary-weak);color:var(--primary);font-weight:600');
     if (isLabor) {
-      const roleBtn = h('button', { class: 'btn btn-sm', style: 'width:100%;text-align:left', title: '노임단가에서 직무 선택' },
+      const roleBtn = h('button', { class: 'ss-cellinput', style: 'text-align:left;cursor:pointer', title: '노임단가에서 직무 선택' },
         r.role_code ? `${r.role_name || r.role_code} ▾` : '직무 선택 ▾');
       roleBtn.addEventListener('click', async () => {
         const x = await pickRole();
@@ -293,23 +302,16 @@ export async function renderStep3(root, state, wiz) {
         if (!r.grade) r.grade = x.grade || '';
         r.base_price = x.apply_price != null ? Number(x.apply_price) : null;
         if (!num(r.proposed_price)) r.proposed_price = r.base_price || 0;
-        repaint();
+        repaintLeft();
       });
-      first = h('div', { style: 'display:flex;flex-direction:column;gap:4px' }, roleBtn, txt('role_label', '표시명 (예: PM, 개발#1)'), txt('grade', '등급'));
-    } else {
-      first = h('div', { style: 'display:flex;flex-direction:column;gap:4px' }, txt('category', '구분'), txt('name', '모듈명'),
-        r.item_code ? h('div', { class: 'sub', style: 'color:var(--text-3)' }, r.item_code) : null);
+      return h('tr', {}, sel, txt('role_label', '예) PM, 개발#1'), td(roleBtn), txt('grade', '', 'center'), td(spec),
+        numIn('mm'), money('base_price'), proposed, amtCell);
     }
-    return h('tr', {},
-      h('td', { style: 'width:230px' }, first),
-      h('td', {}, spec),
-      h('td', { class: 'num', style: 'white-space:nowrap' }, numIn(qtyKey, 'width:70px;text-align:right'),
-        isLabor ? h('span', { class: 'sub' }, ' MM') : txt('unit', '단위', 'width:58px;margin-left:4px')),
-      h('td', { class: 'num' }, numIn('base_price', 'width:118px;text-align:right')),
-      h('td', { class: 'num' }, numIn('proposed_price', 'width:118px;text-align:right;background:var(--primary-weak);color:var(--primary);font-weight:600')),
-      amtCell,
-      h('td', { class: 'ctr' }, del));
+    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), numIn('qty'), txt('unit', '', 'center'),
+      money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
+
+  function lines(v) { return Math.min(8, Math.max(1, String(v || '').split('\n').length)); }
 
   async function pasteInto(b, rows, repaint) {
     const raw = prompt('엑셀에서 복사한 내용을 붙여 넣으세요.\n형식: 모듈코드[탭]수량 (한 줄에 하나)');
@@ -344,70 +346,78 @@ export async function renderStep3(root, state, wiz) {
   }
 
   function blockCard(b, repaint) {
-    const card = h('div', { class: 'card', style: 'margin-bottom:12px' });
-    const dropBlock = h('button', { class: 'btn btn-sm', style: 'margin-left:10px', title: '이 블록을 견적에서 뺀다' }, '블록 빼기');
-    dropBlock.addEventListener('click', async () => {
+    const isLabor = b.block_code === 'LABOR';
+    const rows = isLabor ? b.labor : b.items;
+    const picked = new Set();
+    const cols = isLabor ? LABOR_COLS : ITEM_COLS;
+    const gbtn = (label, onclick, cls = 'ss-btn--gridrow') => h('button', { class: 'ss-btn ' + cls, onclick }, label);
+
+    const addRow = () => {
+      rows.push(isLabor
+        ? { role_code: '', role_name: '', role_label: '', grade: '', task: '', mm: 1, base_price: null, proposed_price: 0, amount: 0, month_alloc: {} }
+        : { item_code: '', category: rows.length ? rows[rows.length - 1].category || '' : '', name: '', spec: '', unit: '', qty: 1, base_price: null, proposed_price: 0, amount: 0 });
+      repaint();
+    };
+    // 고르는 값은 팝업에서 — 품목은 가격정책 품목, 인력은 노임단가 직무
+    const pickRows = async () => {
+      const s0 = wiz.get();
+      if (isLabor) {
+        const x = await pickRole();
+        if (!x) return;
+        const base = x.apply_price != null ? Number(x.apply_price) : null;
+        rows.push({ role_code: x.role_code, role_name: x.role_name, role_label: x.role_name, grade: x.grade || '', task: '', mm: 1,
+          base_price: base, proposed_price: base || 0, amount: 0, month_alloc: {} });
+      } else {
+        const list = await pickItems({ solution: s0.applied && s0.applied.solution, deployment: ITEM_DEP[s0.type.deployment] || '' });
+        if (!list.length) return;
+        list.forEach((i) => rows.push(itemRow(i)));
+        toast(`${list.length}개 품목을 넣었습니다.`, 'ok');
+      }
+      repaint();
+    };
+    const delRows = () => {
+      if (!picked.size) return toast('삭제할 행을 선택하세요.', 'err');
+      for (const r of picked) { const i = rows.indexOf(r); if (i >= 0) rows.splice(i, 1); }
+      repaint();
+    };
+    const dropBlock = async () => {
       const n = (b.items || []).length + (b.labor || []).length;
       if (n && !(await confirmModal({ title: '블록 빼기', danger: true, okLabel: '빼기', message: `'${b.name}' 블록과 행 ${n}개를 견적에서 뺍니다.` }))) return;
       const blocks = wiz.get().blocks;
       const i = blocks.indexOf(b); if (i >= 0) blocks.splice(i, 1);
       repaint();
-    });
-    card.appendChild(h('div', { class: 'card-h' }, h('h2', {}, b.name),
-      b.recurring ? h('span', { class: 'badge badge-yellow' }, '월정액') : null,
-      h('span', { class: 'sp' }), h('span', { class: 'sub' }, '소계 '),
-      h('span', { class: 'num', id: 'sub-' + b.block_code, style: 'font-weight:600' }, won(b._sub || 0)), dropBlock));
-
-    const mkTable = (isLabor) => {
-      const rows = isLabor ? b.labor : b.items;
-      if (!rows) return null;
-      const tb = h('tbody');
-      rows.forEach((r) => tb.appendChild(rowEl(b, r, isLabor, repaint)));
-      const add = h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 14px' }, '+ 빈 행');
-      add.addEventListener('click', () => {
-        rows.push(isLabor
-          ? { role_code: '', role_name: '', role_label: '', grade: '', task: '', mm: 1, base_price: null, proposed_price: 0, amount: 0, month_alloc: {} }
-          : { item_code: '', category: '', name: '', spec: '', unit: '', qty: 1, base_price: null, proposed_price: 0, amount: 0 });
-        repaint();
-      });
-      // 고르는 값은 팝업에서 — 품목은 가격정책 품목, 인력은 노임단가 직무
-      const pick = h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 6px' }, isLabor ? '직무 선택' : '품목 선택');
-      pick.addEventListener('click', async () => {
-        const s0 = wiz.get();
-        if (isLabor) {
-          const x = await pickRole();
-          if (!x) return;
-          const base = x.apply_price != null ? Number(x.apply_price) : null;
-          rows.push({ role_code: x.role_code, role_name: x.role_name, role_label: x.role_name, grade: x.grade || '', task: '', mm: 1,
-            base_price: base, proposed_price: base || 0, amount: 0, month_alloc: {} });
-        } else {
-          const list = await pickItems({ solution: s0.applied && s0.applied.solution, deployment: ITEM_DEP[s0.type.deployment] || '' });
-          if (!list.length) return;
-          list.forEach((i) => rows.push(itemRow(i)));
-          toast(`${list.length}개 품목을 넣었습니다.`, 'ok');
-        }
-        repaint();
-      });
-      const paste = isLabor ? null : h('button', { class: 'btn btn-sm', style: 'margin:8px 0 0 6px' }, '엑셀 붙여넣기');
-      if (paste) paste.addEventListener('click', () => pasteInto(b, rows, repaint));
-      return h('div', {},
-        (isLabor && b.items && b.items.length)
-          ? h('div', { class: 'sub', style: 'padding:10px 14px 0;color:var(--text-3)' }, '산정 근거(공수)') : null,
-        h('div', { class: 'table-wrap' }, h('table', { class: 'grid' },
-          h('thead', {}, h('tr', {},
-            h('th', {}, isLabor ? '직무 · 표시명 · 등급' : '구분 · 모듈명'), h('th', {}, isLabor ? '업무' : '세부기능'),
-            h('th', { class: 'num' }, isLabor ? '공수 (MM)' : '수량 · 단위'),
-            h('th', { class: 'num' }, '기준단가 (원)'), h('th', { class: 'num' }, '제안단가 (원)'),
-            h('th', { class: 'num' }, b.recurring ? '제안금액 (원/월)' : '제안금액 (원)'), h('th', {}, ''))),
-          tb)),
-        h('div', { style: 'padding:0 0 12px' }, add, pick, paste));
     };
-    if (b.items) card.appendChild(mkTable(false));
-    // 인건비 표는 LABOR 블록에만 둔다. 비-LABOR 블록의 인건비 행은 금액이 아니라
-    // 공수 배분이므로 STEP④ 에서 mm·월별배분만 편집한다.
-    if (b.labor && b.block_code === 'LABOR') card.appendChild(mkTable(true));
-    else if (b.labor && b.labor.length) {
-      card.appendChild(h('div', { class: 'banner inf', style: 'margin:0 14px 12px' },
+
+    const head = h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ ' + b.name),
+      b.recurring ? h('span', { class: 'badge badge-yellow' }, '월정액') : null,
+      h('div', { class: 'ss-detailbar__spacer' }),
+      gbtn('행추가', addRow), gbtn(isLabor ? '직무 선택' : '품목 선택', pickRows),
+      isLabor ? null : gbtn('엑셀 붙여넣기', () => pasteInto(b, rows, repaint)),
+      gbtn('행삭제', delRows), gbtn('블록 빼기', dropBlock, 'ss-btn--delete'));
+
+    const tbody = h('tbody');
+    rows.forEach((r) => tbody.appendChild(rowEl(b, r, isLabor, picked)));
+    if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' },
+      isLabor ? '[직무 선택] 으로 노임단가 직무를 넣거나 [행추가] 로 직접 입력하세요.' : '[품목 선택] 으로 가격정책 품목을 넣거나 [행추가] 로 직접 입력하세요.')));
+    // 소계 행 — 견적서와 같은 자리
+    const amtIdx = cols.findIndex(([t]) => t.startsWith('제안금액'));
+    tbody.appendChild(h('tr', { style: 'background:#F4F9E3;font-weight:600' },
+      h('td', { colspan: amtIdx, style: 'text-align:center' }, `${b.name} 소계${b.recurring ? ' (월)' : ''}`),
+      h('td', { class: 'ss-cell--amount', id: 'sub-' + b.block_code }, won(b._sub || 0)),
+      ...(cols.length - amtIdx - 1 > 0 ? [h('td', { colspan: cols.length - amtIdx - 1 })] : [])));
+
+    const width = cols.reduce((a, [, w]) => a + w, 0);
+    const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${width}px;min-width:100%` },
+      h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+      h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+      tbody);
+
+    const card = h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' }, head,
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' }, table));
+    // 셋업비용 등 비-LABOR 블록의 인력 행은 금액이 아니라 인력투입계획 부록용 공수 배분 — 4단계(인건비)에서 고친다
+    if (!isLabor && b.labor && b.labor.length) {
+      card.appendChild(h('div', { class: 'banner inf', style: 'margin-top:8px' },
         h('div', {}, `인력투입계획 부록용 공수 배분 ${b.labor.length}건이 있습니다. 공수는 다음 단계(인건비)에서 입력합니다.`)));
     }
     return card;
