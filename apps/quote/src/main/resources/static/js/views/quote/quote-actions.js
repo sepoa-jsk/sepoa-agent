@@ -2,6 +2,7 @@
 //   복사      : 같은 내용으로 새 견적(새 번호 · 작성중 · 견적일 오늘)을 만들고 수정 화면을 연다
 //   견적서 보기: PDF 와 같은 렌더러로 그린 견적서(표지 포함)를 띄우고 인쇄로 PDF 를 저장한다
 //   삭제      : 확인 후 지우고 목록으로 간다
+//   내려받기  : PDF(표지 포함) · Excel — 서버에 저장된 내용으로 만든다
 import { api } from '../../api.js';
 import { h, toast, confirmModal, openModal } from '../../ui.js';
 
@@ -42,4 +43,32 @@ export async function deleteQuote(quote) {
   if (!ok) return;
   try { await api.deleteQuote(quote.id); toast('삭제되었습니다.', 'ok'); location.hash = '#/quotes'; }
   catch (err) { toast(err.message, 'err'); }
+}
+
+// 내려받기 — 오류(예: 서버에 Chrome 없음)는 화면에 알리려고 링크 대신 fetch 로 받는다
+export async function downloadQuote(quote, kind, btn) {
+  const label = kind === 'pdf' ? 'PDF' : 'Excel';
+  const old = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = `${label} 만드는 중…`; }
+  try {
+    const url = kind === 'pdf' ? api.pdfUrl(quote.id) : api.excelUrl(quote.id);
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.message || `${label} 내려받기 실패 (${res.status})`);
+    }
+    const cd = res.headers.get('content-disposition') || '';
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+    const name = m ? decodeURIComponent(m[1]) : `${quote.quote_no}.${kind === 'pdf' ? 'pdf' : 'xlsx'}`;
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (err) {
+    toast(err.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = old; }
+  }
 }

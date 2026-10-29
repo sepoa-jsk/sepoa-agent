@@ -2,7 +2,8 @@
 // 새 견적은 POST /api/quotes, 이미 저장된 견적(임시저장·수정)은 PUT /api/quotes/:id. 저장 후 #/quotes/:id 로 이동.
 import { api as http } from '../../../api.js';
 import { h, won, toast } from '../../../ui.js';
-import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload, makePreview } from './step3-config.js';
+import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload } from './step3-config.js';
+import { downloadQuote } from '../quote-actions.js';
 
 const num = (v) => Number(v) || 0;
 
@@ -56,11 +57,9 @@ export function renderStep5(root, state, wiz) {
           '정합성 검증 규칙 R-01~R-16 은 작업 16 에서 서버 측으로 들어옵니다.'));
   if (!wiz.readOnly) root.appendChild(banner); // 상세(읽기 전용)에서는 발행 전 확인이 필요 없다
 
-  const layout = h('div', { style: 'display:grid;grid-template-columns:1fr 440px;gap:14px;align-items:start' });
+  // 전체 폭 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
   const left = h('div', { style: 'min-width:0' });
-  const right = h('div', { style: 'position:sticky;top:0' });
-  layout.appendChild(left); layout.appendChild(right);
-  root.appendChild(layout);
+  root.appendChild(left);
 
   // ── 좌: 요약 + 산출물 ──
   const row = (k, v, strong) => h('div', { style: 'display:flex;justify-content:space-between;padding:7px 0;font-size:12.5px' },
@@ -86,8 +85,9 @@ export function renderStep5(root, state, wiz) {
       calc.monthly ? row('월 사용료 (원)', won(calc.monthlyFinal), true) : null)));
 
   const outBox = h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' });
+  // 내려받기는 서버에 저장된 견적 기준이다 — 저장 전 견적은 끄고, 저장된 견적은 고친 내용을 저장해야 반영된다고 알린다
   const savedNote = h('div', { class: 'sub', style: 'padding:0 14px 12px;color:var(--text-3)' },
-    '산출물은 발행(저장) 후 내려받을 수 있습니다.');
+    state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 발행(저장) 후 반영됩니다.' : '산출물은 발행(저장) 후 내려받을 수 있습니다.');
   // 상세(읽기 전용)에서는 발행 · 산출물 칸을 두지 않는다 — 견적서는 위쪽 [견적서 보기] 에서 본다
   if (!wiz.readOnly) left.appendChild(h('div', { class: 'card' },
     h('div', { class: 'card-h' }, h('h2', {}, '산출물')),
@@ -95,8 +95,9 @@ export function renderStep5(root, state, wiz) {
 
   const publishBtn = h('button', { class: 'btn btn-primary' }, '발행 (저장)');
   publishBtn.disabled = errs.length > 0;
-  const pdfBtn = h('button', { class: 'btn', disabled: true }, 'PDF 다운로드');
-  const xlsBtn = h('button', { class: 'btn', disabled: true }, 'Excel 다운로드');
+  const saved = { id: state.quoteId, quote_no: state.quoteNo };
+  const pdfBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
+  const xlsBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
   outBox.appendChild(publishBtn); outBox.appendChild(pdfBtn); outBox.appendChild(xlsBtn);
 
   publishBtn.addEventListener('click', async () => {
@@ -116,12 +117,4 @@ export function renderStep5(root, state, wiz) {
     }
   });
 
-  // ── 우: 미리보기 ──
-  right.appendChild(h('div', { class: 'card' },
-    h('div', { class: 'card-h' }, h('h2', {}, '미리보기'),
-      h('span', { class: 'sub' }, 'PDF 와 같은 렌더러'), h('span', { class: 'sp' }),
-      h('span', { class: 'badge badge-gray', id: 'pv5-state' }, '대기')),
-    h('div', { class: 'card-b', style: 'padding:0' },
-      h('iframe', { id: 'pv5-frame', style: 'width:100%;height:640px;border:0;background:#fff' }))));
-  makePreview('pv5-frame', 'pv5-state').now(wiz);
 }

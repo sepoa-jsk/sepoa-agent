@@ -3,7 +3,7 @@
 // 계산 로직은 바꾸지 않는다: 서버 calcQuoteBlocks 와 같은 순서를 그대로 옮겨 왔다.
 //   블록소계 합 → 특별DC → 절사(십만) → VAT. 일시불/월(recurring) 분리.
 import { api as http } from '../../../api.js';
-import { h, won, toast } from '../../../ui.js';
+import { h, won, toast, openModal } from '../../../ui.js';
 
 const num = (v) => Number(v) || 0;
 
@@ -175,46 +175,35 @@ async function applyTemplate(state, wiz) {
   }
 }
 
-// 미리보기 갱신 — STEP⑤ 에서도 쓴다
-export function makePreview(frameId, stateId) {
-  let timer = null;
-  async function run(wiz) {
-    const s = wiz.get();
-    const badge = document.getElementById(stateId);
-    try {
-      const r = await http.previewQuote({
-        blocks: toBlocksPayload(s), header: previewHeader(s),
-        discount: discountPayload(s), monthly_discount: monthlyDiscountPayload(s),
-        round_unit: num(s.round_unit ?? 100000),
-      });
-      const f = document.getElementById(frameId);
-      if (f) {
-        // 견적서는 A4(약 800px) 폭으로 짜여 있다 — 좁은 미리보기 칸에서는 줄바꿈되지 않게 통째로 줄여 보인다
-        f.onload = () => {
-          const body = f.contentDocument && f.contentDocument.body;
-          if (body) body.style.zoom = String(Math.min(1, (f.clientWidth - 16) / 800));
-        };
-        f.srcdoc = r.html;
-      }
-      if (badge) {
-        badge.textContent = `일시 ${won(r.calc.onetime_total)}${r.calc.monthly_total ? ' / 월 ' + won(r.calc.monthly_total) : ''}`;
-        badge.className = 'badge badge-blue';
-      }
-      return r;
-    } catch (err) {
-      if (badge) { badge.textContent = '미리보기 실패'; badge.className = 'badge badge-red'; }
-      return null;
-    }
+// 미리보기 창 — 견적 작성 위쪽 [미리보기] 버튼. 지금 화면의 값(저장 전 포함)으로 PDF 와 같은 견적서를 그린다.
+export async function openPreview(wiz) {
+  const s = wiz.get();
+  if (!s.blocks || !s.blocks.length) return toast('템플릿을 불러오거나 3단계(구성)에서 견적 구성을 만든 뒤 미리볼 수 있습니다.', 'err');
+  recalcBlocks(s); // 행 금액(amount)을 채운다 — 서버는 보낸 금액을 그대로 합산한다
+  const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
+  const info = h('span', { style: 'margin-right:auto;font-size:12px;color:var(--text-3)' }, '그리는 중...');
+  const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
+  const m = openModal({
+    title: `견적서 미리보기${s.quoteNo ? ' — ' + s.quoteNo : ''}`,
+    body: frame,
+    footer: [info, printBtn, h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
+  });
+  const box = m.back.querySelector('.modal');
+  box.style.width = '880px';
+  box.querySelector('.modal-body').style.padding = '12px';
+  try {
+    const r = await http.previewQuote({
+      blocks: toBlocksPayload(s), header: { ...previewHeader(s), quote_no: s.quoteNo || undefined },
+      discount: discountPayload(s), monthly_discount: monthlyDiscountPayload(s),
+      round_unit: num(s.round_unit ?? 100000),
+    });
+    frame.srcdoc = r.html;
+    info.textContent = `일시 ${won(r.calc.onetime_total)}원${r.calc.monthly_total ? ' / 월 ' + won(r.calc.monthly_total) + '원' : ''}`;
+    printBtn.disabled = false;
+  } catch (err) {
+    info.textContent = '';
+    frame.replaceWith(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, err.message));
   }
-  return {
-    now: run,
-    schedule(wiz) {
-      const badge = document.getElementById(stateId);
-      if (badge) { badge.textContent = '갱신 중'; badge.className = 'badge badge-yellow'; }
-      clearTimeout(timer);
-      timer = setTimeout(() => run(wiz), 300); // 디바운스 300ms
-    },
-  };
 }
 
 export async function renderStep3(root, state, wiz) {
@@ -232,19 +221,10 @@ export async function renderStep3(root, state, wiz) {
     root.replaceChildren();
   }
 
-  const layout = h('div', { style: 'display:grid;grid-template-columns:1fr 440px;gap:14px;align-items:start' });
+  // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
   const left = h('div', { style: 'min-width:0' });
-  const right = h('div', { style: 'position:sticky;top:0' });
-  layout.appendChild(left); layout.appendChild(right);
-  root.appendChild(layout);
-
-  right.appendChild(h('div', { class: 'card' },
-    h('div', { class: 'card-h' }, h('h2', {}, '미리보기'),
-      h('span', { class: 'sub' }, 'PDF 와 같은 렌더러'), h('span', { class: 'sp' }),
-      h('span', { class: 'badge badge-gray', id: 'pv-state' }, '대기')),
-    h('div', { class: 'card-b', style: 'padding:0' },
-      h('iframe', { id: 'pv-frame', style: 'width:100%;height:640px;border:0;background:#fff' }))));
-  const preview = makePreview('pv-frame', 'pv-state');
+  root.appendChild(left);
+  const preview = { schedule() {} }; // 예전 오른쪽 미리보기 갱신 자리 — 지금은 창으로 연다
 
   const els = {};
   function syncTotals(c) {

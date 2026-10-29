@@ -33,7 +33,8 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * {@code /api/quotes} — Node {@code routes/quotes.js} 이식. 명세 2-6절 (#26~#33).
  * 계산 창구(#23~#25)는 {@link QuoteCalcController}, 견적 읽기는 {@link QuoteLoader}.
  *
- * <p>Excel·PDF(#32·#33) 는 렌더러(J7) 전까지 {@code 501 NOT_IMPLEMENTED} 다(명세 3장 F).
+ * <p>Excel·PDF(#32·#33) — 견적서 HTML({@link QuoteHtml})을 Chrome 으로 인쇄한 PDF, 같은 양식의 Excel({@link QuoteExcel}).
+ * 블록이 없는 구 섹션형 견적은 지원하지 않는다(400 LEGACY_QUOTE).
  */
 @RestController
 @RequestMapping("/api/quotes")
@@ -47,13 +48,18 @@ public class QuoteController {
     private final QuoteCalc calc;
     private final QuoteWriter writer;
     private final QuoteHtml html;
+    private final QuotePdf pdf;
+    private final QuoteExcel excel;
 
-    public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer, QuoteHtml html) {
+    public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer, QuoteHtml html,
+            QuotePdf pdf, QuoteExcel excel) {
         this.db = db;
         this.loader = loader;
         this.calc = calc;
         this.writer = writer;
         this.html = html;
+        this.pdf = pdf;
+        this.excel = excel;
     }
 
     /** #27 목록 — 최신순, {@code size} 최대 100 */
@@ -263,21 +269,42 @@ public class QuoteController {
         return Map.of("html", html.render(q, html.settings(), html.masters(q, null), !"0".equals(cover)));
     }
 
-    /** #32 Excel — J7 */
+    /** #32 Excel — 견적서와 같은 양식. 금액 칸은 숫자라 엑셀에서 고쳐 쓸 수 있다 */
     @GetMapping("/{id}/excel")
-    public Map<String, Object> excel(@PathVariable String id) {
-        return notYet(id, "Excel");
+    public ResponseEntity<byte[]> excel(@PathVariable String id) {
+        Map<String, Object> q = blockQuote(id);
+        byte[] body = excel.build(q, html.settings(), html.masters(q, null));
+        return download(body, q, "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     }
 
-    /** #33 PDF — J7 */
+    /** #33 PDF — 견적서 보기와 같은 HTML 을 인쇄한다. {@code ?cover=0} 이면 표지를 뺀다 */
     @GetMapping("/{id}/pdf")
-    public Map<String, Object> pdf(@PathVariable String id) {
-        return notYet(id, "PDF");
+    public ResponseEntity<byte[]> pdf(@PathVariable String id, @RequestParam(required = false) String cover) {
+        Map<String, Object> q = blockQuote(id);
+        byte[] body = pdf.toPdf(html.render(q, html.settings(), html.masters(q, null), !"0".equals(cover)));
+        return download(body, q, "pdf", "application/pdf");
     }
 
-    private Map<String, Object> notYet(String id, String what) {
-        if (loader.load(Js.number(id)) == null) throw ApiException.notFound();
-        throw new ApiException(HttpStatus.NOT_IMPLEMENTED, "NOT_IMPLEMENTED", what + " 출력은 Java 이식 J7 에서 연결됩니다.");
+    private Map<String, Object> blockQuote(String id) {
+        Map<String, Object> q = loader.load(Js.number(id));
+        if (q == null) throw ApiException.notFound();
+        if (maps(q.get("blocks")).isEmpty()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "LEGACY_QUOTE", "구 견적(섹션형)은 내려받기를 지원하지 않습니다.");
+        }
+        return q;
+    }
+
+    /** 파일 이름 — 견적번호_고객사.확장자. 한글 이름은 RFC 5987 filename* 로, 옛 브라우저용 filename 은 견적번호만 */
+    private static ResponseEntity<byte[]> download(byte[] body, Map<String, Object> q, String ext, String type) {
+        String no = String.valueOf(q.get("quote_no"));
+        String cust = q.get("customer_name") == null ? "" : String.valueOf(q.get("customer_name")).replaceAll("[\\\\/:*?\"<>|]", "");
+        String name = no + (cust.isBlank() ? "" : "_" + cust) + "." + ext;
+        String encoded = java.net.URLEncoder.encode(name, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        String ascii = no.replaceAll("[^A-Za-z0-9_.-]", "") + "." + ext;
+        return ResponseEntity.ok()
+                .header("Content-Type", type)
+                .header("Content-Disposition", "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encoded)
+                .body(body);
     }
 
     // ── 공통 ───────────────────────────────────────────────────────

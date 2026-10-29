@@ -133,7 +133,7 @@ public class QuoteHtml {
 
     // ── 렌더 ─────────────────────────────────────────────────────
 
-    private static final Map<String, String> DEP_LABEL = Map.of(
+    static final Map<String, String> DEP_LABEL = Map.of(
             "ONPREM_LUMP", "온프레미스", "ONPREM_INSTALL", "온프레미스", "ONPREM", "온프레미스", "SAAS", "SaaS", "PCLOUD", "Private Cloud");
     private static final String[] CIRCLED = { "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨" };
 
@@ -501,56 +501,56 @@ public class QuoteHtml {
     }
 
     /** 상단 총견적가 — 실측 양식대로 ₩ 를 붙인다. 0 은 무상제공 */
-    private static String wonSign(double v) {
+    static String wonSign(double v) {
         return v == 0 ? "무상제공" : "₩" + won(v);
     }
 
     /** 2026-08-04 → 2026년 08월 04일 */
-    private static String korDate(Object d) {
+    static String korDate(Object d) {
         String s = fmtDate(d);
         return s.matches("\\d{4}-\\d{2}-\\d{2}") ? s.substring(0, 4) + "년 " + s.substring(5, 7) + "월 " + s.substring(8, 10) + "일" : s;
     }
 
-    private static String fixed1(double v) {
+    static String fixed1(double v) {
         return String.format(Locale.ROOT, "%.1f", v);
     }
 
     /** 수량 — 인건비 공수는 2.0, 품목은 단위를 붙인다(1 식 · 2.0 MM · 10 계정). 단위가 비어 있으면 '식' */
-    private static String qtyText(double qty, String unit, boolean labor) {
+    static String qtyText(double qty, String unit, boolean labor) {
         if (labor) return fixed1(qty);
         if ("MM".equalsIgnoreCase(unit)) return fixed1(qty) + " MM";
         return numText(qty) + " " + (unit == null || unit.isEmpty() ? "식" : esc(unit)); // 단위가 없으면 실측처럼 '식'
     }
 
-    private static String freeText(double v) {
+    static String freeText(double v) {
         return v == 0 ? "무상제공" : won(v);
     }
 
     /** JS 숫자 → 문자열 (0.4, 1, 12) */
-    private static String numText(double v) {
+    static String numText(double v) {
         return Js.string(v);
     }
 
-    private static double num(Object v) {
+    static double num(Object v) {
         if (v == null) return 0;
         double d = Js.toNumber(v);
         return Double.isNaN(d) ? 0 : d;
     }
 
-    private static String str(Object v) {
+    static String str(Object v) {
         return v == null ? "" : String.valueOf(v);
     }
 
-    private static String or(Object v, String fallback) {
+    static String or(Object v, String fallback) {
         return Rows.truthy(v) ? String.valueOf(v) : fallback;
     }
 
-    private static String firstNonEmpty(Object... vs) {
+    static String firstNonEmpty(Object... vs) {
         for (Object v : vs) if (Rows.truthy(v)) return String.valueOf(v);
         return "";
     }
 
-    private static String fmtDate(Object d) {
+    static String fmtDate(Object d) {
         String s = str(d);
         return s.length() > 10 ? s.substring(0, 10) : s;
     }
@@ -570,17 +570,17 @@ public class QuoteHtml {
         return sb.toString();
     }
 
-    private static String tag(String memo, String t) {
+    static String tag(String memo, String t) {
         Matcher m = Pattern.compile("\\[" + Pattern.quote(t) + "\\]\\s*(.+)").matcher(memo);
         return m.find() ? m.group(1).trim() : "";
     }
 
-    private static List<?> list(Object v) {
+    static List<?> list(Object v) {
         return v instanceof List<?> l ? l : List.of();
     }
 
     @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> maps(Object v) {
+    static List<Map<String, Object>> maps(Object v) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Object o : list(v)) if (o instanceof Map<?, ?> m) out.add((Map<String, Object>) m);
         return out;

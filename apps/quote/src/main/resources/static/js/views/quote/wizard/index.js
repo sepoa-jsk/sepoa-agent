@@ -4,9 +4,8 @@
 //   state 를 읽어 화면을 그리고, 값이 바뀌면 api.patch({...}) 로 변경분만 돌려준다.
 //   단계 이동은 api.go(n) / api.next() / api.prev().
 //
-// 임시저장은 두 겹이다.
-//   ① 자동 — 새 견적을 쓰는 동안 단계 이동·값 변경 시 이 브라우저(localStorage)에 담는다. 새로고침해도 복원된다.
-//   ② 임시저장 버튼 — 서버에 '작성중(DRAFT)' 견적으로 저장한다. 견적 목록에 나오고 다른 PC 에서도 이어 쓴다.
+// 신규(#/quotes/new)는 늘 빈 화면에서 시작한다(2026-10-29 사용자 요청 — 예전 브라우저 자동 보관 · 복원은 없앴다).
+// 임시저장 버튼 — 서버에 '작성중(DRAFT)' 견적으로 저장한다. 견적 목록에 나오고 다른 PC 에서도 이어 쓴다.
 //      처음엔 POST 로 견적번호를 받고, 그 뒤로는 같은 견적을 PUT 으로 덮어쓴다.
 // 수정: #/quotes/:id/edit 은 저장된 견적을 읽어 위저드 상태로 되돌린 뒤 STEP③ 에서 연다.
 //      수정 중에는 브라우저 자동 보관을 하지 않는다(새 견적 작성분과 섞이지 않게).
@@ -14,12 +13,12 @@
 //      상태(작성중 · 발송 · 수주 · 실주)만 상세에서도 바로 바꾼다(PATCH /status).
 //      상세 ↔ 수정을 오갈 때 보던 단계를 이어서 연다(sessionStorage).
 import { api as http } from '../../../api.js';
-import { copyQuote, viewQuote, deleteQuote } from '../quote-actions.js';
+import { copyQuote, viewQuote, deleteQuote, downloadQuote } from '../quote-actions.js';
 import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
-import { renderStep3, appliedPatch } from './step3-config.js';
+import { renderStep3, appliedPatch, openPreview } from './step3-config.js';
 import { openTemplatePicker } from './template-picker.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
@@ -137,9 +136,9 @@ export async function renderWizard(root, opts = {}) {
     sessionStorage.removeItem(OPEN_STEP_KEY);
     state.step = keep >= 1 && keep <= STEPS.length ? keep : readOnly ? 1 : 3;
   } else {
-    const draft = loadDraft();
-    state = draft || blankState();
-    if (draft) toast(`작성 중이던 견적을 복원했습니다.${draft.quoteNo ? ' (' + draft.quoteNo + ')' : ''}`, 'ok');
+    // 신규는 빈 화면 — 예전에 남은 브라우저 보관분도 지운다
+    localStorage.removeItem(DRAFT_KEY);
+    state = blankState();
   }
 
   const api = {
@@ -189,10 +188,8 @@ export async function renderWizard(root, opts = {}) {
     return sel;
   }
 
-  function persist() {
-    if (editMode) return;
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch { /* 용량 초과 무시 */ }
-  }
+  // 브라우저 자동 보관은 하지 않는다(신규는 늘 빈 화면). 저장은 [임시저장] · [발행] 으로 서버에.
+  function persist() { /* 의도적으로 비움 */ }
 
   // 서버 임시저장 — 상태는 그대로 '작성중'. 견적 구성(블록)이 생긴 뒤부터 저장할 수 있다.
   let saving = false;
@@ -263,6 +260,8 @@ export async function renderWizard(root, opts = {}) {
         { label: '수정', onClick: () => switchTo(`#/quotes/${state.quoteId}/edit`) },
         { label: '복사', onClick: () => copyQuote(q) },
         { label: '견적서 보기', onClick: () => viewQuote(q) },
+        { label: 'PDF', onClick: () => downloadQuote(q, 'pdf') },
+        { label: 'Excel', onClick: () => downloadQuote(q, 'excel') },
         { label: '삭제', onClick: () => deleteQuote(q) },
         { label: '이전', onClick: () => api.prev() },
         { label: '다음', primary: true, onClick: () => api.next() },
@@ -275,6 +274,7 @@ export async function renderWizard(root, opts = {}) {
       actions: [
         ...(editMode ? [{ label: '취소', onClick: () => switchTo(`#/quotes/${state.quoteId}`) }] : []),
         { label: '템플릿 불러오기', onClick: pickTemplate },
+        { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },
         { label: '다음', primary: true, onClick: () => api.next() },

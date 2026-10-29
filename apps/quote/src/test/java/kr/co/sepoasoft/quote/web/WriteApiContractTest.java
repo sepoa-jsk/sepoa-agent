@@ -37,7 +37,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * J5-4 견적 쓰기 계약 — 검증 오류·404·#18. 실제 저장 결과는 Node 와의 실측 비교(테스트 견적을 만들고 지운다)가 맡는다.
  */
 @WebMvcTest(controllers = QuoteController.class)
-@Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class, QuoteHtml.class })
+@Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class, QuoteHtml.class, QuotePdf.class, QuoteExcel.class })
 @TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
 @DisplayName("J5-4 견적 쓰기")
 class WriteApiContractTest {
@@ -94,15 +94,19 @@ class WriteApiContractTest {
     }
 
     @Test
-    @DisplayName("Excel·PDF — 견적이 있으면 501 NOT_IMPLEMENTED(J7 전), 없으면 404")
-    void exportsNotYet() throws Exception {
+    @DisplayName("Excel·PDF — 없는 견적은 404, 블록이 없는 구 섹션형 견적은 400 LEGACY_QUOTE")
+    void exportsGuard() throws Exception {
         given(db.first(anyString(), any())).willReturn(null);
         mvc.perform(get("/api/quotes/9/pdf").session(login())).andExpect(status().isNotFound());
+        mvc.perform(get("/api/quotes/9/excel").session(login())).andExpect(status().isNotFound());
         given(db.first(anyString(), any())).willReturn(new LinkedHashMap<>(Map.of("id", 9)));
         given(db.query(anyString(), any())).willReturn(List.of());
         mvc.perform(get("/api/quotes/9/excel").session(login()))
-                .andExpect(status().isNotImplemented())
-                .andExpect(jsonPath("$.error").value("NOT_IMPLEMENTED"));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("LEGACY_QUOTE"));
+        mvc.perform(get("/api/quotes/9/pdf").session(login()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("LEGACY_QUOTE"));
     }
 
     @Test
