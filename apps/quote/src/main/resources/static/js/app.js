@@ -49,7 +49,7 @@ const viewEl = () => document.getElementById('view');
 const routes = [
   // 견적 작성 경로는 위저드 하나다. 템플릿 견적 화면(quote-block.js)은 작업 10 에서 폐기했다.
   { re: /^#\/quotes\/new$/, view: () => renderWizard(viewEl()) },
-  // 편집은 아직 위저드로 넘기지 못했다. editor.js 는 섹션형 전용이므로 블록형은 가드로 막는다.
+  // 편집 — 블록형 견적은 위저드 수정 모드, 섹션형(구 견적)은 editor.js.
   { re: /^#\/quotes\/(\d+)\/edit$/, view: (m) => openEdit(viewEl(), Number(m[1])) },
   { re: /^#\/quotes\/(\d+)$/, view: (m) => renderDetail(viewEl(), Number(m[1])) },
   { re: /^#\/quotes$/, view: () => renderList(viewEl()) },
@@ -67,23 +67,19 @@ const routes = [
 //   품목·인건비가 유실된다. 그래서 블록이 있는 견적은 editor.js 로 보내지 않는다.
 //   (현재 editor.js 는 deployment !== 'ONPREM' 이면 본문도 저장버튼도 렌더하지 않아
 //    실제로는 도달 전에 막히지만, 그 방어에 기대지 않고 여기서 명시적으로 막는다)
-//   위저드 편집 모드가 생기면 이 함수가 위저드로 넘기는 자리가 된다.
+//   블록형은 위저드 수정 모드(renderWizard(el, { quote }))로 연다.
 async function openEdit(el, id) {
   let quote = null;
   try { ({ quote } = await api.getQuote(id)); }
   catch (err) { toast(err.message, 'err'); location.hash = '#/quotes'; return; }
   if (!quote) { toast('견적을 찾을 수 없습니다.', 'err'); location.hash = '#/quotes'; return; }
-  if ((quote.blocks || []).length) {
-    toast('이 견적은 편집 준비 중입니다. 블록형 견적 편집은 위저드 편집 모드에서 지원합니다.', 'err');
-    location.hash = `#/quotes/${id}`;
-    return;
-  }
+  if ((quote.blocks || []).length) return renderWizard(el, { quote });
   return renderEditor(el, { mode: 'edit', id });
 }
 
 async function router() {
   const hash = location.hash || '#/quotes';
-  const nav = hash.startsWith('#/quotes/new') ? 'new'
+  const nav = hash.startsWith('#/quotes/new') || /^#\/quotes\/\d+\/edit$/.test(hash) ? 'new'
     : hash.startsWith('#/quotes') ? 'quotes'
     : hash.startsWith('#/master') ? 'master'
     : hash.startsWith('#/pricing') ? 'pricing'

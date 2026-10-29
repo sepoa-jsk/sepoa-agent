@@ -4,14 +4,20 @@
 //   state 를 읽어 화면을 그리고, 값이 바뀌면 api.patch({...}) 로 변경분만 돌려준다.
 //   단계 이동은 api.go(n) / api.next() / api.prev().
 //
-// 임시저장: 단계 이동·값 변경 시 localStorage 에 저장한다. 새로고침해도 복원된다.
+// 임시저장은 두 겹이다.
+//   ① 자동 — 새 견적을 쓰는 동안 단계 이동·값 변경 시 이 브라우저(localStorage)에 담는다. 새로고침해도 복원된다.
+//   ② 임시저장 버튼 — 서버에 '작성중(DRAFT)' 견적으로 저장한다. 견적 목록에 나오고 다른 PC 에서도 이어 쓴다.
+//      처음엔 POST 로 견적번호를 받고, 그 뒤로는 같은 견적을 PUT 으로 덮어쓴다.
+// 수정: #/quotes/:id/edit 은 저장된 견적을 읽어 위저드 상태로 되돌린 뒤 STEP③ 에서 연다.
+//      수정 중에는 브라우저 자동 보관을 하지 않는다(새 견적 작성분과 섞이지 않게).
+import { api as http } from '../../../api.js';
 import { h, toast, clear } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
 import { renderStep3 } from './step3-config.js';
 import { renderStep4 } from './step4-labor.js';
-import { renderStep5 } from './step5-review.js';
+import { renderStep5, quotePayload } from './step5-review.js';
 
 const DRAFT_KEY = 'sq.wizard.draft.v1';
 
@@ -47,7 +53,54 @@ function blankState() {
     monthly_discount: { mode: 'TARGET', value: null },  // 월 사용료 특별DC (하겐다즈 SaaS 300,000→100,000)
     conds: [], riskFactors: [],
     savedAt: null,
+    quoteId: null, quoteNo: null, // 서버에 저장된 견적이면 채워진다 (임시저장 또는 수정)
   };
+}
+
+// 저장된 견적 → 위저드 상태. 메모에 접어 둔 견적용도·결제조건·연락처·이메일을 다시 풀어낸다(previewHeader 의 역).
+const MEMO_KEYS = { 견적용도: 'purpose', 결제조건: 'pay_terms', 연락처: 'phone', 이메일: 'email' };
+const n0 = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+const day = (v) => (v ? String(v).slice(0, 10) : '');
+function dcOf(type, value) {
+  // 저장 시 할인 없음은 type null 로 남는다. TARGET 0 은 무상제공이라 값 0 을 살린다.
+  return type ? { mode: type, value: n0(value) ?? 0 } : { mode: 'TARGET', value: null };
+}
+function fromQuote(q, tpl) {
+  const st = blankState();
+  const memo = {};
+  for (const line of String(q.memo || '').split('\n')) {
+    const m = line.match(/^\[(.+?)\]\s?(.*)$/);
+    if (m && MEMO_KEYS[m[1]]) memo[MEMO_KEYS[m[1]]] = m[2];
+  }
+  Object.assign(st.basic, {
+    customer_name: q.customer_name || '', customer_contact: q.customer_contact || '',
+    quote_date: day(q.quote_date) || st.basic.quote_date, valid_until: day(q.valid_until),
+    purpose: memo.purpose || '', phone: memo.phone || '', email: memo.email || '',
+    pay_terms: memo.pay_terms && memo.pay_terms !== '-' ? memo.pay_terms : '',
+  });
+  st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code };
+  st.blocks = (q.blocks || []).map((b) => ({
+    block_code: b.block_code, name: b.title, recurring: !!b.recurring,
+    items: (b.items || []).map((it) => ({
+      item_code: it.item_code, category: it.category, name: it.name, spec: it.spec, unit: it.unit,
+      qty: Number(it.qty), base_price: n0(it.base_price), proposed_price: Number(it.proposed_price) || 0,
+      amount: Number(it.amount) || 0,
+    })),
+    labor: (b.labor || []).map((l) => ({
+      role_code: l.role_code, role_name: l.role_name, role_label: l.role_label, grade: l.grade, task: l.task,
+      mm: Number(l.mm), base_price: n0(l.base_price), proposed_price: Number(l.proposed_price) || 0,
+      amount: Number(l.amount) || 0, month_alloc: l.month_alloc || {},
+    })),
+  }));
+  st.applied = { solution: q.solution, brand: q.brand, ...(tpl || {}) };
+  st.hasLaborPlan = !!(tpl && tpl.has_labor_plan);
+  st.round_unit = n0(q.round_unit) ?? 100000;
+  st.discount = dcOf(q.discount_type, q.discount_value);
+  st.monthly_discount = dcOf(q.monthly_discount_type, q.monthly_discount_value);
+  st.conds = (q.conditions || []).map((c) => ({ text: typeof c === 'string' ? c : c.text || '' }));
+  st.quoteId = q.id; st.quoteNo = q.quote_no;
+  st.step = 3;
+  return st;
 }
 
 function loadDraft() {
@@ -59,11 +112,21 @@ function loadDraft() {
   } catch { return null; }
 }
 
-export async function renderWizard(root) {
+export async function renderWizard(root, opts = {}) {
   resetTemplateCache(); // 견적 템플릿 화면에서 바꾼 내용을 다시 받는다
-  const draft = loadDraft();
-  let state = draft || blankState();
-  if (draft) toast(`작성 중이던 견적을 복원했습니다. (${draft.savedAt || '임시저장'})`, 'ok');
+  const editMode = !!opts.quote;
+  let state;
+  if (editMode) {
+    let tpl = null;
+    if (opts.quote.template_code) {
+      try { ({ template: tpl } = await http.templateDetail(opts.quote.template_code)); } catch { /* 템플릿이 없어도 수정은 된다 */ }
+    }
+    state = fromQuote(opts.quote, tpl);
+  } else {
+    const draft = loadDraft();
+    state = draft || blankState();
+    if (draft) toast(`작성 중이던 견적을 복원했습니다.${draft.quoteNo ? ' (' + draft.quoteNo + ')' : ''}`, 'ok');
+  }
 
   const api = {
     patch(part) { state = deepMerge(state, part); persist(); paintFooterState(); },
@@ -80,17 +143,58 @@ export async function renderWizard(root) {
     next() { api.go(state.step + 1); },
     prev() { api.go(state.step - 1); },
     reset() { localStorage.removeItem(DRAFT_KEY); state = blankState(); paint(); },
+    // 발행 후 정리 — 이 견적을 담고 있던 브라우저 보관분만 지운다
+    finish(id) {
+      const d = loadDraft();
+      if (!editMode || (d && d.quoteId === id)) localStorage.removeItem(DRAFT_KEY);
+    },
     addDays,
   };
 
   function persist() {
-    state.savedAt = new Date().toTimeString().slice(0, 5);
+    if (editMode) return;
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch { /* 용량 초과 무시 */ }
   }
 
+  // 서버 임시저장 — 상태는 그대로 '작성중'. 견적 구성(블록)이 생긴 뒤부터 저장할 수 있다.
+  let saving = false;
+  async function saveDraft() {
+    if (saving) return;
+    if (!state.basic.customer_name.trim()) return toast('수신처(고객사명)를 입력한 뒤 임시저장할 수 있습니다.', 'err');
+    if (!state.blocks.length) return toast('3단계(구성)에서 템플릿이 적용된 뒤부터 임시저장할 수 있습니다.', 'err');
+    saving = true;
+    try {
+      const payload = quotePayload(state);
+      const { quote } = state.quoteId
+        ? await http.updateQuote(state.quoteId, payload)
+        : await http.createQuote(payload);
+      state.quoteId = quote.id; state.quoteNo = quote.quote_no;
+      state.savedAt = new Date().toTimeString().slice(0, 5);
+      persist(); paintFooterState(); paintTitle();
+      toast(`견적 ${quote.quote_no} 을(를) 작성중으로 임시저장했습니다.`, 'ok');
+    } catch (err) {
+      toast(err.message, 'err');
+    } finally { saving = false; }
+  }
+
+  const savedText = () => (state.savedAt ? `서버 임시저장 ${state.savedAt}` : '');
   function paintFooterState() {
     const el = document.getElementById('wizard-saved');
-    if (el) el.textContent = state.savedAt ? `임시저장 ${state.savedAt}` : '';
+    if (el) el.textContent = savedText();
+  }
+
+  function paintTitle() {
+    const head = editMode ? '견적 수정' : '견적 작성';
+    setPage({
+      title: head,
+      path: `견적관리 / ${head}${state.quoteNo ? ' ' + state.quoteNo : ''} / ${state.step}. ${STEPS[state.step - 1].label}`,
+      actions: [
+        ...(editMode ? [{ label: '취소', onClick: () => { location.hash = `#/quotes/${state.quoteId}`; } }] : []),
+        { label: '임시저장', onClick: saveDraft },
+        { label: '이전', onClick: () => api.prev() },
+        { label: '다음', primary: true, onClick: () => api.next() },
+      ],
+    });
   }
 
   function stepsBar() {
@@ -107,18 +211,8 @@ export async function renderWizard(root) {
     const body = h('div', {});
     root.appendChild(body);
     root.appendChild(h('div', { class: 'page-sub', id: 'wizard-saved', style: 'margin-top:10px;text-align:right' },
-      state.savedAt ? `임시저장 ${state.savedAt}` : ''));
-
-    // GNB 액션 — 작업 7 의 setPage 인터페이스
-    setPage({
-      title: '견적 작성',
-      path: `견적관리 / 견적 작성 / ${state.step}. ${STEPS[state.step - 1].label}`,
-      actions: [
-        { label: '임시저장', onClick: () => { persist(); paintFooterState(); toast('임시저장했습니다.', 'ok'); } },
-        { label: '이전', onClick: () => api.prev() },
-        { label: '다음', primary: true, onClick: () => api.next() },
-      ],
-    });
+      savedText()));
+    paintTitle(); // GNB 액션 — 작업 7 의 setPage 인터페이스
 
     STEPS[state.step - 1].render(body, state, api);
   }

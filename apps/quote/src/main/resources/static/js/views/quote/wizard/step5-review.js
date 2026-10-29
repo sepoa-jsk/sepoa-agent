@@ -1,10 +1,21 @@
 // STEP⑤ 검토·발행 — 검증 배너 자리 + 미리보기 + 발행.
-// 저장은 기존 POST /api/quotes(블록 경로)를 그대로 쓴다. 저장 후 #/quotes/:id 로 이동.
+// 새 견적은 POST /api/quotes, 이미 저장된 견적(임시저장·수정)은 PUT /api/quotes/:id. 저장 후 #/quotes/:id 로 이동.
 import { api as http } from '../../../api.js';
 import { h, won, toast } from '../../../ui.js';
 import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload, makePreview } from './step3-config.js';
 
 const num = (v) => Number(v) || 0;
+
+// 저장 페이로드 — 발행과 임시저장이 같은 모양을 쓴다
+export function quotePayload(s) {
+  return {
+    ...previewHeader(s),
+    blocks: toBlocksPayload(s),
+    discount: discountPayload(s),
+    monthly_discount: monthlyDiscountPayload(s),
+    round_unit: num(s.round_unit ?? 100000),
+  };
+}
 
 // 발행 전 확인 — 서버측 강제는 작업 16 검증 엔진 소관이다.
 function localChecks(state) {
@@ -66,7 +77,9 @@ export function renderStep5(root, state, wiz) {
       row('절사액 (원)', calc.trunc ? '-' + won(calc.trunc) : '0'),
       row('최종견적금액 (원)', won(calc.final), true),
       row('부가세 (원, 별도 10%)', won(calc.vat)),
-      calc.monthly ? row('월 사용료 (원)', won(calc.monthly), true) : null)));
+      calc.monthly && calc.mdcAmt ? row('월 사용료 소계 (원)', won(calc.monthly)) : null,
+      calc.monthly && calc.mdcAmt ? row('월 특별 DC (원)', '-' + won(calc.mdcAmt)) : null,
+      calc.monthly ? row('월 사용료 (원)', won(calc.monthlyFinal), true) : null)));
 
   const outBox = h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' });
   const savedNote = h('div', { class: 'sub', style: 'padding:0 14px 12px;color:var(--text-3)' },
@@ -85,15 +98,11 @@ export function renderStep5(root, state, wiz) {
     const s = wiz.get();
     publishBtn.disabled = true; publishBtn.textContent = '저장 중…';
     try {
-      const payload = {
-        ...previewHeader(s),
-        blocks: toBlocksPayload(s),
-        discount: discountPayload(s),
-        monthly_discount: monthlyDiscountPayload(s),
-        round_unit: num(s.round_unit ?? 100000),
-      };
-      const { quote } = await http.createQuote(payload);
-      wiz.reset();
+      const payload = quotePayload(s);
+      const { quote } = s.quoteId
+        ? await http.updateQuote(s.quoteId, payload)
+        : await http.createQuote(payload);
+      wiz.finish(quote.id);
       toast(`견적 ${quote.quote_no} 을(를) 저장했습니다.`, 'ok');
       location.hash = `#/quotes/${quote.id}`;
     } catch (err) {
