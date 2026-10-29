@@ -15,11 +15,14 @@ const DEP_DESC = {
   PCLOUD: '셋업 + 라이선스 + 월 서비스료',
 };
 
+// 견적 템플릿 화면에서 추가·수정·사용 중지한 내용이 바로 보이도록, 화면을 열 때(wizard 진입) 한 번 새로 받는다.
+// 사용 중지한 템플릿은 고를 수 없다.
 let tplCache = null;
+export function resetTemplateCache() { tplCache = null; }
 async function loadTemplates() {
   if (tplCache) return tplCache;
   try {
-    const r = await http.templates({});
+    const r = await http.templates({ active: 1 });
     tplCache = r.templates || [];
   } catch {
     tplCache = [];

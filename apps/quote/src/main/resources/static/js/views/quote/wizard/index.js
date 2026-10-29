@@ -8,7 +8,7 @@
 import { h, toast, clear } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
-import { renderStep2, validateStep2 } from './step2-type.js';
+import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
 import { renderStep3 } from './step3-config.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5 } from './step5-review.js';
@@ -60,6 +60,7 @@ function loadDraft() {
 }
 
 export async function renderWizard(root) {
+  resetTemplateCache(); // 견적 템플릿 화면에서 바꾼 내용을 다시 받는다
   const draft = loadDraft();
   let state = draft || blankState();
   if (draft) toast(`작성 중이던 견적을 복원했습니다. (${draft.savedAt || '임시저장'})`, 'ok');

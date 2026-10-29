@@ -23,7 +23,7 @@ export const MENU = [
     { nav: 'labor-rates', label: '노임단가', href: '#/labor-rates', admin: true },
     { nav: 'code', label: '공통코드' },
     { nav: 'term', label: '견적조건 문구' },
-    { nav: 'templates', label: '메일·문서 템플릿', href: '#/templates', admin: true },
+    { nav: 'templates', label: '견적 템플릿', href: '#/templates', admin: true },
   ] },
   { group: '시스템관리', items: [
     { nav: 'user', label: '사용자' },
