@@ -61,6 +61,7 @@ function blankState() {
     savedAt: null,
     quoteId: null, quoteNo: null, // 서버에 저장된 견적이면 채워진다 (임시저장 또는 수정)
     status: 'DRAFT',
+    pay_plan: null, // 견적별 결제 방안 { enabled, ratio, rows } — null 이면 템플릿 설정 · 기본 문구
   };
 }
 
@@ -107,6 +108,7 @@ function fromQuote(q, tpl) {
   st.conds = (q.conditions || []).map((c) => ({ text: typeof c === 'string' ? c : c.text || '' }));
   st.quoteId = q.id; st.quoteNo = q.quote_no;
   st.status = q.status || 'DRAFT';
+  st.pay_plan = q.pay_plan && typeof q.pay_plan === 'object' ? q.pay_plan : null;
   st.step = 3;
   return st;
 }
@@ -237,6 +239,7 @@ export async function renderWizard(root, opts = {}) {
         type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code },
         ...appliedPatch(d),
         discount: { mode: 'TARGET', value: null }, monthly_discount: { mode: 'TARGET', value: null },
+        pay_plan: null, // 새 템플릿의 결제 방안 설정을 따른다
       });
       state.step = 3;
       persist(); paint();

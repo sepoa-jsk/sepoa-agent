@@ -203,7 +203,7 @@ public class QuoteController {
         }
         Map<String, Object> b = new LinkedHashMap<>();
         for (String k : List.of("quote_type", "deployment", "template_code", "solution", "brand",
-                "customer_name", "customer_contact", "memo", "conditions")) b.put(k, q.get(k));
+                "customer_name", "customer_contact", "memo", "conditions", "pay_plan")) b.put(k, q.get(k));
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         b.put("quote_date", today.toString());
         b.put("valid_until", today.plusDays(30).toString());

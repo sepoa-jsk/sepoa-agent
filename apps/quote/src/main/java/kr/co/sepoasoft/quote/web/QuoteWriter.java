@@ -106,6 +106,8 @@ public class QuoteWriter {
         cols.put("monthly_total", calc.get("monthly_total"));
         cols.put("memo", header.get("memo"));
         cols.put("conditions", conditions(header));
+        // 견적별 결제 방안(V6) — {enabled, ratio, rows}. 보내지 않으면 NULL = 템플릿 설정 · 기본 문구
+        cols.put("pay_plan", header.get("pay_plan") instanceof Map<?, ?> pp ? db.stringify(pp) : null);
 
         long id;
         if (quoteId != null) {

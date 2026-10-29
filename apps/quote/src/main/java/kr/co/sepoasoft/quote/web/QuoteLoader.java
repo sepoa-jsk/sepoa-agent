@@ -42,6 +42,7 @@ public class QuoteLoader {
         if (quote == null) return null;
         Object qid = quote.get("id");
         quote.put("conditions", db.safeJson(quote.get("conditions")));
+        quote.put("pay_plan", db.safeJson(quote.get("pay_plan"))); // 견적별 결제 방안(V6) — 없으면 null
         List<Map<String, Object>> sections = db.query(
                 "SELECT * FROM sq_quote_sections WHERE quote_id = ? ORDER BY sort, id", qid);
         if (!sections.isEmpty()) {

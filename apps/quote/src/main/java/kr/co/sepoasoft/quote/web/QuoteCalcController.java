@@ -229,7 +229,8 @@ public class QuoteCalcController {
             quote.put(k, result.get(k));
         }
         quote.put("conditions", header.get("conditions") instanceof List<?> c ? c : null);
-        String page = html.render(quote, html.settings(), html.masters(quote, header.get("condition_set"), header.containsKey("pay_plan") ? header.get("pay_plan") : null), false);
+        String page = html.render(quote, html.settings(), html.masters(quote, header.get("condition_set"),
+                header.containsKey("pay_plan") && !(header.get("pay_plan") instanceof Map<?, ?>) ? header.get("pay_plan") : null), false);
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("html", page);
         res.put("calc", result);

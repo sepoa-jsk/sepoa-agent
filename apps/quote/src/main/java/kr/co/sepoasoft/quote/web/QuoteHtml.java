@@ -188,8 +188,8 @@ public class QuoteHtml {
             body.append(blockTable(b, blockDefs, mark, extra)).append('\n');
         }
 
-        // 클라우드서비스 결제 방안 — 템플릿에서 '결제 방안 포함' 을 켠 견적만 (실측 SaaS · Private Cloud 하단)
-        String payPlan = Rows.truthy(masters.get("payPlan")) ? payPlan(solName, onetimeTotal, monthlyTotal) : "";
+        // 클라우드서비스 결제 방안 — 견적에서 넣기로 했거나(견적별 설정) 템플릿에서 켠 견적 (실측 SaaS · Private Cloud 하단)
+        String payPlan = payPlanOn(quote, masters) ? payPlan(solName, payPlanRows(quote, onetimeTotal, monthlyTotal)) : "";
 
         StringBuilder condHtml = new StringBuilder();
         for (String c : conds) condHtml.append("<tr><td>-. ").append(esc(c)).append("</td></tr>");
@@ -340,21 +340,62 @@ public class QuoteHtml {
                 + body + "</table>";
     }
 
-    /** 클라우드서비스 결제 방안 — 셋업비용은 계약체결 후 50% / 구축완료 후 50%, 월 사용료는 매월 말 (실측 SaaS 문구) */
-    private static String payPlan(String solName, double onetime, double monthly) {
-        long half = Math.round(onetime / 2);
-        String setup = onetime == 0
-                ? "<tr><td class=\"c\">서비스<br>셋업비용</td><td>1. 무상제공</td><td>1. 셋업비용 : 무상제공</td><td>-</td></tr>"
-                : "<tr><td class=\"c\">서비스<br>셋업비용</td><td>1. 일시불<br>&nbsp;&nbsp;-. 계약체결 후 50%<br>&nbsp;&nbsp;-. 구축완료 후 50%</td>"
-                        + "<td>1. 일시불 비용 : ₩" + won(onetime) + "원<br>&nbsp;&nbsp;&nbsp;계약체결 후 50% : ₩" + won(half) + "원"
-                        + "<br>&nbsp;&nbsp;&nbsp;구축완료 후 50% : ₩" + won(onetime - half) + "원</td>"
-                        + "<td>-. 서비스계약 체결 후 7일 이내 세금계산서 발행<br>-. 검수완료 후 7일 이내 세금계산서 발행"
-                        + "<br>-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%</td></tr>";
+    /** 결제 방안을 넣는가 — 견적별 설정(pay_plan.enabled)이 있으면 그것, 없으면 템플릿(has_pay_plan) */
+    static boolean payPlanOn(Map<String, Object> quote, Map<String, Object> masters) {
+        if (quote.get("pay_plan") instanceof Map<?, ?> pp && pp.containsKey("enabled")) return Rows.truthy(pp.get("enabled"));
+        return Rows.truthy(masters.get("payPlan"));
+    }
+
+    /**
+     * 결제 방안 표의 행 — [구분, 지급시점, 비용, 내역]. 견적에서 직접 고친 행(pay_plan.rows)이 있으면 그대로,
+     * 없으면 금액과 계약체결 비율(pay_plan.ratio, 기본 50%)로 기본 문구를 만든다(실측 창성 SaaS 문구).
+     * 견적 작성 화면(step3 payPlanDefault)도 같은 문구를 만든다 — 바꾸면 둘 다 바꾼다.
+     */
+    static List<String[]> payPlanRows(Map<String, Object> quote, double onetime, double monthly) {
+        Map<?, ?> pp = quote.get("pay_plan") instanceof Map<?, ?> m ? m : Map.of();
+        List<String[]> out = new ArrayList<>();
+        if (pp.get("rows") instanceof List<?> rows && !rows.isEmpty()) {
+            for (Object r : rows) {
+                List<?> c = r instanceof List<?> l ? l : List.of();
+                String[] v = new String[4];
+                for (int i = 0; i < 4; i++) v[i] = i < c.size() && c.get(i) != null ? String.valueOf(c.get(i)) : "";
+                out.add(v);
+            }
+            return out;
+        }
+        double ratio = pp.get("ratio") == null ? 50 : num(pp.get("ratio"));
+        if (ratio <= 0 || ratio > 100) ratio = 50;
+        String r1 = numText(ratio), r2 = numText(100 - ratio);
+        long first = Math.round(onetime * ratio / 100);
+        if (onetime == 0) {
+            out.add(new String[] { "서비스\n셋업비용", "1. 무상제공", "1. 셋업비용 : 무상제공", "-" });
+        } else if (ratio >= 100) {
+            out.add(new String[] { "서비스\n셋업비용", "1. 일시불\n  -. 계약체결 후 100%", "1. 일시불 비용 : ₩" + won(onetime) + "원",
+                    "-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 100%" });
+        } else {
+            out.add(new String[] { "서비스\n셋업비용", "1. 일시불\n  -. 계약체결 후 " + r1 + "%\n  -. 구축완료 후 " + r2 + "%",
+                    "1. 일시불 비용 : ₩" + won(onetime) + "원\n   계약체결 후 " + r1 + "% : ₩" + won(first) + "원\n   구축완료 후 " + r2 + "% : ₩" + won(onetime - first) + "원",
+                    "-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 " + r1 + "% / 구축완료 후 " + r2 + "%" });
+        }
+        out.add(new String[] { "서비스\n월 사용료", "1. 매월 말", "1. 서비스 사용료 : ₩" + won(monthly) + "원/매월", "-. 서비스 착수 후 월별로 세금계산서 발행" });
+        return out;
+    }
+
+    /** 클라우드서비스 결제 방안 표 */
+    private static String payPlan(String solName, List<String[]> rows) {
+        StringBuilder body = new StringBuilder();
+        for (String[] r : rows) {
+            body.append("<tr><td class=\"c\">").append(br(r[0])).append("</td><td>").append(br(r[1])).append("</td><td>").append(br(r[2]))
+                    .append("</td><td>").append(br(r[3])).append("</td></tr>");
+        }
         return "<div class=\"sec\">▣ " + esc(solName.isEmpty() ? "" : solName + " ") + "클라우드서비스 결제 방안</div>"
                 + "<table class=\"grid\"><colgroup><col style=\"width:13%\"><col style=\"width:20%\"><col style=\"width:31%\"><col style=\"width:36%\"></colgroup>"
-                + "<tr><th>구분</th><th>지급시점</th><th>비용</th><th>내역</th></tr>" + setup
-                + "<tr><td class=\"c\">서비스<br>월 사용료</td><td>1. 매월 말</td><td>1. 서비스 사용료 : ₩" + won(monthly) + "원/매월</td>"
-                + "<td>-. 서비스 착수 후 월별로 세금계산서 발행</td></tr></table>\n";
+                + "<tr><th>구분</th><th>지급시점</th><th>비용</th><th>내역</th></tr>" + body + "</table>\n";
+    }
+
+    /** 글자를 그대로 싣되 줄바꿈 · 앞 공백을 살린다 */
+    private static String br(String s) {
+        return esc(s).replace("\n", "<br>").replace("  ", "&nbsp;&nbsp;");
     }
 
     /** 부속 페이지 — 인력투입계획표 · 노임단가표(협회 양식) */

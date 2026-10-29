@@ -174,8 +174,8 @@ public class QuoteExcel {
             r += 1;
         }
 
-        // 결제 방안
-        if (QuoteCalc.truthy(masters.get("payPlan"))) {
+        // 결제 방안 — 견적서 HTML 과 같은 규칙(QuoteHtml.payPlanOn · payPlanRows)
+        if (QuoteHtml.payPlanOn(q, masters)) {
             String sol = str(masters.get("solutionName"));
             text(ws, r, 1, "▣ " + (sol.isEmpty() ? "" : sol + " ") + "클라우드서비스 결제 방안", style("sec"));
             r += 1;
@@ -183,17 +183,11 @@ public class QuoteExcel {
             merge(ws, r, r, 3, 4);
             merge(ws, r, r, 5, 7);
             r += 1;
-            long half = Math.round(onetimeTotal / 2);
-            String[][] rows = onetimeTotal == 0
-                    ? new String[][] { { "서비스\n셋업비용", "1. 무상제공", "1. 셋업비용 : 무상제공", "-" } }
-                    : new String[][] { { "서비스\n셋업비용", "1. 일시불\n  -. 계약체결 후 50%\n  -. 구축완료 후 50%",
-                            "1. 일시불 비용 : ₩" + won(onetimeTotal) + "원\n   계약체결 후 50% : ₩" + won(half) + "원\n   구축완료 후 50% : ₩" + won(onetimeTotal - half) + "원",
-                            "-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%" } };
-            List<String[]> all = new ArrayList<>(List.of(rows));
-            all.add(new String[] { "서비스\n월 사용료", "1. 매월 말", "1. 서비스 사용료 : ₩" + won(monthlyTotal) + "원/매월", "-. 서비스 착수 후 월별로 세금계산서 발행" });
-            for (String[] v : all) {
+            for (String[] v : QuoteHtml.payPlanRows(q, onetimeTotal, monthlyTotal)) {
                 Row row = ws.createRow(r);
-                row.setHeightInPoints(v[3].contains("\n") ? 48 : 30);
+                int lines = 1;
+                for (String x : v) lines = Math.max(lines, x.split("\n").length);
+                row.setHeightInPoints(Math.max(20, 15 * lines));
                 cell(ws, r, 1, v[0], style("cwrap"));
                 cell(ws, r, 2, v[1], style("wrap"));
                 cell(ws, r, 3, v[2], style("wrap"));

@@ -137,6 +137,8 @@ export function previewHeader(state) {
     ].filter(Boolean).join('\n'),
     conditions: (state.conds || []).filter((c) => c.text && c.text.trim())
       .map((c) => ({ text: c.text, auto: false, edited: true })),
+    // 견적별 결제 방안(V6) — 없으면 보내지 않는다(템플릿 설정 · 기본 문구)
+    pay_plan: state.pay_plan || undefined,
   };
 }
 
@@ -528,8 +530,7 @@ export async function renderStep3(root, state, wiz) {
           h('b', {}, '옵션 라인 자동 생성은 아직 없습니다'),
           '서버이중화·계열사 추가 등은 규칙 마스터(sq_mst_rule)가 들어오는 작업 13 이후 연동됩니다. 지금은 항목을 직접 추가하세요.')))));
     // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
-    const pay = payPlanCard();
-    if (pay) left.appendChild(pay);
+    left.appendChild(payPlanCard());
     left.appendChild(condCard());
     left.appendChild(summaryCard(c));
     wiz.patch({});
@@ -565,39 +566,130 @@ export async function renderStep3(root, state, wiz) {
       h('div', { class: 'card-b' }, list, add));
   }
 
-  // 결제 방안 — 템플릿에서 '결제 방안 포함' 을 켠 견적(SaaS · Private Cloud)은 견적서에 이 표가 인쇄된다.
-  // 문구는 고정이고 금액만 견적을 따른다(최종 일시불을 계약체결 후 50% / 구축완료 후 50%, 월 사용료는 매월 말).
-  // 켜고 끄는 곳은 견적 템플릿 화면이다. 여기서는 무엇이 인쇄되는지 보여 준다.
+  // ── 결제 방안 ───────────────────────────────────────────────
+  // 견적마다 고친다(state.pay_plan = { enabled, ratio, rows }).
+  //   enabled — 견적서에 넣을지. 없으면 템플릿 설정(has_pay_plan)을 따른다 — 직접 작성 견적도 켤 수 있다
+  //   ratio   — 셋업비용 계약체결 시 비율(%), 나머지는 구축완료 후. 바꾸면 기본 문구를 다시 만든다
+  //   rows    — 직접 고친 표. null 이면 금액 · 비율로 기본 문구(서버 QuoteHtml.payPlanRows 와 같은 문구)
+  const PAY_COLS = [['선택', 44], ['구분', 150], ['지급시점', 220], ['비용', 360], ['내역', 420]];
+  const payState = () => wiz.get().pay_plan || {};
+  const payOn = () => {
+    const pp = payState();
+    return 'enabled' in pp ? !!pp.enabled : !!(wiz.get().applied && wiz.get().applied.has_pay_plan);
+  };
+  const setPay = (part) => { wiz.patch({ pay_plan: { ...payState(), ...part } }); };
+
+  function payPlanDefault(one, mon, ratio) {
+    const r = ratio > 0 && ratio <= 100 ? Number(ratio) : 50;
+    const first = Math.round(one * r / 100);
+    const rows = [];
+    if (one === 0) rows.push(['서비스\n셋업비용', '1. 무상제공', '1. 셋업비용 : 무상제공', '-']);
+    else if (r >= 100) {
+      rows.push(['서비스\n셋업비용', '1. 일시불\n  -. 계약체결 후 100%', `1. 일시불 비용 : ₩${won(one)}원`,
+        '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 100%']);
+    } else {
+      rows.push(['서비스\n셋업비용', `1. 일시불\n  -. 계약체결 후 ${r}%\n  -. 구축완료 후 ${100 - r}%`,
+        `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 ${r}% : ₩${won(first)}원\n   구축완료 후 ${100 - r}% : ₩${won(one - first)}원`,
+        `-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 ${r}% / 구축완료 후 ${100 - r}%`]);
+    }
+    rows.push(['서비스\n월 사용료', '1. 매월 말', `1. 서비스 사용료 : ₩${won(mon)}원/매월`, '-. 서비스 착수 후 월별로 세금계산서 발행']);
+    return rows;
+  }
+  const shownPayRows = (c) => {
+    const pp = payState();
+    return Array.isArray(pp.rows) && pp.rows.length ? pp.rows : payPlanDefault(c.final, c.monthlyFinal, pp.ratio ?? 50);
+  };
+
   function payPlanCard() {
-    if (!wiz.get().applied || !wiz.get().applied.has_pay_plan) return null;
+    const on = payOn();
+    const pp = payState();
+    const picked = new Set();
+    const onBox = h('input', { type: 'checkbox', checked: on, onchange: (e) => { setPay({ enabled: e.target.checked }); repaintLeft(); } });
+    const gbtn = (label, onclick) => h('button', { class: 'ss-btn ss-btn--gridrow', onclick }, label);
+    // 처음 고치는 순간 지금 보이는 기본 문구를 견적에 옮겨 담는다 — 그 뒤로는 금액이 바뀌어도 그대로 둔다
+    const materialize = () => {
+      const c = recalcBlocks(wiz.get());
+      if (!(Array.isArray(payState().rows) && payState().rows.length)) setPay({ rows: shownPayRows(c).map((r) => [...r]) });
+      return payState().rows;
+    };
+    const ratio = h('input', { class: 'ss-input', type: 'number', min: 1, max: 100, step: 1, style: 'width:70px;text-align:right', value: pp.ratio ?? 50,
+      onchange: (e) => {
+        const v = Number(e.target.value);
+        if (!(v > 0 && v <= 100)) { e.target.value = payState().ratio ?? 50; return toast('비율은 1~100 사이로 넣으세요.', 'err'); }
+        setPay({ ratio: v, rows: null }); // 비율로 기본 문구를 다시 만든다
+        repaintLeft();
+        toast(`계약체결 ${v}% / 구축완료 ${100 - v}% 로 다시 만들었습니다.`, 'ok');
+      } });
+    const bar = h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap' },
+      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안'),
+      h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:8px' }, onBox, '견적서에 넣기'),
+      on ? h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '계약체결 시', ratio, '%') : null,
+      h('div', { class: 'ss-detailbar__spacer' }),
+      ...(on ? [
+        gbtn('행추가', () => { const rows = materialize(); rows.push(['', '', '', '']); setPay({ rows }); repaintLeft(); }),
+        gbtn('행삭제', () => {
+          if (!picked.size) return toast('삭제할 행을 선택하세요.', 'err');
+          const rows = materialize().filter((_, i) => !picked.has(i));
+          setPay({ rows }); repaintLeft();
+        }),
+        gbtn('기본값으로', () => { setPay({ rows: null }); repaintLeft(); toast('금액과 비율로 기본 문구를 다시 만들었습니다.', 'ok'); }),
+      ] : []));
+    const card = h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' }, bar);
+    if (!on) {
+      card.appendChild(h('div', { class: 'ss-detailbar__note', style: 'margin-top:6px' },
+        '견적서에 클라우드서비스 결제 방안 표를 넣지 않습니다. 넣으려면 [견적서에 넣기] 를 켜세요.'));
+      els.payPlan = null;
+      return card;
+    }
     const tbody = h('tbody');
-    els.payPlan = tbody;
+    els.payPlan = { tbody, picked };
     paintPayPlan(recalcBlocks(wiz.get()));
-    // 블록 그리드와 같은 모양 — ▣ 제목 줄 + 편집 그리드 틀. 금액은 견적 합계를 따르고 문구는 고정(견적 템플릿에서 켜고 끈다)
-    const cols = [['구분', 150], ['지급시점', 220], ['비용', 360], ['내역', 420]];
-    return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
-      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안'),
-        h('span', { class: 'ss-detailbar__note' }, '템플릿 설정에 따라 견적서에 인쇄됩니다 · 금액은 합계를 따라 바뀝니다 · 켜고 끄기는 견적 템플릿 화면에서')),
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px;min-width:100%` },
-          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
-          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
-          tbody)));
+    card.appendChild(h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
+      h('table', { class: 'ss-grid ss-grid--sized', style: `width:${PAY_COLS.reduce((x, [, w]) => x + w, 0)}px;min-width:100%` },
+        h('colgroup', {}, ...PAY_COLS.map(([, w]) => h('col', { style: `width:${w}px` }))),
+        h('thead', {}, h('tr', {}, ...PAY_COLS.map(([t]) => h('th', {}, t)))),
+        tbody)));
+    card.appendChild(els.payNote = h('div', { class: 'ss-detailbar__note', style: 'margin-top:6px' }));
+    paintPayNote();
+    return card;
+  }
+
+  function paintPayNote() {
+    if (!els.payNote) return;
+    els.payNote.textContent = Array.isArray(payState().rows) && payState().rows.length
+      ? '직접 고친 내용입니다 — 금액이 바뀌어도 그대로 둡니다. [기본값으로] 를 누르면 지금 금액 · 비율로 다시 만듭니다.'
+      : '기본 문구입니다 — 금액 · 비율을 따라 바뀝니다. 칸을 고치면 그 뒤로는 고친 내용을 씁니다.';
   }
 
   function paintPayPlan(c) {
-    const tbody = els.payPlan;
-    if (!tbody) return;
-    const one = c.final, mon = c.monthlyFinal, half = Math.round(one / 2);
-    const td = (t, st = '') => h('td', { class: 'ss-cell--left', style: 'white-space:pre-line;vertical-align:top;line-height:1.6;padding:6px 10px;' + st }, t);
-    tbody.replaceChildren(
-      h('tr', {}, td('서비스\n셋업비용', 'text-align:center;font-weight:600'),
-        td(one === 0 ? '1. 무상제공' : '1. 일시불\n  -. 계약체결 후 50%\n  -. 구축완료 후 50%'),
-        td(one === 0 ? '1. 셋업비용 : 무상제공' : `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 50% : ₩${won(half)}원\n   구축완료 후 50% : ₩${won(one - half)}원`),
-        td(one === 0 ? '-' : '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%')),
-      h('tr', {}, td('서비스\n월 사용료', 'text-align:center;font-weight:600'), td('1. 매월 말'),
-        td(`1. 서비스 사용료 : ₩${won(mon)}원/매월`), td('-. 서비스 착수 후 월별로 세금계산서 발행')));
+    const ref = els.payPlan;
+    if (!ref) return;
+    const custom = Array.isArray(payState().rows) && payState().rows.length;
+    // 직접 고친 표는 금액이 바뀌어도 다시 그리지 않는다(입력 중인 칸이 날아가지 않게)
+    if (custom && ref.tbody.childElementCount) return;
+    const rows = shownPayRows(c);
+    ref.tbody.replaceChildren(...rows.map((r, i) => h('tr', {},
+      h('td', {}, h('input', { type: 'checkbox', 'aria-label': '선택', checked: ref.picked.has(i),
+        onchange: (e) => { if (e.target.checked) ref.picked.add(i); else ref.picked.delete(i); } })),
+      ...r.map((v, j) => {
+        const ta = h('textarea', { class: 'ss-cellinput', rows: lines(v),
+          style: 'height:auto;resize:vertical;line-height:1.5;padding:4px 6px;text-align:' + (j === 0 ? 'center' : 'left'),
+          oninput: (e) => {
+            const rowsNow = materialize2();
+            rowsNow[i][j] = e.target.value;
+            e.target.rows = lines(e.target.value);
+            setPay({ rows: rowsNow });
+            paintPayNote();
+          } });
+        ta.value = v;
+        return h('td', { class: 'ss-cell--input' }, ta);
+      }))));
+  }
+  // 칸 입력용 — 기본 문구를 견적에 옮겨 담고 그 배열을 돌려준다
+  function materialize2() {
+    const pp = payState();
+    if (Array.isArray(pp.rows) && pp.rows.length) return pp.rows.map((r) => [...r]);
+    return shownPayRows(recalcBlocks(wiz.get())).map((r) => [...r]);
   }
 
   repaintLeft();

@@ -44,7 +44,7 @@ function comboCards(combos, state, root, wiz) {
       if (wiz.readOnly) return; // 상세(읽기 전용)
       // 구축형태를 바꾸면 템플릿 선택이 무효가 되므로 블록도 함께 비운다.
       wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null, manual: false },
-        blocks: [], applied: null, conds: [] });
+        blocks: [], applied: null, conds: [], pay_plan: null });
       renderStep2(root, wiz.get(), wiz);
     });
     return card;
@@ -68,7 +68,7 @@ function tplCards(list, state, root, wiz) {
       // (구 화면 quote-block.js 의 "템플릿 다시 적용" 버튼에 해당한다)
       const changed = state.type.template_code && state.type.template_code !== tpl.code;
       wiz.patch({ type: { template_code: tpl.code, manual: false },
-        ...(changed ? { blocks: [], applied: null, conds: [] } : {}) });
+        ...(changed ? { blocks: [], applied: null, conds: [], pay_plan: null } : {}) });
       renderStep2(root, wiz.get(), wiz);
     });
     return card;
