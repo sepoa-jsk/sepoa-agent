@@ -1,196 +1,253 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, won, toast, loading, clear, openModal, confirmModal } from '../ui.js';
+import { h, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
 
-// 가격정책 = 모듈 단가(sq_modules.base_price) + 직무 단가(sq_labor_roles.base_price)
-// 를 직접 편집한다(방향 A). 네고율/variants 는 마스터로 이동했으므로 여기 없다.
-// std_mm(표준투입 M/M)은 화면에 노출하지 않되 DB 값은 보존한다(견적 계산용).
+// 가격정책 = 모듈 단가(sq_modules.base_price) + 직무 단가(sq_labor_roles.base_price).
+// L1 인라인 편집형 (2026-10-29 화면 재작성) — 화면 내 탭 상자 + 머리(솔루션) + 행추가/행삭제/저장 + 편집 그리드.
+// 등록·수정·삭제는 팝업 없이 그리드에서. 동작은 마스터 관리와 같다(선택 60px · 칸 너비 조절 · 머리 정렬 · 콤마 입력).
+// std_mm(표준투입 M/M)·비고는 보내지 않으므로 기존 값이 그대로 남는다. 네고율은 마스터에서 관리한다.
 const TABS = [
   {
-    key: 'modules', tabLabel: '솔루션 모듈 단가', type: 'modules', scoped: true,
-    unitLabel: '모듈', priceLabel: '기준단가', addLabel: '+ 모듈 추가',
-    nameLabel: '모듈명', priceFieldLabel: '기준단가 (원)',
+    key: 'modules', label: '솔루션 모듈 단가', type: 'modules', scoped: true,
+    fields: [
+      { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, width: 130 },
+      { key: 'name', label: '모듈명', type: 'text', required: true },
+      { key: 'base_price', label: '기준단가 (원)', type: 'money', width: 150 },
+      { key: 'required', label: '필수', type: 'checkbox', width: 60 },
+      { key: 'sort', label: '정렬', type: 'number', width: 70 },
+    ],
   },
   {
-    key: 'labor', tabLabel: '직무별 단가', type: 'labor_roles', scoped: false,
-    unitLabel: '직무', priceLabel: '표준단가 (1 M/M)', addLabel: '+ 직무 추가',
-    nameLabel: '직무명', priceFieldLabel: '표준단가 1 M/M (원)',
-    notice: '직무 단가는 전 솔루션 공통, 1 M/M 기준입니다.',
-    injectSolution: 'PROCURE', // 신규 저장 시 solution(NOT NULL) 자동 세팅
+    key: 'labor', label: '직무별 단가', type: 'labor_roles', scoped: false,
+    note: '직무 단가는 전 솔루션 공통, 1 M/M 기준입니다.',
+    injectOnCreate: { solution: 'PROCURE' }, // solution 은 NOT NULL — 신규만 넣는다
+    fields: [
+      { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, width: 130 },
+      { key: 'name', label: '직무명', type: 'text', required: true },
+      { key: 'base_price', label: '표준단가 1 M/M (원)', type: 'money', width: 170 },
+      { key: 'required', label: '필수', type: 'checkbox', width: 60 },
+      { key: 'sort', label: '정렬', type: 'number', width: 70 },
+    ],
   },
 ];
-
-const S = {
-  tabActive: 'padding:7px 16px;border-radius:999px;border:1px solid #0747A6;background:#0747A6;color:#fff;font-weight:600;font-size:13px;cursor:pointer',
-  tabIdle: 'padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--text-2);font-weight:600;font-size:13px;cursor:pointer',
-  ctxBar: 'display:flex;align-items:center;gap:10px;padding:12px 14px;margin-bottom:14px;background:var(--white);border:0.5px solid var(--line);border-radius:var(--radius)',
-  linkBtn: 'background:none;border:none;color:var(--primary);cursor:pointer;font-size:12.5px;font-weight:600;padding:2px 6px',
-  thead: 'background:var(--bg)',
-  check: 'color:#0747A6;font-weight:700',
-  uncheck: 'color:#ccc',
-};
 
 export async function renderPricing(root) {
   const master = await store.getMaster();
   const solutions = master.solutions || [];
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
 
-  const state = { tab: 'modules', solution: defaultSolution };
+  const state = { tab: TABS[0].key, solution: defaultSolution };
+  let rows = [];     // [{ orig, form, isNew, checked, seq }]
+  let deleted = [];  // 행삭제한 기존 행 — 저장할 때 사용 중지(active=0)
+  let sort = { key: null, dir: null };
+  let seq = 0;
+  let tbody, headCells = [];
+
   const current = () => TABS.find((t) => t.key === state.tab);
-  const checkCell = (v) => (v ? h('span', { style: S.check }, '✓') : h('span', { style: S.uncheck }, '–'));
+  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r));
 
-  // ── 헤더 ──
-  root.appendChild(h('div', { class: 'page-head' },
-    h('div', {},
-      h('div', { class: 'page-title' }, '가격정책 관리'),
-      h('div', { class: 'page-sub' }, '모듈·직무 단가를 관리합니다. 네고율은 마스터에서 관리합니다.')
-    )
-  ));
+  // ── 탭 상자: 탭줄 + 내용 ──
+  const tabs = h('div', { class: 'ss-tabs' });
+  const pane = h('div', { class: 'ss-tabbox__pane' });
+  root.appendChild(h('div', { class: 'ss-tabbox' }, tabs, pane));
 
-  // ── 탭 바 ──
-  const tabbar = h('div', { style: 'display:flex;align-items:center;gap:8px;margin:4px 0 14px;flex-wrap:wrap' });
-  TABS.forEach((t) => tabbar.appendChild(h('button', {
-    dataset: { tab: t.key },
-    style: t.key === state.tab ? S.tabActive : S.tabIdle,
-    onclick: () => { state.tab = t.key; refresh(); },
-  }, t.tabLabel)));
-  root.appendChild(tabbar);
-
-  // ── 컨텍스트(솔루션 셀렉트) / 안내문 ──
-  const ctxWrap = h('div', {});
-  root.appendChild(ctxWrap);
-
-  // ── 테이블 + 하단 추가 버튼 ──
-  const thead = h('thead');
-  const tbody = h('tbody');
-  root.appendChild(h('div', { class: 'panel' }, h('div', { class: 'table-wrap' },
-    h('table', { class: 'grid master-grid' }, thead, tbody))));
-  const addBtn = h('button', { class: 'add-section', style: 'margin-top:12px', onclick: () => editItem(null) }, '+ 추가');
-  root.appendChild(addBtn);
-
-  function syncTabs() {
-    tabbar.querySelectorAll('button').forEach((b) => {
-      b.setAttribute('style', b.dataset.tab === state.tab ? S.tabActive : S.tabIdle);
-    });
-  }
-
-  function buildContext() {
-    const t = current();
-    clear(ctxWrap);
-    if (t.scoped) {
-      const sel = h('select', { class: 'select', onchange: () => { state.solution = sel.value; load(); } },
-        ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)));
-      ctxWrap.appendChild(h('div', { style: S.ctxBar },
-        h('span', { style: 'font-size:12.5px;color:var(--text-2);font-weight:700' }, '솔루션'), sel));
-    } else if (t.notice) {
-      ctxWrap.appendChild(h('div', { class: 'page-sub', style: 'margin:2px 0 12px' }, t.notice));
-    }
-  }
-
-  function buildHead() {
-    const t = current();
-    clear(thead).appendChild(h('tr', { style: S.thead },
-      h('th', {}, t.unitLabel),
-      h('th', { class: 'num' }, t.priceLabel),
-      h('th', { class: 'center' }, '필수'),
-      h('th', { class: 'center' }, '사용'),
-      h('th', { style: 'text-align:right' }, '관리')
-    ));
+  function paintTabs() {
+    clear(tabs);
+    TABS.forEach((t) => tabs.appendChild(h('div', {
+      class: 'ss-tabs__tab' + (t.key === state.tab ? ' ss-tabs__tab--active' : ''),
+      onclick: () => {
+        if (t.key === state.tab) return;
+        if (isDirty()) return toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
+        state.tab = t.key;
+        refresh();
+      },
+    }, t.label)));
   }
 
   function refresh() {
-    syncTabs();
-    buildContext();
-    buildHead();
-    addBtn.textContent = current().addLabel;
+    rows = []; deleted = []; sort = { key: null, dir: null };
+    paintTabs();
+    clear(pane);
+    const t = current();
+
+    // 머리: 솔루션 선택 상자(라벨 글자 없이) + 행추가 · 행삭제 · 저장
+    const fields = h('div', { class: 'ss-edithead__fields' });
+    if (t.scoped) {
+      fields.appendChild(h('div', { class: 'ss-field' },
+        h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => {
+          if (isDirty()) { toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err'); e.target.value = state.solution; return; }
+          state.solution = e.target.value; load();
+        } }, ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
+    }
+    pane.appendChild(h('div', { class: 'ss-edithead', style: 'margin-top:16px' }, fields,
+      h('div', { class: 'ss-actions' },
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
+        h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
+    if (t.note) {
+      pane.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
+        h('span', { class: 'ss-detailbar__note' }, t.note)));
+    }
+
+    // 첫 칸 '선택' 60px 고정, 남는 폭은 이름 칸이 받는다
+    const cols = [h('col', { style: 'width:60px' }), ...t.fields.map((f) => h('col', { style: f.width ? `width:${f.width}px` : null }))];
+    tbody = h('tbody');
+    const table = h('table', { class: 'ss-grid', style: `min-width:${60 + t.fields.reduce((s, f) => s + (f.width || 240), 0)}px` },
+      h('colgroup', {}, ...cols),
+      h('thead', {}, h('tr', {},
+        h('th', { 'data-fixed': '' }, '선택'),
+        ...(headCells = t.fields.map((f) => h('th', {
+          class: 'is-sortable' + (f.required ? ' req' : ''), title: '눌러서 정렬', onclick: () => toggleSort(f),
+        }, f.label, h('span', { class: 'ss-sortmark' })))))),
+      tbody);
+    pane.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill', style: t.note ? 'margin-top:8px' : 'margin-top:12px' }, table));
+    resizableColumns(table, `quote2:pricing-cols:${t.key}`);
     load();
   }
 
+  const emptyRow = (text) => h('tr', {}, h('td', { colspan: current().fields.length + 1, class: 'ss-cell--empty' }, text));
+  const toForm = (t, row) => Object.fromEntries(t.fields.map((f) => [f.key, f.type === 'checkbox' ? (row[f.key] ? 1 : 0) : row[f.key]]));
+
   async function load() {
     const t = current();
-    clear(tbody).appendChild(h('tr', {}, h('td', { colspan: 5 }, loading())));
+    rows = []; deleted = [];
+    clear(tbody).appendChild(emptyRow('불러오는 중...'));
     try {
-      const { rows } = await api.masterList(t.type, t.scoped ? state.solution : undefined);
-      clear(tbody);
-      if (!rows || rows.length === 0) {
-        tbody.appendChild(h('tr', {}, h('td', { colspan: 5 }, h('div', { class: 'empty' }, '데이터가 없습니다.'))));
-        return;
-      }
-      for (const row of rows) {
-        tbody.appendChild(h('tr', { style: row.active ? null : 'opacity:.5' },
-          h('td', {}, h('strong', {}, row.name)),
-          h('td', { class: 'num' }, won(row.base_price)),
-          h('td', { class: 'center' }, checkCell(row.required)),
-          h('td', { class: 'center' }, checkCell(row.active)),
-          h('td', { style: 'text-align:right' },
-            h('button', { style: S.linkBtn, onclick: () => editItem(row) }, '수정'))
-        ));
-      }
+      const { rows: list } = await api.masterList(t.type, t.scoped ? state.solution : undefined);
+      // 사용 중지한 행은 보이지 않는다 (마스터 관리와 같은 규칙)
+      rows = (list || []).filter((r) => r.active).map((r) => ({ orig: r, form: toForm(t, r), isNew: false, checked: false, seq: seq++ }));
+      applySort();
+      paintRows();
     } catch (err) {
-      clear(tbody).appendChild(h('tr', {}, h('td', { colspan: 5 }, h('div', { class: 'empty' }, err.message))));
+      clear(tbody).appendChild(emptyRow(err.message));
     }
   }
 
-  function fld(label, input, full) {
-    return h('div', { class: full ? 'field full' : 'field' }, h('label', {}, label), input);
+  function addRow() {
+    const t = current();
+    const form = Object.fromEntries(t.fields.map((f) => [f.key,
+      f.type === 'checkbox' ? 0 : f.key === 'sort' ? rows.length + 1 : null]));
+    rows.push({ orig: null, form, isNew: true, checked: false, seq: seq++ });
+    paintRows();
+    tbody.lastElementChild?.querySelector('input:not([type=checkbox])')?.focus();
   }
 
-  function editItem(row) {
-    const t = current();
-    const isNew = !row;
-    const f = {
-      code: row?.code || '',
-      name: row?.name || '',
-      base_price: row?.base_price ?? 0,
-      required: row ? (row.required ? 1 : 0) : 0,
-      active: row ? (row.active ? 1 : 0) : 1,
-    };
+  function removeRows() {
+    const picked = rows.filter((r) => r.checked);
+    if (!picked.length) return toast('삭제할 행을 선택하세요.', 'err');
+    picked.forEach((r) => { if (!r.isNew) deleted.push(r.orig); });
+    rows = rows.filter((r) => !r.checked);
+    paintRows();
+  }
 
-    const codeInput = h('input', { class: 'input', value: f.code, oninput: (e) => { f.code = e.target.value; },
-      style: 'font-family:ui-monospace,SFMono-Regular,Consolas,monospace' });
-    const nameInput = h('input', { class: 'input', value: f.name, oninput: (e) => { f.name = e.target.value; } });
-    const priceInput = h('input', { class: 'input', type: 'number', step: 'any', value: f.base_price, oninput: (e) => { f.base_price = e.target.value; } });
-    const reqCheck = h('input', { type: 'checkbox', checked: !!f.required, onchange: (e) => { f.required = e.target.checked ? 1 : 0; } });
-    const actCheck = h('input', { type: 'checkbox', checked: !!f.active, onchange: (e) => { f.active = e.target.checked ? 1 : 0; } });
-    const checkRow = (cb, txt) => h('label', { style: 'display:flex;align-items:center;gap:8px;cursor:pointer' }, cb, h('span', {}, txt));
-
-    const grid = h('div', { class: 'form-grid' });
-    if (isNew) grid.appendChild(fld('코드', codeInput));   // 신규만 코드 입력(수정 시 코드 고정)
-    grid.appendChild(fld(t.nameLabel, nameInput, !isNew));
-    grid.appendChild(fld(t.priceFieldLabel, priceInput));
-    grid.appendChild(fld('필수', checkRow(reqCheck, '필수 항목')));
-    grid.appendChild(fld('사용', checkRow(actCheck, '사용 (체크 해제 시 중지)')));
-
-    const saveBtn = h('button', { class: 'btn btn-primary' }, isNew ? '추가' : '저장');
-    const modal = openModal({
-      title: `${t.unitLabel} 단가 ${isNew ? '추가' : '수정'}`,
-      body: h('div', {}, grid),
-      footer: [h('button', { class: 'btn', onclick: () => modal.close() }, '취소'), saveBtn],
+  // 머리 칸을 누를 때마다 오름 → 내림 → 원래 순서
+  function toggleSort(f) {
+    const next = sort.key !== f.key ? 'asc' : sort.dir === 'asc' ? 'desc' : null;
+    sort = { key: next ? f.key : null, dir: next };
+    headCells.forEach((th, i) => {
+      const on = current().fields[i].key === sort.key;
+      th.querySelector('.ss-sortmark').textContent = on ? (sort.dir === 'asc' ? '▲' : '▼') : '';
+      th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
     });
+    applySort();
+    paintRows();
+  }
 
-    saveBtn.onclick = async () => {
-      if (isNew && !f.code.trim()) return toast('코드를 입력하세요.', 'err');
-      if (!f.name.trim()) return toast('이름을 입력하세요.', 'err');
-      // std_mm 은 payload 에 넣지 않는다 → 수정 시 기존값 유지, 신규 시 DB 기본값(1.00).
-      const payload = {
-        name: f.name.trim(),
-        base_price: Number(f.base_price) || 0,
-        required: f.required ? 1 : 0,
-        active: f.active ? 1 : 0,
-      };
-      if (isNew) {
-        payload.code = f.code.trim();
-        payload.solution = t.scoped ? state.solution : (t.injectSolution || 'PROCURE');
-      }
-      saveBtn.disabled = true;
-      try {
-        if (isNew) await api.masterCreate(t.type, payload);
-        else await api.masterUpdate(t.type, row.id, payload);
-        toast('저장되었습니다.', 'ok');
-        modal.close();
-        load();
-      } catch (err) { toast(err.message, 'err'); saveBtn.disabled = false; }
-    };
+  function applySort() {
+    const f = sort.key && current().fields.find((x) => x.key === sort.key);
+    if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
+    const num = f.type !== 'text';
+    const val = (r) => { const v = r.form[f.key]; return v == null || v === '' ? null : num ? Number(v) : String(v); };
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x == null || y == null) return x == null && y == null ? a.seq - b.seq : x == null ? 1 : -1;
+      const c = num ? x - y : x.localeCompare(y, 'ko', { numeric: true });
+      return c ? c * dir : a.seq - b.seq;
+    });
+  }
+
+  function paintRows() {
+    const t = current();
+    clear(tbody);
+    if (!rows.length) { tbody.appendChild(emptyRow('데이터가 없습니다. 행추가로 등록하세요.')); return; }
+    rows.forEach((r) => {
+      const tr = h('tr', { class: r.isNew ? 'is-new' : null },
+        h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
+      t.fields.forEach((f) => tr.appendChild(cellEl(f, r.form)));
+      tbody.appendChild(tr);
+    });
+  }
+
+  function cellEl(f, form) {
+    if (f.type === 'checkbox') {
+      return h('td', {}, h('input', { type: 'checkbox', checked: !!form[f.key], 'aria-label': f.label,
+        onchange: (e) => { form[f.key] = e.target.checked ? 1 : 0; } }));
+    }
+    // 금액은 우측, 정렬 순번·코드는 가운데
+    const attrs = { class: 'ss-cellinput', 'aria-label': f.label,
+      style: f.key === 'sort' || f.mono ? 'text-align:center' : f.type === 'money' ? 'text-align:right' : null };
+    const inp = f.type === 'text'
+      ? h('input', { ...attrs, type: 'text', value: form[f.key] ?? '', oninput: (e) => { form[f.key] = e.target.value; } })
+      : numInput(form[f.key], (v) => { form[f.key] = v; }, attrs);
+    return h('td', { class: 'ss-cell--input' + (f.mono ? ' ss-cell--link' : '') }, inp);
+  }
+
+  // 화면에 있는 칸만 보낸다 — std_mm · 비고 등은 건드리지 않는다
+  function payloadOf(t, form, isNew) {
+    const payload = {};
+    let missing = null;
+    t.fields.forEach((f) => {
+      let v = form[f.key];
+      if (f.type === 'checkbox') v = v ? 1 : 0;
+      else if (f.type !== 'text') v = v === '' || v == null ? null : Number(v);
+      else v = v == null ? '' : String(v).trim();
+      if (f.required && (v === '' || v == null)) missing = missing || f.label;
+      payload[f.key] = v;
+    });
+    if (payload.base_price == null) payload.base_price = 0; // NOT NULL
+    if (isNew) {
+      payload.active = 1;
+      if (t.scoped) payload.solution = state.solution;
+      if (t.injectOnCreate) Object.assign(payload, t.injectOnCreate);
+    }
+    return { payload, missing };
+  }
+
+  function changed(r) {
+    if (r.isNew) return true;
+    const t = current();
+    return JSON.stringify(payloadOf(t, r.form, false).payload) !== JSON.stringify(payloadOf(t, toForm(t, r.orig), false).payload);
+  }
+
+  async function save() {
+    const t = current();
+    const creates = rows.filter((r) => r.isNew);
+    const updates = rows.filter((r) => !r.isNew && changed(r));
+    if (!creates.length && !updates.length && !deleted.length) return toast('변경된 내용이 없습니다.', 'ok');
+    for (const r of [...creates, ...updates]) {
+      const { missing } = payloadOf(t, r.form, r.isNew);
+      if (missing) return toast(`필수 항목을 확인하세요: ${missing}`, 'err');
+    }
+    const codes = rows.map((r) => String(r.form.code ?? '').trim()).filter(Boolean);
+    const dup = codes.find((v, i) => codes.indexOf(v) !== i);
+    if (dup) return toast(`코드가 겹칩니다: ${dup}`, 'err');
+    if (deleted.length && !(await confirmModal({
+      title: '사용 중지',
+      message: `행삭제한 ${deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`,
+      okLabel: '저장', danger: true,
+    }))) return;
+    let done = 0;
+    try {
+      for (const o of deleted) { await api.masterDelete(t.type, o.id); done++; }
+      for (const r of creates) { await api.masterCreate(t.type, payloadOf(t, r.form, true).payload); done++; }
+      for (const r of updates) { await api.masterUpdate(t.type, r.orig.id, payloadOf(t, r.form, false).payload); done++; }
+      toast(`저장되었습니다. (${done}건)`, 'ok');
+      store.master = null; // 견적 작성 화면이 새 단가를 다시 받게
+    } catch (err) {
+      toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
+    }
+    load();
   }
 
   refresh();
