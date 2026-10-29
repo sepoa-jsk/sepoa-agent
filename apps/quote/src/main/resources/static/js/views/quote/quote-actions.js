@@ -72,3 +72,55 @@ export async function downloadQuote(quote, kind, btn) {
     if (btn) { btn.disabled = false; btn.textContent = old; }
   }
 }
+
+// 메일 발송 창 — 받는 사람(견적의 이메일) · 참조 · 제목 · 본문을 채워 두고, 견적서 PDF(표지 포함)를 붙인다. Excel 은 고르면.
+//   보낸 사람은 시스템 주소(MAIL_FROM), 답장은 로그인한 담당자에게 간다(서버 Reply-To).
+//   시험 모드(MAIL_DRY_RUN)면 창 위에 알리고, 보내지 않고 결과만 보여 준다.
+//   q: { id, quote_no, customer_name, email, purpose } · onSent(result) — 실제 발송 후 상태(발송)를 화면에 반영할 때
+export async function mailQuote(q, onSent) {
+  let cfg = { dry_run: true, allowlist: [] };
+  try { cfg = await api.mailConfig(); } catch { /* 설정을 못 읽어도 창은 연다 — 보낼 때 서버가 다시 막는다 */ }
+  const me = (await import('../../app.js')).store.user || {};
+  const title = q.purpose || `${q.customer_name || ''} 견적`.trim();
+  const inp = (value, ph) => h('input', { class: 'ss-input', style: 'width:100%', value: value || '', placeholder: ph || '' });
+  const to = inp(q.email, '받는 사람 메일 (여러 명은 쉼표로)');
+  const cc = inp('', '참조 (여러 명은 쉼표로)');
+  const subject = inp(`[세포아소프트] ${title} 견적서 송부 (${q.quote_no})`);
+  const body = h('textarea', { class: 'ss-input', style: 'width:100%;height:170px;padding:8px 10px;line-height:1.6;resize:vertical' });
+  body.value = `안녕하십니까, 세포아소프트 ${me.name || ''}입니다.\n\n요청하신 ${title} 견적서를 첨부와 같이 보내드립니다.\n검토 후 문의 사항이 있으시면 회신 부탁드립니다.\n\n감사합니다.\n\n세포아소프트 ${me.name || ''}${me.email ? '\n' + me.email : ''}`;
+  const pdf = h('input', { type: 'checkbox', checked: true });
+  const xls = h('input', { type: 'checkbox' });
+  const field = (label, ctrl, req) => h('div', { class: 'ss-field', style: 'margin-bottom:10px' },
+    h('label', {}, label, req ? h('span', { class: 'req' }, ' *') : null), ctrl);
+  const notice = cfg.dry_run || (cfg.allowlist || []).length
+    ? h('div', { style: 'background:#FFF8E1;border:1px solid #F5D77A;border-radius:4px;padding:8px 10px;font-size:12px;margin-bottom:12px;line-height:1.6' },
+      cfg.dry_run ? h('div', {}, h('b', {}, '시험 모드'), ' — 실제로 보내지 않고 결과만 보여 줍니다. 서버 설정 MAIL_DRY_RUN=false 로 바꾸면 발송됩니다.') : null,
+      (cfg.allowlist || []).length ? h('div', {}, `발송 허용 주소: ${cfg.allowlist.join(', ')}`) : null)
+    : null;
+  const sendBtn = h('button', { class: 'btn btn-primary' }, cfg.dry_run ? '보내기 (시험)' : '보내기');
+  const m = openModal({
+    title: `메일 발송 — ${q.quote_no}`,
+    body: h('div', {}, notice,
+      field('받는 사람', to, true), field('참조', cc), field('제목', subject, true), field('본문', body),
+      h('div', { class: 'ss-field' }, h('label', {}, '첨부'),
+        h('div', { style: 'display:flex;gap:18px;font-size:13px' },
+          h('label', { style: 'display:flex;gap:6px;align-items:center' }, pdf, '견적서 PDF (표지 포함)'),
+          h('label', { style: 'display:flex;gap:6px;align-items:center' }, xls, '견적서 Excel')))),
+    footer: [h('button', { class: 'btn', onclick: () => m.close() }, '취소'), sendBtn],
+  });
+  m.back.querySelector('.modal').style.width = '640px';
+  sendBtn.onclick = async () => {
+    sendBtn.disabled = true; sendBtn.textContent = '보내는 중…';
+    try {
+      const r = await api.mailQuote(q.id, { to: to.value, cc: cc.value, subject: subject.value, body: body.value,
+        attach_pdf: pdf.checked, attach_excel: xls.checked });
+      m.close();
+      if (r.dry_run) toast(`시험 모드 — 보내지 않았습니다. (받는 사람 ${r.to.join(', ')} · 첨부 ${r.attachments.join(', ') || '없음'})`, 'ok');
+      else { toast(`메일을 보냈습니다: ${r.to.join(', ')}`, 'ok'); onSent?.(r); }
+    } catch (err) {
+      sendBtn.disabled = false; sendBtn.textContent = cfg.dry_run ? '보내기 (시험)' : '보내기';
+      toast(err.message, 'err');
+    }
+  };
+  setTimeout(() => (to.value ? subject : to).focus(), 0);
+}

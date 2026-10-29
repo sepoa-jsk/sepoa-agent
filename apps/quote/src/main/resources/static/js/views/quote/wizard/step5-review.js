@@ -98,7 +98,8 @@ export function renderStep5(root, state, wiz) {
   const saved = { id: state.quoteId, quote_no: state.quoteNo };
   const pdfBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
   const xlsBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
-  outBox.appendChild(publishBtn); outBox.appendChild(pdfBtn); outBox.appendChild(xlsBtn);
+  const mailBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => wiz.mail() }, '메일 발송');
+  outBox.appendChild(publishBtn); outBox.appendChild(pdfBtn); outBox.appendChild(xlsBtn); outBox.appendChild(mailBtn);
 
   publishBtn.addEventListener('click', async () => {
     const s = wiz.get();

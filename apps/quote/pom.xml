@@ -70,6 +70,12 @@
       <version>5.3.0</version>
     </dependency>
 
+    <!-- 견적서 메일 발송 (SMTP — AWS SES, work_agent 와 같은 설정) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
+
     <!--
       Flyway (J4) — 자체 러너(db/migrate.js) 대체.
       flyway-mysql 은 MySQL/MariaDB 방언 모듈이며 flyway-core 만으로는 MariaDB 를 인식하지 못한다.

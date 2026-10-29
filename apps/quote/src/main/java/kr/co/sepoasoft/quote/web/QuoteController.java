@@ -50,9 +50,10 @@ public class QuoteController {
     private final QuoteHtml html;
     private final QuotePdf pdf;
     private final QuoteExcel excel;
+    private final QuoteMailer mailer;
 
     public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer, QuoteHtml html,
-            QuotePdf pdf, QuoteExcel excel) {
+            QuotePdf pdf, QuoteExcel excel, QuoteMailer mailer) {
         this.db = db;
         this.loader = loader;
         this.calc = calc;
@@ -60,6 +61,7 @@ public class QuoteController {
         this.html = html;
         this.pdf = pdf;
         this.excel = excel;
+        this.mailer = mailer;
     }
 
     /** #27 목록 — 최신순, {@code size} 최대 100 */
@@ -283,6 +285,68 @@ public class QuoteController {
         Map<String, Object> q = blockQuote(id);
         byte[] body = pdf.toPdf(html.render(q, html.settings(), html.masters(q, null), !"0".equals(cover)));
         return download(body, q, "pdf", "application/pdf");
+    }
+
+    /** 메일 발송 설정 — 화면이 시험 모드 · 허용 목록을 알리는 데 쓴다(비밀번호 · 계정은 내보내지 않는다) */
+    @GetMapping("/mail-config")
+    public Map<String, Object> mailConfig() {
+        return mailer.info();
+    }
+
+    /**
+     * 견적서 메일 발송 — PDF(표지 포함)를 붙이고, 원하면 Excel 도. 보낸 사람은 시스템 주소(MAIL_FROM),
+     * 답장은 로그인한 담당자에게(Reply-To). 실제로 보냈으면 작성중 견적을 발송 상태로 바꾼다.
+     * 시험 모드(MAIL_DRY_RUN)에서는 보내지 않고 상태도 그대로 둔다.
+     */
+    @PostMapping("/{id}/mail")
+    public Map<String, Object> mail(@PathVariable String id, @RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        Map<String, Object> b = body == null ? Map.of() : body;
+        List<String> to = QuoteMailer.split(b.get("to") == null ? "" : String.valueOf(b.get("to")));
+        List<String> cc = QuoteMailer.split(b.get("cc") == null ? "" : String.valueOf(b.get("cc")));
+        String subject = b.get("subject") == null ? "" : String.valueOf(b.get("subject")).trim();
+        String text = b.get("body") == null ? "" : String.valueOf(b.get("body"));
+        if (to.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NO_RECIPIENT", "받는 사람을 입력하세요.");
+        for (String a : concatList(to, cc)) {
+            if (!QuoteMailer.validEmail(a)) throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_EMAIL", "메일 주소가 올바르지 않습니다: " + a);
+        }
+        if (subject.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NO_SUBJECT", "제목을 입력하세요.");
+        Map<String, Object> q = blockQuote(id);
+
+        List<QuoteMailer.Attachment> files = new ArrayList<>();
+        String base = attachName(q);
+        Map<String, Object> masters = html.masters(q, null);
+        if (!Boolean.FALSE.equals(b.get("attach_pdf"))) {
+            files.add(new QuoteMailer.Attachment(base + ".pdf",
+                    pdf.toPdf(html.render(q, html.settings(), masters, true)), "application/pdf"));
+        }
+        if (Boolean.TRUE.equals(b.get("attach_excel"))) {
+            files.add(new QuoteMailer.Attachment(base + ".xlsx", excel.build(q, html.settings(), masters),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+        }
+        var user = AccessInterceptor.currentUser(req);
+        Map<String, Object> out = new LinkedHashMap<>(mailer.send(to, cc, subject, text, files,
+                user == null ? null : user.email(), user == null ? null : user.name()));
+        Object status = q.get("status");
+        if (Boolean.FALSE.equals(out.get("dry_run")) && "DRAFT".equals(status)) {
+            db.update("UPDATE sq_quotes SET status = 'SENT' WHERE id = ? AND status = 'DRAFT'", q.get("id"));
+            status = "SENT";
+        }
+        out.put("status", status);
+        return out;
+    }
+
+    private static List<String> concatList(List<String> a, List<String> b) {
+        List<String> out = new ArrayList<>(a);
+        out.addAll(b);
+        return out;
+    }
+
+    /** 첨부 이름 — 견적번호_고객사 (파일 이름에 못 쓰는 글자는 뺀다) */
+    private static String attachName(Map<String, Object> q) {
+        String no = String.valueOf(q.get("quote_no"));
+        String cust = q.get("customer_name") == null ? "" : String.valueOf(q.get("customer_name")).replaceAll("[\\\\/:*?\"<>|]", "");
+        return no + (cust.isBlank() ? "" : "_" + cust);
     }
 
     private Map<String, Object> blockQuote(String id) {

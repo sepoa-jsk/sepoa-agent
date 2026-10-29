@@ -13,7 +13,7 @@
 //      상태(작성중 · 발송 · 수주 · 실주)만 상세에서도 바로 바꾼다(PATCH /status).
 //      상세 ↔ 수정을 오갈 때 보던 단계를 이어서 연다(sessionStorage).
 import { api as http } from '../../../api.js';
-import { copyQuote, viewQuote, deleteQuote, downloadQuote } from '../quote-actions.js';
+import { copyQuote, viewQuote, deleteQuote, downloadQuote, mailQuote } from '../quote-actions.js';
 import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
@@ -247,6 +247,16 @@ export async function renderWizard(root, opts = {}) {
     } });
   }
 
+  // 메일 발송 — 받는 사람 기본값은 견적의 이메일. 실제로 보내면 상태가 발송으로 바뀐다
+  const mailTarget = () => ({ id: state.quoteId, quote_no: state.quoteNo, customer_name: state.basic.customer_name,
+    email: state.basic.email, purpose: state.basic.purpose });
+  function onMailSent(r) {
+    if (!r.status) return;
+    state.status = r.status;
+    document.querySelectorAll('select[data-status]').forEach((x) => { x.value = r.status; });
+  }
+  api.mail = () => mailQuote(mailTarget(), onMailSent);
+
   // 상세 ↔ 수정 — 보던 단계를 넘겨 준다
   const switchTo = (hash) => { sessionStorage.setItem(OPEN_STEP_KEY, String(state.step)); location.hash = hash; };
 
@@ -262,6 +272,7 @@ export async function renderWizard(root, opts = {}) {
         { label: '견적서 보기', onClick: () => viewQuote(q) },
         { label: 'PDF', onClick: () => downloadQuote(q, 'pdf') },
         { label: 'Excel', onClick: () => downloadQuote(q, 'excel') },
+        { label: '메일 발송', onClick: () => mailQuote(mailTarget(), onMailSent) },
         { label: '삭제', onClick: () => deleteQuote(q) },
         { label: '이전', onClick: () => api.prev() },
         { label: '다음', primary: true, onClick: () => api.next() },

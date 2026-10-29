@@ -75,6 +75,8 @@ export const api = {
   deleteQuote: (id) => req('DELETE', `/api/quotes/${id}`),
   copyQuote: (id) => req('POST', `/api/quotes/${id}/copy`),
   quoteHtml: (id) => req('GET', `/api/quotes/${id}/html`),
+  mailConfig: () => req('GET', '/api/quotes/mail-config'),
+  mailQuote: (id, body) => req('POST', `/api/quotes/${id}/mail`, body),
   excelUrl: (id) => `${BASE}/api/quotes/${id}/excel`,
   pdfUrl: (id) => `${BASE}/api/quotes/${id}/pdf`,
 

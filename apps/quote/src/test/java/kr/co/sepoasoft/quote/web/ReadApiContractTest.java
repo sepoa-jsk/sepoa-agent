@@ -29,7 +29,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  */
 @WebMvcTest(controllers = { MasterController.class, TemplateController.class, QuoteController.class,
         SettingsController.class, LaborRateController.class })
-@Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class, QuoteHtml.class, QuotePdf.class, QuoteExcel.class })
+@Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class, QuoteHtml.class, QuotePdf.class, QuoteExcel.class, QuoteMailer.class })
 @TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
 @DisplayName("J5-2 조회 창구")
 class ReadApiContractTest {
