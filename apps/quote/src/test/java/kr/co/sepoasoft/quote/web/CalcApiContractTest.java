@@ -29,7 +29,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * 엔진은 진짜({@link BlockPricingEngine}), DB 는 목이다.
  */
 @WebMvcTest(controllers = QuoteCalcController.class)
-@Import({ AuthSettings.class, BlockPricingEngine.class, QuoteCalc.class })
+@Import({ AuthSettings.class, BlockPricingEngine.class, QuoteCalc.class, QuoteHtml.class })
 @TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
 @DisplayName("J5-3 계산 창구")
 class CalcApiContractTest {
@@ -121,11 +121,12 @@ class CalcApiContractTest {
     }
 
     @Test
-    @DisplayName("preview — calc 는 calculate 와 같고 html 은 빈 문자열(J7 전), blocks 가 배열이 아니면 400")
+    @DisplayName("preview — calc 는 calculate 와 같고 html 은 견적서(J7), blocks 가 배열이 아니면 400")
     void preview() throws Exception {
         mvc.perform(json("/api/quotes/preview", SOLBRAIN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.html").value(""))
+                .andExpect(jsonPath("$.html").value(org.hamcrest.Matchers.containsString("Quotation")))
+                .andExpect(jsonPath("$.html").value(org.hamcrest.Matchers.containsString("60,000,000")))
                 .andExpect(jsonPath("$.calc.onetime_total").value(60000000));
         mvc.perform(json("/api/quotes/preview", "{\"blocks\":[]}")).andExpect(status().isOk());
         mvc.perform(json("/api/quotes/preview", "{}"))

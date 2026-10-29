@@ -116,7 +116,7 @@ J5 에서는 2번(Google) 을 **자리만** 만든다(검증은 J8). 3·4·5 는
 |---|---|---|---|---|---|---|
 | 23 | `POST /api/quotes/apply-template` | 로그인 | `{template_code}` | `{template, blocks(초안), labor_year, round_unit:100000, conditions, unregistered}` · 저장 안 함 | 404 `NOT_FOUND` "템플릿을 찾을 수 없습니다." | ○ |
 | 24 | `POST /api/quotes/calculate` | 키/로그인 | 블록형 `{blocks, discount, monthly_discount, round_unit}` 또는 레거시 `{sections, discount}` | 엔진 결과 그대로 | 400 `NO_BLOCKS`(빈 blocks) · 400 `NO_SECTIONS` | ○ |
-| 25 | `POST /api/quotes/preview` | 로그인 | `{header, blocks, discount, monthly_discount, round_unit}` | `{"html":"…","calc":{…}}` | 400 `NO_BLOCKS` | ○ ※ html 은 J7 |
+| 25 | `POST /api/quotes/preview` | 로그인 | `{header, blocks, discount, monthly_discount, round_unit}` | `{"html":"…","calc":{…}}` | 400 `NO_BLOCKS` | ○ ※ html 은 J7 — 블록형 렌더 이식(QuoteHtml), `header.blank`·`header.condition_set` 추가 |
 | 26 | `POST /api/quotes` | 로그인 | 블록형(`blocks`) 또는 레거시(`sections`) + 헤더 | `201 {"quote":{…상세와 같은 모양}}` · 견적번호 채번 | 400 `NO_SECTIONS` | ○ |
 | 27 | `GET /api/quotes` | 로그인 | `?status=&customer=&quote_no=&page=1&size=20`(최대 100) | `{total, page, size, quotes:[{...sq_quotes, created_by_name}]}` 최신순 | — | ○ |
 | 28 | `GET /api/quotes/:id` | 로그인 | — | `{"quote":{...헤더, conditions(파싱), sections:[{…, params(파싱), items, labor}], blocks:[{…, recurring(불리언), items, labor(month_alloc 파싱)}]}}` | 404 `NOT_FOUND` | ○ |

@@ -28,7 +28,6 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * <ul>
  *   <li>음수 금액·알 수 없는 특별DC 유형 — 엔진이 거부한다(ENGINE-CONTRACT 2절). 400 {@code INVALID_INPUT}</li>
  *   <li>레거시 섹션형 중 가격정책 4모델 경로({@code calcQuote}) — 이식 대상 아님(J10 대체). 501</li>
- *   <li>{@code preview} 의 {@code html} — 렌더러(J7) 전까지 빈 문자열</li>
  * </ul>
  */
 @RestController
@@ -38,10 +37,12 @@ public class QuoteCalcController {
 
     private final Rows db;
     private final QuoteCalc calc;
+    private final QuoteHtml html;
 
-    public QuoteCalcController(Rows db, QuoteCalc calc) {
+    public QuoteCalcController(Rows db, QuoteCalc calc, QuoteHtml html) {
         this.db = db;
         this.calc = calc;
+        this.html = html;
     }
 
     // ── #23 템플릿 적용 ─────────────────────────────────────────────
@@ -192,7 +193,12 @@ public class QuoteCalcController {
 
     // ── #25 미리보기 (저장 안 함) ────────────────────────────────────
 
-    /** {@code calc} 는 #24 블록형과 같다. {@code html} 은 J7(렌더러) 에서 채운다. */
+    /**
+     * {@code calc} 는 #24 블록형과 같다. {@code html} 은 PDF 와 같은 렌더러({@link QuoteHtml})로 그린다.
+     *
+     * <p>{@code header.blank = true} (견적 템플릿 화면) — 견적번호·견적일자를 채우지 않고 비워 둔다.
+     * {@code header.condition_set} 이 있으면 저장 전 템플릿의 견적조건 세트로 조건을 채운다.
+     */
     @PostMapping("/preview")
     public Map<String, Object> preview(@RequestBody(required = false) Map<String, Object> body) {
         Map<String, Object> b = body == null ? Map.of() : body;
@@ -200,8 +206,30 @@ public class QuoteCalcController {
             throw new ApiException(HttpStatus.BAD_REQUEST, "NO_BLOCKS", "blocks 가 필요합니다.");
         }
         Map<String, Object> result = calc.calcBlocks(blocks, b.get("discount"), b.get("monthly_discount"), b.get("round_unit"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> header = b.get("header") instanceof Map<?, ?> h ? (Map<String, Object>) h : Map.of();
+        boolean blank = truthy(header.get("blank"));
+        Map<String, Object> quote = new LinkedHashMap<>(header);
+        // 저장 전이라 견적번호가 없다. 실제 채번은 저장 시점에 일어난다.
+        quote.put("quote_no", truthy(header.get("quote_no")) ? header.get("quote_no") : blank ? "" : "(저장 시 채번)");
+        quote.put("quote_date", truthy(header.get("quote_date")) ? header.get("quote_date")
+                : blank ? "" : java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString());
+        List<Map<String, Object>> rblocks = new ArrayList<>();
+        if (result.get("blocks") instanceof List<?> cb) for (Object o : cb) {
+            if (!(o instanceof Map<?, ?> m)) continue;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> rb = new LinkedHashMap<>((Map<String, Object>) m);
+            rb.put("title", rb.get("name") != null ? rb.get("name") : rb.get("title"));
+            rblocks.add(rb);
+        }
+        quote.put("blocks", rblocks);
+        for (String k : List.of("onetime_total", "monthly_total", "supply_amount", "discount_amount", "vat_amount", "total_amount", "round_unit")) {
+            quote.put(k, result.get(k));
+        }
+        quote.put("conditions", header.get("conditions") instanceof List<?> c ? c : null);
+        String page = html.render(quote, html.settings(), html.masters(quote, header.get("condition_set")), false);
         Map<String, Object> res = new LinkedHashMap<>();
-        res.put("html", "");
+        res.put("html", page);
         res.put("calc", result);
         return res;
     }

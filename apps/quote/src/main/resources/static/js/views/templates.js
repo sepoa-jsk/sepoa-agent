@@ -1,12 +1,14 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, toast, clear, resizableColumns, numInput, won } from '../ui.js';
+import { h, toast, clear, resizableColumns, numInput, won, openModal } from '../ui.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
 // 견적 작성 2단계에서 템플릿을 고르면 여기서 정한 블록 · 기본 모듈(수량) · 인력(M/M)이 그대로 채워진다.
 // 저장은 템플릿 한 건을 통째로(헤더 + 블록 + 모듈 + 인력) 보낸다 — PUT /api/templates/{id} 는 자식을 지우고 다시 넣는다.
 // 지우기 API 는 없다 — 견적이 템플릿 코드를 참조하므로 '사용'을 끄면 견적 작성에서 고를 수 없게 된다.
+// 미리보기 — 지금 화면의 값(저장 전 포함)으로 견적서 완성본을 그린다. 견적 작성·PDF 와 같은 렌더러(POST /api/quotes/preview)를 쓰고,
+//   고객사·견적번호·견적일자처럼 템플릿에 없는 값은 비워 둔다(header.blank). 인쇄 버튼으로 PDF 저장도 된다.
 const DEPLOYMENTS = [
   ['ONPREM_LUMP', '구축형 일시불'], ['ONPREM_INSTALL', '구축형 분납'], ['SAAS', 'SaaS'], ['PCLOUD', 'Private Cloud'],
 ];
@@ -161,6 +163,7 @@ export async function renderTemplates(root) {
       h('div', { class: 'ss-actions' },
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: startNew }, '신규'),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: copyCurrent, disabled: cur.isNew }, '복사'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: preview }, '미리보기'),
         h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
     // 기본정보 — 4열 폼
@@ -314,6 +317,65 @@ export async function renderTemplates(root) {
         cellText('업무', r.task, (v) => { r.task = v; }),
         cellNum('기본 M/M', r.mm_default, (v) => { r.mm_default = v; }));
       tbody.appendChild(tr);
+    }
+  }
+
+  // ── 미리보기 ──
+  // 견적 작성 3단계가 템플릿을 적용한 직후와 같은 모양: 제안단가 = 기준단가, 수량·M/M = 기본값.
+  // 인건비 단가는 개발인건비(LABOR) 블록에만 싣는다 — 셋업비용의 인력은 공수 배분용이라 금액이 아니다.
+  function previewBlocks() {
+    const prices = priceCache[cur.form.solution] || [];
+    return blocksDef.filter((b) => cur.blocks.has(b.code) && b.code !== 'SUMMARY').map((b) => {
+      const isLabor = b.code === 'LABOR';
+      const items = cur.items.filter((r) => r.block_code === b.code && r.item_code).map((r) => {
+        const p = prices.find((x) => x.code === r.item_code);
+        const base = p && p.base_price != null ? Number(p.base_price) : null;
+        return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code, spec: p?.spec || null,
+          unit: p?.unit || null, qty: num(r.qty_default, 1), base_price: base, proposed_price: base || 0 };
+      });
+      const labor = cur.labor.filter((r) => r.block_code === b.code && r.role_code).map((r) => {
+        const rate = roles.find((x) => x.role_code === r.role_code);
+        const base = rate && rate.apply_price != null ? Number(rate.apply_price) : null;
+        const out = { role_code: r.role_code, role_name: rate?.role_name || null, role_label: r.role_label || null,
+          grade: r.grade || null, task: r.task || null, mm: num(r.mm_default, 0) };
+        return isLabor ? { ...out, base_price: base, proposed_price: base || 0 } : out;
+      });
+      // 빈 labor 배열을 함께 보내면 서버가 인건비 블록으로 본다 — 값이 있는 쪽만 싣는다(견적 작성과 같은 규칙)
+      const out = { block_code: b.code, name: b.name, recurring: b.recurring ? 1 : 0 };
+      if (items.length) out.items = items;
+      if (labor.length) out.labor = labor;
+      if (!items.length && !labor.length) out.items = [];
+      return out;
+    });
+  }
+
+  async function preview() {
+    const f = cur.form;
+    const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
+    const state = h('span', { style: 'margin-right:auto;font-size:12px;color:var(--text-3)' }, '그리는 중...');
+    const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
+    const m = openModal({
+      title: `견적서 미리보기 — ${f.name || '새 템플릿'}${f.code ? ` (${f.code})` : ''}`,
+      body: frame,
+      footer: [state, printBtn, h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
+    });
+    const box = m.back.querySelector('.modal');
+    box.style.width = '880px';
+    box.querySelector('.modal-body').style.padding = '12px';
+    try {
+      const r = await api.previewQuote({
+        blocks: previewBlocks(),
+        header: { blank: true, template_code: f.code || null, condition_set: f.condition_set || null,
+          solution: f.solution, brand: f.brand || null, deployment: f.deployment, quote_type: f.quote_type || 'BUILD' },
+        round_unit: 100000,
+      });
+      frame.srcdoc = r.html;
+      const c = r.calc || {};
+      state.textContent = `기본값 기준 · 일시불 ${won(c.onetime_total)}원${c.monthly_total ? ` / 월 ${won(c.monthly_total)}원` : ''}${cur.isNew || JSON.stringify(payload()) !== baseline ? ' · 저장 전 내용' : ''}`;
+      printBtn.disabled = false;
+    } catch (err) {
+      state.textContent = '';
+      frame.replaceWith(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, err.message));
     }
   }
 
