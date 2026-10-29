@@ -243,9 +243,11 @@ html, body {
 /* ── 폼 ─────────────────────────────────────────── */
 
 .ss-formhead { display: flex; justify-content: flex-end; margin-top: 16px; }
-.ss-form { width: 100%; max-width: 1445px; margin: 0 auto; }
-/* 4열 폼 — 섹션(fieldset) 없이 필드만 가운데 944px 에 4칸 격자로 (운영 화면 캡처: 구매요청생성) */
-.ss-form--cols4 { max-width: 944px; }
+/* 폼은 화면 전체 폭을 쓴다 — 해상도가 커지면 칸도 같이 넓어진다 (2026-10-29 사용자 요청: 가운데 고정 폭 폐지).
+   운영 화면 캡처(구매요청생성)는 가운데 944px 였으나 견적 시스템은 전체 폭으로 맞춘다. */
+.ss-form { width: 100%; }
+/* 4열 폼 — 4칸 격자 */
+.ss-form--cols4 { max-width: none; }
 .ss-form--cols4 .ss-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding-top: 0; }
 .ss-form--cols4 .ss-field { width: auto; }
 .ss-form--cols4 .ss-field--w2 { grid-column: span 2; }
