@@ -234,6 +234,7 @@ export async function renderStep3(root, state, wiz) {
     set('vat', won(c.vat)); set('mon', c.monthly ? won(c.monthly) : '-');
     set('mdc', c.mdcAmt ? '-' + won(c.mdcAmt) : '0');
     set('monFin', c.monthly ? won(c.monthlyFinal) : '-');
+    paintPayPlan(c); // 금액이 바뀌면 결제 방안 금액도 따라 바뀐다
     if (els.warn) {
       els.warn.textContent = c.laborErrors.length ? '인력투입계획 확인: ' + c.laborErrors.join(' / ') : '';
       els.warn.style.display = c.laborErrors.length ? '' : 'none';
@@ -444,6 +445,8 @@ export async function renderStep3(root, state, wiz) {
           h('b', {}, '옵션 라인 자동 생성은 아직 없습니다'),
           '서버이중화·계열사 추가 등은 규칙 마스터(sq_mst_rule)가 들어오는 작업 13 이후 연동됩니다. 지금은 항목을 직접 추가하세요.')))));
     left.appendChild(condCard());
+    const pay = payPlanCard();
+    if (pay) left.appendChild(pay);
     left.appendChild(summaryCard(c));
     wiz.patch({});
     preview.schedule(wiz);
@@ -476,6 +479,37 @@ export async function renderStep3(root, state, wiz) {
       h('div', { class: 'card-h' }, h('h2', {}, '견적조건'),
         h('span', { class: 'sub' }, '견적서 하단에 그대로 인쇄됩니다')),
       h('div', { class: 'card-b' }, list, add));
+  }
+
+  // 결제 방안 — 템플릿에서 '결제 방안 포함' 을 켠 견적(SaaS · Private Cloud)은 견적서에 이 표가 인쇄된다.
+  // 문구는 고정이고 금액만 견적을 따른다(최종 일시불을 계약체결 후 50% / 구축완료 후 50%, 월 사용료는 매월 말).
+  // 켜고 끄는 곳은 견적 템플릿 화면이다. 여기서는 무엇이 인쇄되는지 보여 준다.
+  function payPlanCard() {
+    if (!wiz.get().applied || !wiz.get().applied.has_pay_plan) return null;
+    const box = h('div', {});
+    els.payPlan = box;
+    paintPayPlan(recalcBlocks(wiz.get()));
+    return h('div', { class: 'card', style: 'margin-bottom:12px' },
+      h('div', { class: 'card-h' }, h('h2', {}, '결제 방안'),
+        h('span', { class: 'sub' }, '템플릿 설정에 따라 견적서에 인쇄됩니다 · 켜고 끄기는 견적 템플릿 화면에서')),
+      h('div', { class: 'card-b', style: 'padding:0' }, box));
+  }
+
+  function paintPayPlan(c) {
+    const box = els.payPlan;
+    if (!box) return;
+    const one = c.final, mon = c.monthlyFinal, half = Math.round(one / 2);
+    const td = (t, st = '') => h('td', { style: 'padding:8px 10px;border-top:1px solid var(--line-2);vertical-align:top;white-space:pre-line;' + st }, t);
+    const th = (t) => h('th', { style: 'padding:7px 10px;text-align:left;font-size:12px;color:var(--text-2);background:#F8FAFC' }, t);
+    box.replaceChildren(h('table', { style: 'width:100%;border-collapse:collapse;font-size:12.5px' },
+      h('thead', {}, h('tr', {}, th('구분'), th('지급시점'), th('비용'), th('내역'))),
+      h('tbody', {},
+        h('tr', {}, td('서비스 셋업비용', 'width:120px;font-weight:600'),
+          td(one === 0 ? '1. 무상제공' : '1. 일시불\n  -. 계약체결 후 50%\n  -. 구축완료 후 50%'),
+          td(one === 0 ? '1. 셋업비용 : 무상제공' : `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 50% : ₩${won(half)}원\n   구축완료 후 50% : ₩${won(one - half)}원`),
+          td(one === 0 ? '-' : '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 50% / 구축완료 후 50%')),
+        h('tr', {}, td('서비스 월 사용료', 'font-weight:600'), td('1. 매월 말'),
+          td(`1. 서비스 사용료 : ₩${won(mon)}원/매월`), td('-. 서비스 착수 후 월별로 세금계산서 발행')))));
   }
 
   repaintLeft();

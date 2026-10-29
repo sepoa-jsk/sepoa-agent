@@ -163,6 +163,7 @@ public class QuoteCalcController {
         template.put("has_labor_plan", laborPlan);
         template.put("include_maintenance", Rows.truthy(tpl.get("include_maintenance")));
         template.put("include_component", Rows.truthy(tpl.get("include_component")));
+        template.put("has_pay_plan", Rows.truthy(tpl.get("has_pay_plan"))); // 결제 방안 포함(V5) — 견적 작성 3단계가 결제 방안 칸을 보여 준다
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("template", template);

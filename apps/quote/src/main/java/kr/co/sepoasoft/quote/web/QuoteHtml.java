@@ -104,20 +104,7 @@ public class QuoteHtml {
             for (Map<String, Object> r : db.query("SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no", set)) lines.add(r.get("text"));
             m.put("conditionLines", lines);
         }
-        // 건수 밴드표 — 견적에 담긴 모듈 중 밴드가 있는 것만
-        Set<Object> codes = new LinkedHashSet<>();
-        for (Map<String, Object> b : maps(quote.get("blocks"))) for (Map<String, Object> it : maps(b.get("items"))) {
-            if (Rows.truthy(it.get("item_code"))) codes.add(it.get("item_code"));
-        }
-        if (!codes.isEmpty()) {
-            Map<String, List<Map<String, Object>>> bands = new LinkedHashMap<>();
-            for (Map<String, Object> r : db.query("SELECT p.code, v.label, v.min_qty, v.max_qty, v.price"
-                    + " FROM sq_price_variants v JOIN sq_price_items p ON p.id = v.item_id"
-                    + " WHERE p.code IN (" + Rows.placeholders(codes.size()) + ") ORDER BY v.sort", codes.toArray())) {
-                bands.computeIfAbsent(String.valueOf(r.get("code")), k -> new ArrayList<>()).add(r);
-            }
-            m.put("bands", bands);
-        }
+        // 건수 밴드표(건수별 제안금액)는 싣지 않는다 — 실측 양식(창성)에 없고 견적서 틀 밖에 따로 붙어 보였다(2026-10-29 사용자 요청).
         // 블록 정의
         Map<String, Object> defs = new LinkedHashMap<>();
         for (Map<String, Object> b : db.query("SELECT code, name, `columns`, recurring, has_subtotal, sort FROM sq_blocks ORDER BY sort")) {
@@ -370,7 +357,7 @@ public class QuoteHtml {
                 + "<td>-. 서비스 착수 후 월별로 세금계산서 발행</td></tr></table>\n";
     }
 
-    /** 부속 페이지 — 인력투입계획표 · 노임단가표(협회 양식) · 건수 밴드표 */
+    /** 부속 페이지 — 인력투입계획표 · 노임단가표(협회 양식) */
     private String appendix(Map<String, Object> quote, Map<String, Object> masters, String depLabel) {
         List<String> parts = new ArrayList<>();
         List<Map<String, Object>> laborRows = new ArrayList<>();
@@ -462,19 +449,6 @@ public class QuoteHtml {
                     + (Rows.truthy(masters.get("laborRateSource")) ? "<div class=\"muted\" style=\"margin-top:6px\">출처: " + esc(masters.get("laborRateSource")) + "</div>" : ""));
         }
 
-        if (masters.get("bands") instanceof Map<?, ?> bands && !bands.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (Object v : bands.values()) {
-                StringBuilder rows = new StringBuilder();
-                for (Map<String, Object> r : maps(v)) {
-                    rows.append("<tr><td class=\"c\">").append(numText(num(r.get("min_qty")))).append("</td><td class=\"c\">")
-                            .append(numText(num(r.get("max_qty")))).append("</td><td class=\"r\">").append(won(num(r.get("price")))).append("</td></tr>");
-                }
-                sb.append("\n<div class=\"sec\" style=\"margin-top:12px\">▣ 건수별 제안금액</div>\n<table class=\"grid\" style=\"width:60%\">"
-                        + "<tr><th>월 건수</th><th>년 건수</th><th>제안 금액</th></tr>" + rows + "</table>");
-            }
-            parts.add(sb.toString());
-        }
         return String.join("\n", parts);
     }
 

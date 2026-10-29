@@ -38,7 +38,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  */
 @WebMvcTest(controllers = QuoteController.class)
 @Import({ AuthSettings.class, QuoteLoader.class, QuoteCalc.class, BlockPricingEngine.class, QuoteHtml.class, QuotePdf.class, QuoteExcel.class, QuoteMailer.class })
-@TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key" })
+@TestPropertySource(properties = { "AUTH_MODE=dev", "API_KEY=test-key", "MAIL_DRY_RUN=true", "MAIL_ALLOWLIST=" }) // 시험 중에는 실제 메일을 절대 보내지 않는다(로컬 .env 와 무관)
 @DisplayName("J5-4 견적 쓰기")
 class WriteApiContractTest {
 
