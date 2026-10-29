@@ -152,19 +152,24 @@ function dcPayload(dc) {
 }
 
 // ── 템플릿 적용 ─────────────────────────────────────────────
-async function applyTemplate(state, wiz) {
-  const d = await http.applyTemplate(state.type.template_code);
+// apply-template 응답 → 위저드 상태 조각. 제안단가는 기준단가로 시작한다(템플릿 불러오기 창도 같이 쓴다).
+export function appliedPatch(d) {
   const blocks = d.blocks.filter((b) => b.block_code !== 'SUMMARY').map((b) => ({
     ...b,
     items: (b.items || []).map((it) => ({ ...it, proposed_price: it.base_price || 0 })),
     labor: (b.labor || []).map((l) => ({ ...l, proposed_price: l.base_price || 0, month_alloc: l.month_alloc || {} })),
   }));
-  wiz.patch({
+  return {
     blocks, applied: d.template, laborYear: d.labor_year,
     round_unit: d.round_unit ?? 100000,
     hasLaborPlan: !!d.template.has_labor_plan,
     conds: (d.conditions || []).map((t) => ({ text: t })),
-  });
+  };
+}
+
+async function applyTemplate(state, wiz) {
+  const d = await http.applyTemplate(state.type.template_code);
+  wiz.patch(appliedPatch(d));
   if (d.unregistered && d.unregistered.length) {
     toast(`가격마스터 미등록 모듈 ${d.unregistered.length}건 — 기준단가가 비어 있습니다: ${d.unregistered.join(', ')}`, 'err');
   }

@@ -11,11 +11,12 @@
 // 수정: #/quotes/:id/edit 은 저장된 견적을 읽어 위저드 상태로 되돌린 뒤 STEP③ 에서 연다.
 //      수정 중에는 브라우저 자동 보관을 하지 않는다(새 견적 작성분과 섞이지 않게).
 import { api as http } from '../../../api.js';
-import { h, toast, clear } from '../../../ui.js';
+import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
-import { renderStep3 } from './step3-config.js';
+import { renderStep3, appliedPatch } from './step3-config.js';
+import { openTemplatePicker } from './template-picker.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
 
@@ -183,6 +184,30 @@ export async function renderWizard(root, opts = {}) {
     if (el) el.textContent = savedText();
   }
 
+  // 템플릿 불러오기 — 기본정보는 두고 유형 · 구성 · 인력 · 견적조건을 템플릿 내용으로 바꾼 뒤 3단계(구성)로 간다.
+  // 특별DC 는 금액이 달라지므로 비운다. 이미 구성이 있으면 바꾸기 전에 묻는다.
+  function pickTemplate() {
+    openTemplatePicker({ state, onPick: async ({ tpl, d }) => {
+      if (state.blocks.length) {
+        const ok = await confirmModal({ title: '템플릿 불러오기',
+          message: `지금 작성한 구성 · 인력 · 견적조건 · 특별DC 를 '${tpl.name}' 내용으로 바꿉니다. 기본정보(수신처 등)는 그대로 둡니다.`,
+          okLabel: '바꾸기' });
+        if (!ok) return;
+      }
+      state = deepMerge(state, {
+        type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code },
+        ...appliedPatch(d),
+        discount: { mode: 'TARGET', value: null }, monthly_discount: { mode: 'TARGET', value: null },
+      });
+      state.step = 3;
+      persist(); paint();
+      toast(`'${tpl.name}' 템플릿을 불러왔습니다.`, 'ok');
+      if (d.unregistered && d.unregistered.length) {
+        toast(`가격정책 미등록 모듈 ${d.unregistered.length}건 — 기준단가가 비어 있습니다: ${d.unregistered.join(', ')}`, 'err');
+      }
+    } });
+  }
+
   function paintTitle() {
     const head = editMode ? '견적 수정' : '견적 작성';
     setPage({
@@ -190,6 +215,7 @@ export async function renderWizard(root, opts = {}) {
       path: `견적관리 / ${head}${state.quoteNo ? ' ' + state.quoteNo : ''} / ${state.step}. ${STEPS[state.step - 1].label}`,
       actions: [
         ...(editMode ? [{ label: '취소', onClick: () => { location.hash = `#/quotes/${state.quoteId}`; } }] : []),
+        { label: '템플릿 불러오기', onClick: pickTemplate },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },
         { label: '다음', primary: true, onClick: () => api.next() },
