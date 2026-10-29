@@ -198,6 +198,7 @@ public class QuoteCalcController {
      *
      * <p>{@code header.blank = true} (견적 템플릿 화면) — 견적번호·견적일자를 채우지 않고 비워 둔다.
      * {@code header.condition_set} 이 있으면 저장 전 템플릿의 견적조건 세트로 조건을 채운다.
+     * {@code header.pay_plan} 이 있으면 저장 전 템플릿의 '결제 방안 포함' 값을 쓴다(없으면 template_code 의 설정).
      */
     @PostMapping("/preview")
     public Map<String, Object> preview(@RequestBody(required = false) Map<String, Object> body) {
@@ -227,7 +228,7 @@ public class QuoteCalcController {
             quote.put(k, result.get(k));
         }
         quote.put("conditions", header.get("conditions") instanceof List<?> c ? c : null);
-        String page = html.render(quote, html.settings(), html.masters(quote, header.get("condition_set")), false);
+        String page = html.render(quote, html.settings(), html.masters(quote, header.get("condition_set"), header.containsKey("pay_plan") ? header.get("pay_plan") : null), false);
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("html", page);
         res.put("calc", result);

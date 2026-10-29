@@ -97,7 +97,8 @@ export async function renderTemplates(root) {
         id: t.id, isNew: false,
         form: {
           code: t.code, name: t.name, solution: t.solution, deployment: t.deployment, brand: t.brand,
-          condition_set: t.condition_set, has_labor_plan: t.has_labor_plan ? 1 : 0, active: t.active ? 1 : 0, sort: t.sort ?? 0,
+          condition_set: t.condition_set, has_labor_plan: t.has_labor_plan ? 1 : 0, has_pay_plan: t.has_pay_plan ? 1 : 0,
+          active: t.active ? 1 : 0, sort: t.sort ?? 0,
           include_maintenance: t.include_maintenance ? 1 : 0, include_component: t.include_component ? 1 : 0,
           quote_type: t.quote_type || 'BUILD',
         },
@@ -118,7 +119,7 @@ export async function renderTemplates(root) {
     cur = {
       id: null, isNew: true,
       form: { code: '', name: '', solution: sol, deployment: 'ONPREM_LUMP', brand: '', condition_set: 'COND_ONPREM',
-        has_labor_plan: 1, active: 1, sort: templates.filter((t) => t.solution === sol).length + 1,
+        has_labor_plan: 1, has_pay_plan: 0, active: 1, sort: templates.filter((t) => t.solution === sol).length + 1,
         include_maintenance: 0, include_component: 0, quote_type: 'BUILD' },
       blocks: new Set(['SOLUTION', 'LABOR', 'SUMMARY']),
       items: [], labor: [],
@@ -196,6 +197,7 @@ export async function renderTemplates(root) {
         field('견적조건', sel('condition_set', [['', '없음'], ...conditionSets.map((c) => [c.code, c.name])])),
         field('정렬', numInput(f.sort, (v) => { f.sort = v; }, { class: 'ss-input', style: 'text-align:center' }, true)),
         field('인력투입계획', chk('has_labor_plan', '월별 투입계획 표 사용')),
+        field('결제 방안', chk('has_pay_plan', '클라우드서비스 결제 방안 표 사용')),
         field('블록 (견적서에 들어갈 표)', blockBoxes, 'ss-field--w2'))));
 
     // 탭 상자 — 기본 모듈 | 인력
@@ -365,7 +367,7 @@ export async function renderTemplates(root) {
     try {
       const r = await api.previewQuote({
         blocks: previewBlocks(),
-        header: { blank: true, template_code: f.code || null, condition_set: f.condition_set || null,
+        header: { blank: true, template_code: f.code || null, condition_set: f.condition_set || null, pay_plan: f.has_pay_plan ? 1 : 0,
           solution: f.solution, brand: f.brand || null, deployment: f.deployment, quote_type: f.quote_type || 'BUILD' },
         round_unit: 100000,
       });
@@ -387,7 +389,7 @@ export async function renderTemplates(root) {
       quote_type: f.quote_type || 'BUILD', solution: f.solution, code: trim(f.code), name: trim(f.name),
       deployment: f.deployment, brand: trim(f.brand), condition_set: f.condition_set || null,
       include_maintenance: f.include_maintenance ? 1 : 0, include_component: f.include_component ? 1 : 0,
-      has_labor_plan: f.has_labor_plan ? 1 : 0, active: f.active ? 1 : 0, sort: Number(f.sort) || 0,
+      has_labor_plan: f.has_labor_plan ? 1 : 0, has_pay_plan: f.has_pay_plan ? 1 : 0, active: f.active ? 1 : 0, sort: Number(f.sort) || 0,
       blocks: blocksDef.filter((b) => cur.blocks.has(b.code)).map((b) => b.code),
       items: cur.items.map((r) => ({ block_code: r.block_code, item_code: r.item_code, qty_default: r.qty_default ?? 1 })),
       labor: cur.labor.map((r) => ({ block_code: r.block_code, role_code: r.role_code, role_label: trim(r.role_label),

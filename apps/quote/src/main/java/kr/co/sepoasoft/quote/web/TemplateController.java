@@ -140,8 +140,8 @@ public class TemplateController {
     // ── (ADMIN) 템플릿 생성/수정 — 헤더 + 블록/모듈/인건비 통째 교체 ─
 
     private static final List<String> TPL_COLS = List.of("quote_type", "solution", "code", "name", "deployment", "brand",
-            "include_maintenance", "include_component", "condition_set", "has_labor_plan", "active", "sort");
-    private static final Map<String, Object> TPL_DEFAULTS = Map.of("quote_type", "BUILD", "has_labor_plan", 0,
+            "include_maintenance", "include_component", "condition_set", "has_labor_plan", "has_pay_plan", "active", "sort");
+    private static final Map<String, Object> TPL_DEFAULTS = Map.of("quote_type", "BUILD", "has_labor_plan", 0, "has_pay_plan", 0,
             "include_maintenance", 0, "include_component", 0, "active", 1, "sort", 0);
 
     /** #21 생성 — code·solution·name 필수, code 중복이면 409 */

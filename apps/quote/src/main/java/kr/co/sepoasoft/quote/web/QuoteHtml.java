@@ -56,6 +56,13 @@ public class QuoteHtml {
      * @param conditionSet 견적조건 세트를 직접 지정한다(템플릿 화면 — 저장 전 값). null 이면 템플릿 코드로 찾는다.
      */
     public Map<String, Object> masters(Map<String, Object> quote, Object conditionSet) {
+        return masters(quote, conditionSet, null);
+    }
+
+    /**
+     * @param payPlan 결제 방안 표를 넣을지 직접 지정한다(템플릿 화면 — 저장 전 값). null 이면 견적의 템플릿 설정(has_pay_plan)을 따른다.
+     */
+    public Map<String, Object> masters(Map<String, Object> quote, Object conditionSet, Object payPlan) {
         Map<String, Object> m = new LinkedHashMap<>();
         // 임금단가표 — 견적일 연도 우선, 없으면 active 연도
         String qd = str(quote.get("quote_date"));
@@ -85,12 +92,13 @@ public class QuoteHtml {
             Map<String, Object> sol = db.first("SELECT name FROM sq_solutions WHERE code = ?", quote.get("solution"));
             if (sol != null) m.put("solutionName", sol.get("name"));
         }
+        // 템플릿 설정 — 견적조건 세트 · 결제 방안 포함
+        Map<String, Object> tpl = Rows.truthy(quote.get("template_code"))
+                ? db.first("SELECT condition_set, has_pay_plan FROM sq_quote_templates WHERE code = ?", quote.get("template_code")) : null;
+        m.put("payPlan", payPlan != null ? Rows.truthy(payPlan) : tpl != null && Rows.truthy(tpl.get("has_pay_plan")));
         // 견적조건 — 저장된 conditions 가 없을 때 쓴다
         Object set = conditionSet;
-        if (!Rows.truthy(set) && Rows.truthy(quote.get("template_code"))) {
-            Map<String, Object> tpl = db.first("SELECT condition_set FROM sq_quote_templates WHERE code = ?", quote.get("template_code"));
-            set = tpl == null ? null : tpl.get("condition_set");
-        }
+        if (!Rows.truthy(set) && tpl != null) set = tpl.get("condition_set");
         if (Rows.truthy(set)) {
             List<Object> lines = new ArrayList<>();
             for (Map<String, Object> r : db.query("SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no", set)) lines.add(r.get("text"));
@@ -193,8 +201,8 @@ public class QuoteHtml {
             body.append(blockTable(b, blockDefs, mark, extra)).append('\n');
         }
 
-        // SaaS · Private Cloud — 클라우드서비스 결제 방안 (실측 SaaS 하단)
-        String payPlan = monthlyTotal != 0 || monthlySub != 0 ? payPlan(solName, onetimeTotal, monthlyTotal) : "";
+        // 클라우드서비스 결제 방안 — 템플릿에서 '결제 방안 포함' 을 켠 견적만 (실측 SaaS · Private Cloud 하단)
+        String payPlan = Rows.truthy(masters.get("payPlan")) ? payPlan(solName, onetimeTotal, monthlyTotal) : "";
 
         StringBuilder condHtml = new StringBuilder();
         for (String c : conds) condHtml.append("<tr><td>-. ").append(esc(c)).append("</td></tr>");
