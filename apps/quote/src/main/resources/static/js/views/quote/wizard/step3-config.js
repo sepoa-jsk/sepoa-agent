@@ -390,9 +390,21 @@ export async function renderStep3(root, state, wiz) {
       repaint();
     };
 
+    // 블록 순서 — 견적서에 찍히는 순서
+    const all = wiz.get().blocks;
+    const at = all.indexOf(b);
+    const move = (d) => {
+      const j = at + d;
+      if (j < 0 || j >= all.length) return;
+      [all[at], all[j]] = [all[j], all[at]];
+      repaint();
+      document.getElementById('blk-' + b.block_code)?.scrollIntoView({ block: 'nearest' });
+    };
     const head = h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ ' + b.name),
+      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${at + 1}. ${b.name}`),
       b.recurring ? h('span', { class: 'badge badge-yellow' }, '월정액') : null,
+      h('button', { class: 'ss-btn ss-btn--gridrow', style: 'margin-left:8px', disabled: at <= 0, title: '위로', onclick: () => move(-1) }, '▲ 위로'),
+      h('button', { class: 'ss-btn ss-btn--gridrow', disabled: at >= all.length - 1, title: '아래로', onclick: () => move(1) }, '▼ 아래로'),
       h('div', { class: 'ss-detailbar__spacer' }),
       gbtn('행추가', addRow), gbtn(isLabor ? '직무 선택' : '품목 선택', pickRows),
       isLabor ? null : gbtn('엑셀 붙여넣기', () => pasteInto(b, rows, repaint)),
@@ -415,7 +427,7 @@ export async function renderStep3(root, state, wiz) {
       h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
       tbody);
 
-    const card = h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' }, head,
+    const card = h('div', { class: 'card', id: 'blk-' + b.block_code, style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' }, head,
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' }, table));
     // 셋업비용 등 비-LABOR 블록의 인력 행은 금액이 아니라 인력투입계획 부록용 공수 배분 — 4단계(인건비)에서 고친다
     if (!isLabor && b.labor && b.labor.length) {
@@ -490,45 +502,46 @@ export async function renderStep3(root, state, wiz) {
     return card;
   }
 
-  // 블록 추가 — 직접 작성은 여기서 블록부터 만든다. 템플릿을 불러온 견적도 블록을 더하거나 뺄 수 있다
-  function addBlockBar() {
-    const sel = h('select', { class: 'select', style: 'width:240px' });
-    const btn = h('button', { class: 'btn btn-sm btn-primary' }, '블록 추가');
+  // 견적 구성 줄 — 3단계 맨 위. 지금 블록 순서(번호 · 이름 · 소계)를 한눈에 보이고, 블록을 더한다.
+  // 블록 순서가 견적서에 찍히는 순서다. 순서 바꾸기는 각 블록 머리의 ▲ ▼ (또는 이 줄의 칩을 누르면 그 블록으로 간다).
+  function blockBar() {
+    const blocks = wiz.get().blocks;
+    const sel = h('select', { class: 'ss-select', style: 'width:220px' });
+    const btn = h('button', { class: 'ss-btn ss-btn--save' }, '블록 추가');
     blockDefs().then((defs) => {
-      const have = new Set(wiz.get().blocks.map((b) => b.block_code));
+      const have = new Set(blocks.map((x) => x.block_code));
       const opts = defs.filter((d) => d.code !== 'SUMMARY' && !have.has(d.code));
-      sel.replaceChildren(...opts.map((d) => h('option', { value: d.code }, `${d.name}${d.recurring ? ' (월)' : ''}`)));
+      sel.replaceChildren(...(opts.length ? opts.map((d) => h('option', { value: d.code }, `${d.name}${d.recurring ? ' (월)' : ''}`))
+        : [h('option', { value: '' }, '더할 블록이 없습니다')]));
       btn.disabled = !opts.length;
     });
     btn.addEventListener('click', async () => {
       const d = (await blockDefs()).find((x) => x.code === sel.value);
       if (!d) return;
-      const isLaborBlock = d.code === 'LABOR';
-      const blocks = wiz.get().blocks;
-      blocks.push({ block_code: d.code, name: d.name, recurring: !!d.recurring, ...(isLaborBlock ? { labor: [] } : { items: [] }) });
-      // 블록 정의 순서대로
-      blocks.sort((x, y) => (blockDefsCache.findIndex((q) => q.code === x.block_code)) - (blockDefsCache.findIndex((q) => q.code === y.block_code)));
+      // 새 블록은 맨 아래에 붙인다 — 자리는 ▲ ▼ 로 옮긴다
+      wiz.get().blocks.push({ block_code: d.code, name: d.name, recurring: !!d.recurring, ...(d.code === 'LABOR' ? { labor: [] } : { items: [] }) });
       repaintLeft();
+      document.getElementById('blk-' + d.code)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    const empty = !wiz.get().blocks.length;
-    return h('div', { class: 'card', style: 'margin-bottom:12px' },
-      h('div', { class: 'card-b', style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' },
-        h('span', { style: 'font-size:12.5px;color:var(--text-2)' }, empty
-          ? '직접 작성 — 견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 등)을 먼저 추가하세요.'
-          : '블록 추가'), sel, btn));
+    const chips = blocks.map((x, i) => h('button', {
+      class: 'ss-chip', style: 'cursor:pointer;border:1px solid #DCE3EC;background:#F8FAFC',
+      title: '이 블록으로 가기', onclick: () => document.getElementById('blk-' + x.block_code)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    }, `${i + 1}. ${x.name}`));
+    return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap;gap:8px' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적 구성'),
+        blocks.length
+          ? h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, ...chips)
+          : h('span', { class: 'ss-detailbar__note' }, '견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 · 개발인건비 등)을 먼저 추가하세요.'),
+        h('div', { class: 'ss-detailbar__spacer' }), sel, btn));
   }
 
   function repaintLeft() {
     const c = recalcBlocks(wiz.get());
     left.replaceChildren();
+    left.appendChild(blockBar());
     for (const b of wiz.get().blocks) left.appendChild(blockCard(b, repaintLeft));
-    left.appendChild(addBlockBar());
-    left.appendChild(h('div', { class: 'card', style: 'margin-bottom:12px' },
-      h('div', { class: 'card-h' }, h('h2', {}, '옵션'), h('span', { class: 'sub' }, '작업 11~13 이후 연동')),
-      h('div', { class: 'card-b' },
-        h('div', { class: 'banner inf' }, h('div', {},
-          h('b', {}, '옵션 라인 자동 생성은 아직 없습니다'),
-          '서버이중화·계열사 추가 등은 규칙 마스터(sq_mst_rule)가 들어오는 작업 13 이후 연동됩니다. 지금은 항목을 직접 추가하세요.')))));
+    // 옵션(서버이중화 · 계열사 추가 등 규칙 마스터 연동) 안내 칸은 뺐다 — 기능이 생기면 그때 넣는다
     // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
     left.appendChild(payPlanCard());
     left.appendChild(condCard());
