@@ -29,7 +29,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
  * 가격정책 품목 — Node {@code routes/pricing.js} 이식. 명세 2-4절 (#12~#16).
  *
  * <p>Node 의 {@code GET /api/master}(#11) 는 마스터 라우터에 가려 한 번도 실행되지 않으므로 옮기지 않는다(명세 3장 A).
- * 지금 화면은 이 창구들을 부르지 않는다 — 타시스템 연계·관리용이다.
+ * 가격정책 화면의 '견적 품목' 탭(pricing.js)이 목록 · 생성 · 수정 · 사용 중지에 쓴다. 코드는 수정 대상이 아니다(템플릿이 참조).
  */
 @RestController
 @RequestMapping("/api/pricing")

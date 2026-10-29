@@ -2,11 +2,49 @@ import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
 
-// 가격정책 = 모듈 단가(sq_modules.base_price) + 직무 단가(sq_labor_roles.base_price).
-// L1 인라인 편집형 (2026-10-29 화면 재작성) — 화면 내 탭 상자 + 머리(솔루션) + 행추가/행삭제/저장 + 편집 그리드.
+// 가격정책 = 견적 품목(sq_price_items) + 모듈 단가(sq_modules.base_price) + 직무 단가(sq_labor_roles.base_price).
+// L1 인라인 편집형 (2026-10-29 화면 재작성) — 화면 내 탭 상자 + 머리(솔루션 등) + 행추가/행삭제/저장 + 편집 그리드.
 // 등록·수정·삭제는 팝업 없이 그리드에서. 동작은 마스터 관리와 같다(선택 60px · 칸 너비 조절 · 머리 정렬 · 콤마 입력).
 // std_mm(표준투입 M/M)·비고는 보내지 않으므로 기존 값이 그대로 남는다. 네고율은 마스터에서 관리한다.
+//
+// 견적 품목 탭은 견적 템플릿 · 견적 작성이 단가를 찾는 표다(템플릿 품목코드 → 이 표의 코드). /api/pricing 창구를 쓴다.
+//   이미 있는 품목의 코드는 고칠 수 없다 — 템플릿과 저장된 견적이 코드로 참조한다. 바꾸려면 새 품목을 만들고 템플릿에서 다시 고른다.
+const DEPLOYMENTS = [['ONPREM', '구축형(공통)'], ['ONPREM_LUMP', '구축형 일시불'], ['ONPREM_INSTALL', '구축형 분납'], ['SAAS', 'SaaS'], ['PCLOUD', 'Private Cloud']];
+const PRICING_TYPES = [['FIXED', '고정'], ['DISCOUNT', '할인율'], ['BAND', '건수 밴드'], ['MM', '공수(M/M)']];
+
+// 탭마다 읽기·쓰기 창구. 기본은 마스터 관리 창구(/api/master/{type})
+const masterApi = (type) => ({
+  list: (st, scoped) => api.masterList(type, scoped ? st.solution : undefined).then((r) => r.rows || []),
+  create: (row) => api.masterCreate(type, row),
+  update: (id, row) => api.masterUpdate(type, id, row),
+  remove: (id) => api.masterDelete(type, id),
+});
+const itemApi = {
+  list: (st) => api.pricing(st.solution, st.deployment || undefined).then((r) => r.items || []),
+  create: (row) => api.createPriceItem(row),
+  update: (id, row) => api.updatePriceItem(id, row),
+  remove: (id) => api.deletePriceItem(id), // 사용 중지(active=0)
+};
+
 const TABS = [
+  {
+    key: 'items', label: '견적 품목', api: itemApi, scoped: true, deploymentFilter: true,
+    note: '견적 템플릿 · 견적 작성이 이 품목의 기준단가를 씁니다. 이미 있는 품목의 코드는 템플릿이 참조하므로 고칠 수 없습니다.',
+    fields: [
+      { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, lockOnEdit: true, width: 170 },
+      { key: 'deployment', label: '구축형태', type: 'select', options: DEPLOYMENTS, required: true, width: 130 },
+      { key: 'category', label: '구분', type: 'text', width: 170 },
+      { key: 'name', label: '품목명', type: 'text', required: true, width: 200 },
+      { key: 'spec', label: '세부기능', type: 'text', width: 300 },
+      { key: 'pricing_type', label: '가격방식', type: 'select', options: PRICING_TYPES, required: true, width: 110 },
+      { key: 'unit', label: '단위', type: 'text', width: 90 },
+      { key: 'base_price', label: '기준단가 (원)', type: 'money', width: 140 },
+      { key: 'qty_default', label: '기본수량', type: 'number', width: 90 },
+      { key: 'recurring', label: '월', type: 'checkbox', width: 50 },
+      { key: 'sort', label: '정렬', type: 'number', width: 70 },
+    ],
+    defaults: (st) => ({ deployment: st.deployment || 'ONPREM', pricing_type: 'FIXED', qty_default: 1 }),
+  },
   {
     key: 'modules', label: '솔루션 모듈 단가', type: 'modules', scoped: true,
     fields: [
@@ -36,7 +74,7 @@ export async function renderPricing(root) {
   const solutions = master.solutions || [];
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
 
-  const state = { tab: TABS[0].key, solution: defaultSolution };
+  const state = { tab: TABS[0].key, solution: defaultSolution, deployment: '' };
   let rows = [];     // [{ orig, form, isNew, checked, seq }]
   let deleted = [];  // 행삭제한 기존 행 — 저장할 때 사용 중지(active=0)
   let sort = { key: null, dir: null };
@@ -79,6 +117,14 @@ export async function renderPricing(root) {
           state.solution = e.target.value; load();
         } }, ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
     }
+    if (t.deploymentFilter) {
+      fields.appendChild(h('div', { class: 'ss-field' },
+        h('select', { class: 'ss-select', 'aria-label': '구축형태', onchange: (e) => {
+          if (isDirty()) { toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err'); e.target.value = state.deployment; return; }
+          state.deployment = e.target.value; load();
+        } }, h('option', { value: '' }, '전체 구축형태'),
+        ...DEPLOYMENTS.map(([v, l]) => h('option', { value: v, selected: v === state.deployment }, l)))));
+    }
     pane.appendChild(h('div', { class: 'ss-edithead', style: 'margin-top:16px' }, fields,
       h('div', { class: 'ss-actions' },
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
@@ -114,7 +160,7 @@ export async function renderPricing(root) {
     rows = []; deleted = [];
     clear(tbody).appendChild(emptyRow('불러오는 중...'));
     try {
-      const { rows: list } = await api.masterList(t.type, t.scoped ? state.solution : undefined);
+      const list = await (t.api || masterApi(t.type)).list(state, t.scoped);
       // 사용 중지한 행은 보이지 않는다 (마스터 관리와 같은 규칙)
       rows = (list || []).filter((r) => r.active).map((r) => ({ orig: r, form: toForm(t, r), isNew: false, checked: false, seq: seq++ }));
       applySort();
@@ -128,6 +174,7 @@ export async function renderPricing(root) {
     const t = current();
     const form = Object.fromEntries(t.fields.map((f) => [f.key,
       f.type === 'checkbox' ? 0 : f.key === 'sort' ? rows.length + 1 : null]));
+    Object.assign(form, t.defaults ? t.defaults(state) : {}); // 지금 고른 구축형태 등으로 미리 채운다
     rows.push({ orig: null, form, isNew: true, checked: false, seq: seq++ });
     paintRows();
     tbody.lastElementChild?.querySelector('input:not([type=checkbox])')?.focus();
@@ -157,7 +204,7 @@ export async function renderPricing(root) {
   function applySort() {
     const f = sort.key && current().fields.find((x) => x.key === sort.key);
     if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
-    const num = f.type !== 'text';
+    const num = f.type !== 'text' && f.type !== 'select';
     const val = (r) => { const v = r.form[f.key]; return v == null || v === '' ? null : num ? Number(v) : String(v); };
     const dir = sort.dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
@@ -175,12 +222,23 @@ export async function renderPricing(root) {
     rows.forEach((r) => {
       const tr = h('tr', { class: r.isNew ? 'is-new' : null },
         h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
-      t.fields.forEach((f) => tr.appendChild(cellEl(f, r.form)));
+      t.fields.forEach((f) => tr.appendChild(cellEl(f, r)));
       tbody.appendChild(tr);
     });
   }
 
-  function cellEl(f, form) {
+  function cellEl(f, r) {
+    const form = r.form;
+    if (f.type === 'select') {
+      const opts = f.options.some(([v]) => v === form[f.key]) || form[f.key] == null ? f.options : [[form[f.key], form[f.key]], ...f.options];
+      return h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': f.label,
+        onchange: (e) => { form[f.key] = e.target.value; } },
+      ...opts.map(([v, l]) => h('option', { value: v, selected: v === form[f.key] }, l))));
+    }
+    // 잠긴 칸(이미 있는 품목의 코드)은 글자만 보인다
+    if (f.lockOnEdit && !r.isNew) {
+      return h('td', { class: 'ss-cell--link', style: 'text-align:center', title: '템플릿이 참조하는 코드라 고칠 수 없습니다' }, form[f.key] ?? '');
+    }
     if (f.type === 'checkbox') {
       return h('td', {}, h('input', { type: 'checkbox', checked: !!form[f.key], 'aria-label': f.label,
         onchange: (e) => { form[f.key] = e.target.checked ? 1 : 0; } }));
@@ -201,7 +259,7 @@ export async function renderPricing(root) {
     t.fields.forEach((f) => {
       let v = form[f.key];
       if (f.type === 'checkbox') v = v ? 1 : 0;
-      else if (f.type !== 'text') v = v === '' || v == null ? null : Number(v);
+      else if (f.type !== 'text' && f.type !== 'select') v = v === '' || v == null ? null : Number(v);
       else v = v == null ? '' : String(v).trim();
       if (f.required && (v === '' || v == null)) missing = missing || f.label;
       payload[f.key] = v;
@@ -240,9 +298,10 @@ export async function renderPricing(root) {
     }))) return;
     let done = 0;
     try {
-      for (const o of deleted) { await api.masterDelete(t.type, o.id); done++; }
-      for (const r of creates) { await api.masterCreate(t.type, payloadOf(t, r.form, true).payload); done++; }
-      for (const r of updates) { await api.masterUpdate(t.type, r.orig.id, payloadOf(t, r.form, false).payload); done++; }
+      const io = t.api || masterApi(t.type);
+      for (const o of deleted) { await io.remove(o.id); done++; }
+      for (const r of creates) { await io.create(payloadOf(t, r.form, true).payload); done++; }
+      for (const r of updates) { await io.update(r.orig.id, payloadOf(t, r.form, false).payload); done++; }
       toast(`저장되었습니다. (${done}건)`, 'ok');
       store.master = null; // 견적 작성 화면이 새 단가를 다시 받게
     } catch (err) {

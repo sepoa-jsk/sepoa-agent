@@ -60,6 +60,9 @@ export const api = {
   master: () => req('GET', '/api/master'),
   pricing: (solution, deployment, all) =>
     req('GET', `/api/pricing${qs({ solution, deployment, all: all ? '1' : undefined })}`),
+  createPriceItem: (body) => req('POST', '/api/pricing/items', body),
+  updatePriceItem: (id, body) => req('PUT', `/api/pricing/items/${id}`, body),
+  deletePriceItem: (id) => req('DELETE', `/api/pricing/items/${id}`),
 
   // 견적
   calculate: (payload) => req('POST', '/api/quotes/calculate', payload),
