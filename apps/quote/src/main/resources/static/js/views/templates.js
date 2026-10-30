@@ -373,7 +373,7 @@ export async function renderTemplates(root) {
       return;
     }
     body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
-      h('span', { class: 'ss-detailbar__note' }, '견적 작성 3단계(구성)와 같은 모양입니다. 여기 넣은 모듈 · 수량 · 인원·건수가 견적 작성에서 기본으로 들어갑니다. 단가는 가격정책 기준단가입니다.')));
+      h('span', { class: 'ss-detailbar__note' }, '견적 작성 3단계(구성)와 같은 모양입니다. 여기 넣은 모듈 · 수량 · 인원·건수가 견적 작성에서 기본으로 들어가고, 단가 · 금액은 견적 작성에서 가격정책으로 채워집니다.')));
     const at = blocks.findIndex((b) => b.code === code);
     const b = at >= 0 ? blocks[at] : { code, name: `${(blocksDef.find((x) => x.code === code) || {}).name || code} (블록 꺼짐 — 블록을 다시 켜거나 행을 지우세요)` };
     body.appendChild(saasBlockCard(b, at >= 0 ? at + 1 : '-', prices, at >= 0 ? null : cur.items.filter((r) => r.block_code === code)));
@@ -442,10 +442,8 @@ export async function renderTemplates(root) {
     const rows = only || cur.items.filter((r) => r.block_code === b.code);
     const hasBand = rows.some((r) => bandVariants(prices.find((x) => x.code === r.item_code)));
     const cols = [['선택', 44], ['구분', 90], ['모듈', 220], ['세부기능', 320], ...(hasBand ? [['인원·건수', 170]] : []),
-      ['수량', 76], ['단위', 72], ['기준단가 (원)', 122], ['금액 (원)', 130], ['품목코드', 140]];
-    const subTd = h('td', { class: 'ss-cell--amount', style: 'text-align:right' });
-    const amounts = new Map();
-    const paintSub = () => { subTd.textContent = won([...amounts.values()].reduce((a, v) => a + v, 0)); };
+      ['수량', 76], ['단위', 72], ['품목코드', 140]];
+    // 템플릿에는 금액(기준단가 · 금액 · 소계)을 두지 않는다(2026-10-30 사용자 요청) — 단가 · 금액은 견적 작성에서 가격정책으로 채운다
 
     const head = h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
       h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. ${b.name}`),
@@ -466,23 +464,6 @@ export async function renderTemplates(root) {
       const p = prices.find((x) => x.code === r.item_code) || (priceCache[cur.form.solution] || []).find((x) => x.code === r.item_code);
       if (p) r.group = policyGroup(p); // 구분은 품목에서 — 견적 작성과 같은 규칙
       const variants = bandVariants(p);
-      const priceTd = h('td', { style: 'text-align:right' });
-      const amtTd = h('td', { class: 'ss-cell--amount', style: 'text-align:right' });
-      const paintPrice = () => {
-        let price = p && p.base_price != null ? Number(p.base_price) : null;
-        priceTd.title = ''; priceTd.style.color = '';
-        if (variants) {
-          const v = bandOf(variants, r.band_key || 'USER', num(r.band_qty, 1));
-          price = v ? Number(v.price) : null;
-          priceTd.title = v ? `${v.label} 구간 월 금액` : '가격정책에 맞는 구간이 없습니다';
-          if (!v) priceTd.style.color = 'var(--ss-red, #FF5252)';
-        }
-        priceTd.textContent = price != null ? won(price) : (variants ? '구간 없음' : '');
-        const amt = (price || 0) * num(r.qty_default, 0);
-        amounts.set(r, amt);
-        amtTd.textContent = won(amt);
-        paintSub();
-      };
       // 모듈 — 고른 구분의 SaaS 품목. 목록에 없는 지금 값(미등록 코드 등)도 한 줄로 남긴다
       const inGroup = prices.filter((x) => !r.group || policyGroup(x) === r.group);
       // 서비스 이용료(S2C · S2P …)는 가격정책 용어대로 '서비스 이용료' 한 줄 — 어느 서비스인지는 견적 작성 1단계에서 고른다.
@@ -498,10 +479,10 @@ export async function renderTemplates(root) {
       const bandTd = variants
         ? h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' },
           h('select', { class: 'ss-cellinput', 'aria-label': '인원·건수 구분', style: 'text-align:center;width:72px;flex:none',
-            onchange: (e) => { r.band_key = e.target.value; bandUnit.textContent = BAND_KINDS[r.band_key][1]; paintPrice(); } },
+            onchange: (e) => { r.band_key = e.target.value; bandUnit.textContent = BAND_KINDS[r.band_key][1]; } },
           ...Object.entries(BAND_KINDS).filter(([k]) => variants.some((v) => bandKey(v) === k))
             .map(([k, [label]]) => h('option', { value: k, selected: (r.band_key || 'USER') === k }, label))),
-          numInput(r.band_qty ?? 1, (v) => { r.band_qty = v === '' ? null : Number(v); paintPrice(); },
+          numInput(r.band_qty ?? 1, (v) => { r.band_qty = v === '' ? null : Number(v); },
             { class: 'ss-cellinput', 'aria-label': '인원·건수', style: 'text-align:right;flex:1;min-width:0' }),
           bandUnit))
         : h('td', {});
@@ -516,19 +497,12 @@ export async function renderTemplates(root) {
         cellSelect('모듈', opts, r.item_code, (v) => { r.item_code = v; r.band_key = null; r.band_qty = null; paintTabs(); }),
         h('td', { style: 'text-align:left;white-space:pre-line;color:var(--ss-ink-2)' }, p ? p.spec || '' : ''),
         ...(hasBand ? [bandTd] : []),
-        cellNum('수량', r.qty_default, (v) => { r.qty_default = v; paintPrice(); }),
+        cellNum('수량', r.qty_default, (v) => { r.qty_default = v; }),
         h('td', { style: 'text-align:center' }, p ? p.unit || '' : ''),
-        priceTd, amtTd,
         h('td', { class: 'ss-cell--link' }, r.item_code || ''));
-      paintPrice();
       tbody.appendChild(tr);
     }
     if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty', style: 'height:60px' }, '[행추가] 로 모듈을 넣으세요.')));
-    // 소계 행 — 견적 작성과 같은 자리
-    const amtIdx = cols.findIndex(([t]) => t.startsWith('금액'));
-    paintSub();
-    tbody.appendChild(h('tr', { style: 'background:#F4F9E3;font-weight:600' },
-      h('td', { colspan: amtIdx, style: 'text-align:center' }, `${b.name} 소계${b.recurring ? ' (월)' : ''}`), subTd, h('td', {})));
 
     const width = cols.reduce((a, [, w]) => a + w, 0);
     const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${width}px;min-width:100%` },
