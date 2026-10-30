@@ -78,18 +78,31 @@ function tplCards(list, state, root, wiz) {
 }
 
 // 직접 작성 — 템플릿 없이 솔루션 · 구축형태만 정하고(→ 2단계 기본정보), 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
-function manualCard(state, root, wiz) {
-  const sols = (store.master && store.master.solutions) || [];
+// 솔루션 · 구축형태 상자는 아래 템플릿 선택도 거른다 — 바꾸면 그 조합의 템플릿만 보인다
+function manualCard(state, root, wiz, sols, sol) {
   const on = !!state.type.manual;
   const solSel = h('select', { class: 'select', style: 'width:160px' },
-    ...sols.map((s) => h('option', { value: s.code, selected: s.code === (state.applied && state.applied.solution) }, s.name || s.code)));
+    ...sols.map((s) => h('option', { value: s.code, selected: s.code === sol }, s.name || s.code)));
   const depSel = h('select', { class: 'select', style: 'width:170px' },
     ...Object.entries(DEP_LABEL).map(([v, l]) => h('option', { value: v, selected: v === state.type.deployment }, l)));
+  // 고른 템플릿이 새 솔루션 · 구축형태와 맞지 않으면 템플릿과 구성을 비운다
+  const reset = { template_code: null, manual: false };
+  const cleared = { blocks: [], applied: null, conds: [], pay_plan: null };
+  solSel.addEventListener('change', () => {
+    if (wiz.readOnly) return;
+    wiz.patch({ type: { solution: solSel.value, ...reset }, ...cleared });
+    renderStep2(root, wiz.get(), wiz);
+  });
+  depSel.addEventListener('change', () => {
+    if (wiz.readOnly) return;
+    wiz.patch({ type: { quote_type: 'BUILD', deployment: depSel.value, ...reset }, ...cleared });
+    renderStep2(root, wiz.get(), wiz);
+  });
   const start = h('button', { class: 'btn btn-primary' }, on ? '직접 작성 중 — 다시 적용' : '직접 작성으로 시작');
   start.addEventListener('click', () => {
     const changed = !on || state.type.deployment !== depSel.value || (state.applied && state.applied.solution) !== solSel.value;
     wiz.patch({
-      type: { quote_type: 'BUILD', deployment: depSel.value, template_code: null, manual: true },
+      type: { quote_type: 'BUILD', deployment: depSel.value, template_code: null, manual: true, solution: solSel.value },
       applied: { solution: solSel.value, brand: '', has_pay_plan: false },
       hasLaborPlan: false,
       ...(changed ? { blocks: [], conds: [] } : {}),
@@ -104,8 +117,13 @@ function manualCard(state, root, wiz) {
 }
 
 export async function renderStep2(root, state, wiz) {
+  const loaded = await loadTemplates();
+  const sols = ((await store.getMaster()) || {}).solutions || [];
   root.replaceChildren();
-  const all = await loadTemplates();
+  // 고른 솔루션 — 저장값 → 적용된 템플릿 → 첫 솔루션. 템플릿 · 유형 카드는 이 솔루션 것만
+  const sol = state.type.solution || (state.applied && state.applied.solution) || (sols[0] && sols[0].code) || null;
+  const all = sol ? loaded.filter((t) => t.solution === sol) : loaded;
+  const solName = (sols.find((s) => s.code === sol) || {}).name || sol || '';
 
   // 실제 존재하는 조합만 (템플릿 없는 조합은 선택 불가)
   const combos = [];
@@ -122,7 +140,7 @@ export async function renderStep2(root, state, wiz) {
   const typeCard = h('div', { class: 'card', style: 'margin-bottom:14px' },
     h('div', { class: 'card-h' },
       h('h2', {}, '견적 유형'),
-      h('span', { class: 'sub' }, '템플릿이 등록된 조합만 선택할 수 있습니다'),
+      h('span', { class: 'sub' }, `${solName ? solName + ' — ' : ''}템플릿이 등록된 조합만 선택할 수 있습니다`),
       h('span', { class: 'sp' }),
       h('span', { class: 'badge badge-gray' }, '유지보수·추가개발은 Phase 6')),
     h('div', {
@@ -130,16 +148,17 @@ export async function renderStep2(root, state, wiz) {
       style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px',
     }, ...comboCards(combos, state, root, wiz)));
   root.appendChild(typeCard);
-  root.appendChild(manualCard(state, root, wiz));
+  root.appendChild(manualCard(state, root, wiz, sols, sol));
 
   if (state.type.deployment) {
     const list = all.filter((x) => x.quote_type === state.type.quote_type && x.deployment === state.type.deployment);
     root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'card-h' },
         h('h2', {}, '템플릿 선택'),
-        h('span', { class: 'sub' }, `${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종`)),
+        h('span', { class: 'sub' }, `${solName ? solName + ' · ' : ''}${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종`)),
       h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
-        ...tplCards(list, state, root, wiz))));
+        ...(list.length ? tplCards(list, state, root, wiz)
+          : [h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')]))));
   }
 
   root.appendChild(h('div', { class: 'card' },

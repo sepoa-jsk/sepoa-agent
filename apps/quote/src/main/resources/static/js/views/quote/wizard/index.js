@@ -55,7 +55,7 @@ function blankState() {
       // 마스터 연동 예정 (작업 13) — 화면에는 비활성으로 노출한다
       company_class: null, channel: null,
     },
-    type: { quote_type: 'BUILD', deployment: null, template_code: null },
+    type: { quote_type: 'BUILD', deployment: null, template_code: null, solution: null }, // solution — 1단계에서 고른 솔루션(템플릿을 거른다)
     blocks: [], applied: null, laborYear: null, hasLaborPlan: false,
     round_unit: 100000,
     discount: { mode: 'TARGET', value: null },          // null = DC 미적용
@@ -90,7 +90,7 @@ function fromQuote(q, tpl, tplConds) {
     purpose: memo.purpose || '', phone: memo.phone || '', email: memo.email || '',
     pay_terms: memo.pay_terms && memo.pay_terms !== '-' ? memo.pay_terms : '',
   });
-  st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code, manual: !q.template_code };
+  st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code, manual: !q.template_code, solution: q.solution };
   st.blocks = (q.blocks || []).map((b) => ({
     block_code: b.block_code, name: b.title, recurring: !!b.recurring,
     items: (b.items || []).map((it) => ({
@@ -248,7 +248,7 @@ export async function renderWizard(root, opts = {}) {
         if (!ok) return;
       }
       state = deepMerge(state, {
-        type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code },
+        type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code, solution: tpl.solution },
         ...appliedPatch(d),
         discount: { mode: 'TARGET', value: null }, monthly_discount: { mode: 'TARGET', value: null },
         pay_plan: null, // 새 템플릿의 결제 방안 설정을 따른다
