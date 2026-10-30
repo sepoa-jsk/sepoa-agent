@@ -194,7 +194,7 @@ export async function renderTemplates(root) {
         if (on) condSel.value = f.condition_set;
       }, '견적조건'));
     // 종류 — 기본 모듈 · 인력이 없으면 구조만(블록 틀만), 있으면 데이터 포함. 저장 값이 아니라 내용으로 정해진다
-    const kindText = () => (cur.items.length || cur.labor.length ? '데이터 포함 — 기본 모듈 · 인력까지 채워져 있습니다' : '구조만 — 블록 틀만 있고 모듈 · 인력은 견적 작성에서 넣습니다');
+    const kindText = () => (cur.items.length || cur.labor.length ? '데이터 포함 — 기본 모듈 · 인력까지 채워져 있습니다' : '구조만 — 블록 틀만 있고 모듈 · 인력 · 견적조건 문구는 견적 작성에서 넣습니다');
     kindEl = h('div', { style: 'display:flex;align-items:center;min-height:var(--ss-ctrl-h);font-size:13px;color:var(--ss-ink-2)' }, kindText());
     kindEl.refresh = () => { kindEl.textContent = kindText(); };
 
@@ -387,7 +387,8 @@ export async function renderTemplates(root) {
       const r = await api.previewQuote({
         blocks: previewBlocks(),
         header: { blank: true, template_code: f.code || null, condition_set: f.condition_set || null, pay_plan: f.has_pay_plan ? 1 : 0,
-          ...(f.condition_set ? {} : { conditions: [] }),
+          // 견적조건을 뺐거나 구조만 템플릿(문구 빈칸으로 시작)이면 견적조건 칸 없이 그린다
+          ...(f.condition_set && (cur.items.length || cur.labor.length) ? {} : { conditions: [] }),
           solution: f.solution, brand: f.brand || null, deployment: f.deployment, quote_type: f.quote_type || 'BUILD' },
         round_unit: 100000,
       });

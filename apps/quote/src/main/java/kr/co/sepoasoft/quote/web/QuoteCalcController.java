@@ -143,7 +143,9 @@ public class QuoteCalcController {
         }
 
         List<Object> conditions = new ArrayList<>();
-        if (Rows.truthy(tpl.get("condition_set"))) {
+        // 구조만 템플릿(기본 모듈 · 인력 없음)은 견적조건 블록만 두고 문구는 빈칸으로 시작한다(2026-10-30 사용자 결정)
+        boolean structOnly = titems.isEmpty() && tlabor.isEmpty();
+        if (Rows.truthy(tpl.get("condition_set")) && !structOnly) {
             for (Map<String, Object> r : db.query(
                     "SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no", tpl.get("condition_set"))) {
                 conditions.add(r.get("text"));
@@ -163,7 +165,9 @@ public class QuoteCalcController {
         template.put("has_labor_plan", laborPlan);
         template.put("include_maintenance", Rows.truthy(tpl.get("include_maintenance")));
         template.put("include_component", Rows.truthy(tpl.get("include_component")));
-        template.put("has_pay_plan", Rows.truthy(tpl.get("has_pay_plan"))); // 결제 방안 포함(V5) — 견적 작성 3단계가 결제 방안 칸을 보여 준다
+        template.put("has_pay_plan", Rows.truthy(tpl.get("has_pay_plan")));
+        template.put("has_conditions", Rows.truthy(tpl.get("condition_set"))); // 견적조건 블록을 넣는가 — 문구가 비어도 블록은 있다
+        template.put("kind", structOnly ? "STRUCT" : "DATA"); // 결제 방안 포함(V5) — 견적 작성 3단계가 결제 방안 칸을 보여 준다
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("template", template);
