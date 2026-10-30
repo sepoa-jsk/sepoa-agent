@@ -62,13 +62,17 @@ export function renderStep5(root, state, wiz) {
   const left = h('div', { style: 'min-width:0' });
   root.appendChild(left);
 
-  // ── 좌: 요약 + 산출물 ──
+  // ── 요약 — 발행 · 내려받기 · 메일 버튼은 요약 머리 오른쪽(2026-10-30 사용자 요청 — 아래 '산출물' 칸은 없앰) ──
   const row = (k, v, strong) => h('div', { style: 'display:flex;justify-content:space-between;padding:7px 0;font-size:12.5px' },
     h('span', { style: 'color:var(--text-2)' }, k),
     h('span', { class: 'num', style: strong ? 'font-weight:700' : '' }, v));
 
+  const outBox = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' });
+  // 내려받기는 서버에 저장된 견적 기준이다 — 저장 전 견적은 끄고, 저장된 견적은 고친 내용을 저장해야 반영된다고 버튼 풍선말로 알린다
+  const savedNote = state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 발행(저장) 후 반영됩니다.' : '발행(저장) 후 내려받을 수 있습니다.';
   left.appendChild(h('div', { class: 'card', style: 'margin-bottom:12px' },
-    h('div', { class: 'card-h' }, h('h2', {}, '견적 요약')),
+    // 상세(읽기 전용)에서는 발행 · 내려받기 버튼을 두지 않는다 — 견적서는 위쪽 [견적서 보기] 에서 본다
+    h('div', { class: 'card-h' }, h('h2', {}, '견적 요약'), h('span', { class: 'sp' }), wiz.readOnly ? null : outBox),
     h('div', { class: 'card-b' },
       row('수신처', state.basic.customer_name || '-'),
       row('견적용도', state.basic.purpose || '-'),
@@ -85,20 +89,11 @@ export function renderStep5(root, state, wiz) {
       calc.monthly && calc.mdcAmt ? row('월 특별 DC (원)', '-' + won(calc.mdcAmt)) : null,
       calc.monthly ? row('월 사용료 (원)', won(calc.monthlyFinal), true) : null)));
 
-  const outBox = h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' });
-  // 내려받기는 서버에 저장된 견적 기준이다 — 저장 전 견적은 끄고, 저장된 견적은 고친 내용을 저장해야 반영된다고 알린다
-  const savedNote = h('div', { class: 'sub', style: 'padding:0 14px 12px;color:var(--text-3)' },
-    state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 발행(저장) 후 반영됩니다.' : '산출물은 발행(저장) 후 내려받을 수 있습니다.');
-  // 상세(읽기 전용)에서는 발행 · 산출물 칸을 두지 않는다 — 견적서는 위쪽 [견적서 보기] 에서 본다
-  if (!wiz.readOnly) left.appendChild(h('div', { class: 'card' },
-    h('div', { class: 'card-h' }, h('h2', {}, '산출물')),
-    outBox, savedNote));
-
   const publishBtn = h('button', { class: 'btn btn-primary' }, '발행 (저장)');
   publishBtn.disabled = errs.length > 0;
   const saved = { id: state.quoteId, quote_no: state.quoteNo };
-  const pdfBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
-  const xlsBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
+  const pdfBtn = h('button', { class: 'btn', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
+  const xlsBtn = h('button', { class: 'btn', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
   const mailBtn = h('button', { class: 'btn', disabled: !state.quoteId, onclick: () => wiz.mail() }, '메일 발송');
   outBox.appendChild(publishBtn); outBox.appendChild(pdfBtn); outBox.appendChild(xlsBtn); outBox.appendChild(mailBtn);
 
