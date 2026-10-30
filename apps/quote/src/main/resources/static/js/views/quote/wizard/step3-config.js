@@ -205,10 +205,22 @@ function dcPayload(dc) {
 
 // ── 템플릿 적용 ─────────────────────────────────────────────
 // apply-template 응답 → 위저드 상태 조각. 제안단가는 기준단가로 시작한다(템플릿 불러오기 창도 같이 쓴다).
+// SaaS 견적의 구분 = 가격정책 SaaS 기본정보의 항목(기본 / 부가 / 옵션 — 2026-10-30 사용자 요청).
+// 품목에서 정한다(가격정책 화면의 예전 항목 → 분류와 같은 규칙): 옵션(옵션모듈) → 옵션,
+// 셋업 · Poa-BiA · 인프라 · 연계 · 유지보수 · 커스터마이징 → 부가, 나머지(서비스 이용료) → 기본
+export const POLICY_GROUPS = ['기본', '부가', '옵션'];
+export function policyGroup(it) {
+  const t = `${it.category || ''} ${it.name || ''}`;
+  if (/옵션/.test(t)) return '옵션';
+  return /셋업|Poa-BiA|인프라|연계|유지보수|커스터마이징/i.test(t) ? '부가' : '기본';
+}
+const withPolicyGroup = (it) => ({ ...it, category: policyGroup(it) });
+
 export function appliedPatch(d) {
+  const saas = d.template && d.template.deployment === 'SAAS';
   const blocks = d.blocks.filter((b) => b.block_code !== 'SUMMARY').map((b) => ({
     ...b,
-    items: (b.items || []).map((it) => ({ ...it, proposed_price: it.base_price || 0 })),
+    items: (b.items || []).map((it) => ({ ...(saas ? withPolicyGroup(it) : it), proposed_price: it.base_price || 0 })),
     labor: (b.labor || []).map((l) => ({ ...l, proposed_price: l.base_price || 0, month_alloc: l.month_alloc || {} })),
   }));
   return {
@@ -341,6 +353,13 @@ export async function renderStep3(root, state, wiz) {
     const sel = h('td', {}, h('input', { type: 'checkbox', 'aria-label': '선택', checked: picked.has(r),
       onchange: (e) => { if (e.target.checked) picked.add(r); else picked.delete(r); } }));
     const proposed = money('proposed_price', 'background:var(--primary-weak);color:var(--primary);font-weight:600');
+    // SaaS 견적의 구분은 가격정책 항목(기본 / 부가 / 옵션)에서 고른다. 예전 값(서비스이용료 등)은 그대로 한 줄 더 보인다
+    const category = () => (wiz.get().type.deployment !== 'SAAS' ? txt('category')
+      : td(h('select', { class: 'ss-cellinput', 'aria-label': '구분', style: 'text-align:center',
+        onchange: (e) => { r.category = e.target.value; touched(); } },
+        ...(r.category ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
+        ...(r.category && !POLICY_GROUPS.includes(r.category) ? [h('option', { value: r.category, selected: true }, r.category)] : []),
+        ...POLICY_GROUPS.map((g) => h('option', { value: g, selected: r.category === g }, g)))));
     if (isLabor) {
       const roleBtn = h('button', { class: 'ss-cellinput', style: 'text-align:left;cursor:pointer', title: '노임단가에서 직무 선택' },
         r.role_code ? `${r.role_name || r.role_code} ▾` : '직무 선택 ▾');
@@ -359,7 +378,7 @@ export async function renderStep3(root, state, wiz) {
     }
     const variants = bands[r.item_code];
     if (!variants) {
-      return h('tr', {}, sel, txt('category'), txt('name'), td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
+      return h('tr', {}, sel, category(), txt('name'), td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
         money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
     }
     // 구간형 서비스 — 인원·건수 칸에서 [인원 / 건수] 를 고르고 숫자를 넣으면 구간 월 금액을 단가로 채운다. 수량 · 단위는 그대로
@@ -397,7 +416,7 @@ export async function renderStep3(root, state, wiz) {
     const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, r.band ? BAND_KINDS[r.band][1] : '');
     applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
     const bandCell = h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' }, bandSel, bandIn, bandUnit));
-    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
+    return h('tr', {}, sel, category(), txt('name'), td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
       base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
 
@@ -422,8 +441,9 @@ export async function renderStep3(root, state, wiz) {
       if (ex) { ex.qty = p.qty; updated++; continue; }
       const m = master[p.code];
       if (!m) unknown.push(p.code);
+      const saas = wiz.get().type.deployment === 'SAAS';
       rows.push({
-        item_code: p.code, category: (m && m.category) || null, name: (m && m.name) || p.code,
+        item_code: p.code, category: m ? (saas ? policyGroup(m) : m.category || null) : null, name: (m && m.name) || p.code,
         spec: (m && m.spec) || '', qty: p.qty, unit: (m && m.unit) || null,
         base_price: m && m.base_price != null ? Number(m.base_price) : null,
         proposed_price: m && m.base_price != null ? Number(m.base_price) : 0, amount: 0,
@@ -461,7 +481,7 @@ export async function renderStep3(root, state, wiz) {
       } else {
         const list = await pickItems({ solution: s0.applied && s0.applied.solution, deployment: ITEM_DEP[s0.type.deployment] || '' });
         if (!list.length) return;
-        list.forEach((i) => rows.push(itemRow(i)));
+        list.forEach((i) => rows.push(s0.type.deployment === 'SAAS' ? withPolicyGroup(itemRow(i)) : itemRow(i)));
         toast(`${list.length}개 품목을 넣었습니다.`, 'ok');
       }
       repaint();
