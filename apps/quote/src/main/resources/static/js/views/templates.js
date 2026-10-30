@@ -382,12 +382,10 @@ export async function renderTemplates(root) {
   // 결제 방안 탭 — 템플릿은 넣을지(켜고 끔)만 정한다. 견적서에 들어갈 기본 표를 이 템플릿의 기본 금액으로 보여 준다.
   // 비율 · 문구는 견적 작성 3단계(구성)의 결제 방안에서 견적마다 고친다
   function payPlanTab(body) {
-    const blocks = previewBlocks();
-    const sum = (rec) => blocks.filter((b) => !!b.recurring === rec)
-      .reduce((a, b) => a + (b.items || []).reduce((x, r) => x + (r.proposed_price || 0) * (r.qty || 0), 0), 0);
-    const rows = payPlanDefault(sum(false), sum(true), 50);
+    // 템플릿에는 금액을 두지 않는다(2026-10-30 사용자 요청) — 기본 문구에서 금액 부분을 빼고 보인다
+    const rows = payPlanDefault(1, 1, 50).map((r) => r.map((v) => v.replace(/\s*:\s*₩[\d,]+원/g, '')));
     body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
-      h('span', { class: 'ss-detailbar__note' }, '견적서에 들어갈 결제 방안 기본 표입니다(이 템플릿의 기본 금액 · 계약체결 50% 기준). 비율과 문구는 견적 작성 3단계(구성)에서 견적마다 고칩니다.')));
+      h('span', { class: 'ss-detailbar__note' }, '견적서에 들어갈 결제 방안 기본 문구입니다(계약체결 50% 기준). 금액은 견적 작성에서 채워지고, 비율과 문구는 견적 작성 3단계(구성)에서 견적마다 고칩니다.')));
     const cols = [['구분', 150], ['지급시점', 220], ['비용', 360], ['내역', 420]];
     body.appendChild(h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' }, h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안')),
