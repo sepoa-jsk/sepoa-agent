@@ -474,10 +474,12 @@ export async function renderTemplates(root) {
       }
       if (r.item_code && !opts.some(([c]) => c === r.item_code)) opts.unshift([r.item_code, p ? (variants ? SVC_TERM : p.name) : `${r.item_code} (가격정책 미등록)`]);
       const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, BAND_KINDS[r.band_key || 'USER'][1]);
+      // 단위 — 인원·건수가 있는 서비스 이용료 행은 인원이면 '명', 건수면 '건'(2026-10-30 사용자 요청). 나머지는 가격정책 품목 단위
+      const unitTd = h('td', { style: 'text-align:center' }, variants ? BAND_KINDS[r.band_key || 'USER'][1] : (p ? p.unit || '' : ''));
       const bandTd = variants
         ? h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' },
           h('select', { class: 'ss-cellinput', 'aria-label': '인원·건수 구분', style: 'text-align:center;width:72px;flex:none',
-            onchange: (e) => { r.band_key = e.target.value; bandUnit.textContent = BAND_KINDS[r.band_key][1]; } },
+            onchange: (e) => { r.band_key = e.target.value; bandUnit.textContent = BAND_KINDS[r.band_key][1]; unitTd.textContent = BAND_KINDS[r.band_key][1]; } },
           ...Object.entries(BAND_KINDS).filter(([k]) => variants.some((v) => bandKey(v) === k))
             .map(([k, [label]]) => h('option', { value: k, selected: (r.band_key || 'USER') === k }, label))),
           numInput(r.band_qty ?? 1, (v) => { r.band_qty = v === '' ? null : Number(v); },
@@ -496,7 +498,7 @@ export async function renderTemplates(root) {
         h('td', { style: 'text-align:left;white-space:pre-line;color:var(--ss-ink-2)' }, p ? p.spec || '' : ''),
         ...(hasBand ? [bandTd] : []),
         cellNum('수량', r.qty_default, (v) => { r.qty_default = v; }),
-        h('td', { style: 'text-align:center' }, p ? p.unit || '' : ''),
+        unitTd,
         h('td', { class: 'ss-cell--link' }, r.item_code || ''));
       tbody.appendChild(tr);
     }
