@@ -3,7 +3,6 @@
 import { api as http } from '../../../api.js';
 import { pickCustomer } from '../pickers.js';
 import { h } from '../../../ui.js';
-import { loadSaasCatalog, quoteService } from './step3-config.js';
 
 let settingsCache = null;
 
@@ -35,24 +34,6 @@ export async function renderStep1(root, state, wiz) {
   const ro = (val) => h('input', { class: 'input', style: 'width:100%', value: val || '', readonly: true, disabled: true });
 
   root.replaceChildren();
-
-  // ── SaaS 서비스 — 맨 앞에서 고른다(2026-10-30 사용자 요청). 3단계 구성의 이용료 · 서비스별 품목이 이 서비스로 맞춰진다 ──
-  if (state.type.deployment === 'SAAS') {
-    const { services } = await loadSaasCatalog(state.type.solution || (state.applied && state.applied.solution));
-    if (services.length) {
-      const cur = quoteService(state, services);
-      root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },
-        h('div', { class: 'card-h' }, h('h2', {}, 'SaaS 서비스'),
-          h('span', { class: 'sub' }, '고른 서비스로 구성(서비스 이용료 · 독립인프라 등)과 가격이 맞춰집니다')),
-        h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
-          ...services.map((x) => h('button', {
-            class: 'btn' + (x.code === cur ? ' btn-primary' : ''), style: 'min-width:110px',
-            title: String(x.item.spec || ''),
-            onclick: () => { if (wiz.readOnly) return; wiz.patch({ type: { service: x.code } }); renderStep1(root, wiz.get(), wiz); },
-          }, x.label)),
-          cur ? null : h('span', { style: 'font-size:12px;color:var(--ss-red, #FF5252);align-self:center' }, '서비스를 고르세요'))));
-    }
-  }
 
   // ── 고객 정보 ──
   root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },

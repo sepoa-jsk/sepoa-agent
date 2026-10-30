@@ -4,6 +4,7 @@ import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
 import { kindBadge, openTemplatePreview } from './template-picker.js';
+import { loadSaasCatalog, quoteService } from './step3-config.js';
 
 const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
 const DEP_LABEL = {
@@ -155,6 +156,10 @@ export async function renderStep2(root, state, wiz) {
     }, ...comboCards(combos, state, root, wiz)));
   root.appendChild(typeCard);
   root.appendChild(manualCard(state, root, wiz, sols, sol));
+  if (state.type.deployment === 'SAAS') {
+    const svcCard = await serviceCard(state, root, wiz, sol);
+    if (svcCard) root.appendChild(svcCard);
+  }
 
   if (state.type.deployment) {
     const list = all.filter((x) => x.quote_type === state.type.quote_type && x.deployment === state.type.deployment);
@@ -176,6 +181,23 @@ export async function renderStep2(root, state, wiz) {
         h('div', {},
           h('b', {}, '정책 버전 마스터가 아직 없습니다'),
           '현재는 가격정책(sq_price_items)과 활성 임금단가 연도가 그대로 적용됩니다.')))));
+}
+
+// SaaS 서비스(S2C · S2P · P2P · Sourcing) — 구축형태가 SaaS 일 때 템플릿 위에서 고른다(2026-10-30 사용자 요청 — 기본정보에서 옮김).
+// 3단계(구성)에서 서비스 이용료 · (서비스) 품목을 고른 서비스로 맞추고 가격을 다시 채운다(step3-config.js syncService)
+async function serviceCard(state, root, wiz, sol) {
+  const { services } = await loadSaasCatalog(sol);
+  if (!services.length) return null;
+  const cur = quoteService(state, services);
+  return h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('div', { class: 'card-h' }, h('h2', {}, 'SaaS 서비스'),
+      h('span', { class: 'sub' }, '고른 서비스로 구성(서비스 이용료 · 독립인프라 등)과 가격이 맞춰집니다')),
+    h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      ...services.map((x) => h('button', {
+        class: 'btn' + (x.code === cur ? ' btn-primary' : ''), style: 'min-width:110px', title: String(x.item.spec || ''),
+        onclick: () => { if (wiz.readOnly) return; wiz.patch({ type: { service: x.code } }); renderStep2(root, wiz.get(), wiz); },
+      }, x.label)),
+      cur ? null : h('span', { style: 'font-size:12px;color:var(--ss-red, #FF5252);align-self:center' }, '서비스를 고르세요')));
 }
 
 // 다음 단계로 가기 전 확인
