@@ -2,8 +2,11 @@ import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
 
-// 가격정책 = 견적 품목(sq_price_items) + 모듈 단가(sq_modules.base_price) + 직무 단가(sq_labor_roles.base_price).
-// L1 인라인 편집형 (2026-10-29 화면 재작성) — 화면 내 탭 상자 + 머리(솔루션 등) + 행추가/행삭제/저장 + 편집 그리드.
+// 가격정책 — 2026-10-30 다시 구성(사용자 요청): 1단계 솔루션(왼쪽 레일) → 2단계 SaaS | On-premise(탭) → 3단계 입력.
+//   SaaS       : 인원 구간 · 건수 구간 금액표(구간 월 금액). 솔루션마다 한 벌 — {접두}_SAAS_RANGE 품목의 variants(key USER / COUNT)에 둔다.
+//   On-premise : 모듈과 금액 — 구축형 견적 품목(sq_price_items, deployment ONPREM*)의 기준단가.
+//   그 밖에 셋업비 · 옵션 같은 SaaS 품목은 '전체 품목' 탭, 직무 단가는 '직무별 단가(공통)' 탭에서 고친다.
+// 그리드 탭은 L1 인라인 편집형 — 머리(행추가/행삭제/저장) + 편집 그리드.
 // 등록·수정·삭제는 팝업 없이 그리드에서. 동작은 마스터 관리와 같다(선택 60px · 칸 너비 조절 · 머리 정렬 · 콤마 입력).
 // std_mm(표준투입 M/M)·비고는 보내지 않으므로 기존 값이 그대로 남는다. 네고율은 마스터에서 관리한다.
 //
@@ -26,9 +29,34 @@ const itemApi = {
   remove: (id) => api.deletePriceItem(id), // 사용 중지(active=0)
 };
 
+// On-premise 탭 — 구축형(공통 · 일시불 · 분납) 품목만
+const ONPREM_DEPS = DEPLOYMENTS.filter(([v]) => v.startsWith('ONPREM'));
+const onpremApi = {
+  list: (st) => api.pricing(st.solution).then((r) => (r.items || []).filter((x) => String(x.deployment).startsWith('ONPREM'))),
+  create: (row) => api.createPriceItem(row),
+  update: (id, row) => api.updatePriceItem(id, row),
+  remove: (id) => api.deletePriceItem(id),
+};
+
 const TABS = [
+  { key: 'saas', label: 'SaaS', custom: true },
   {
-    key: 'items', label: '견적 품목', api: itemApi, scoped: true, deploymentFilter: true,
+    key: 'onprem', label: 'On-premise', api: onpremApi, scoped: true,
+    note: '구축형 견적의 모듈과 금액입니다. 견적 작성 · 템플릿이 이 금액을 기준단가로 씁니다. 이미 있는 모듈의 코드는 고칠 수 없습니다.',
+    fields: [
+      { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, lockOnEdit: true, width: 170 },
+      { key: 'deployment', label: '구축형태', type: 'select', options: ONPREM_DEPS, required: true, width: 130 },
+      { key: 'category', label: '구분', type: 'text', width: 170 },
+      { key: 'name', label: '모듈', type: 'text', required: true, width: 220 },
+      { key: 'spec', label: '세부기능', type: 'text', width: 320 },
+      { key: 'base_price', label: '금액 (원)', type: 'money', width: 150 },
+      { key: 'sort', label: '정렬', type: 'number', width: 70 },
+    ],
+    defaults: () => ({ deployment: 'ONPREM' }),
+    injectOnCreate: { pricing_type: 'FIXED', qty_default: 1 },
+  },
+  {
+    key: 'items', label: '전체 품목', api: itemApi, scoped: true, deploymentFilter: true,
     note: '견적 템플릿 · 견적 작성이 이 품목의 기준단가를 씁니다. 이미 있는 품목의 코드는 템플릿이 참조하므로 고칠 수 없습니다.',
     fields: [
       { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, lockOnEdit: true, width: 170 },
@@ -46,17 +74,7 @@ const TABS = [
     defaults: (st) => ({ deployment: st.deployment || 'ONPREM', pricing_type: 'FIXED', qty_default: 1 }),
   },
   {
-    key: 'modules', label: '솔루션 모듈 단가', type: 'modules', scoped: true,
-    fields: [
-      { key: 'code', label: '코드', type: 'text', mono: true, required: true, unique: true, width: 130 },
-      { key: 'name', label: '모듈명', type: 'text', required: true },
-      { key: 'base_price', label: '기준단가 (원)', type: 'money', width: 150 },
-      { key: 'required', label: '필수', type: 'checkbox', width: 60 },
-      { key: 'sort', label: '정렬', type: 'number', width: 70 },
-    ],
-  },
-  {
-    key: 'labor', label: '직무별 단가', type: 'labor_roles', scoped: false,
+    key: 'labor', label: '직무별 단가(공통)', type: 'labor_roles', scoped: false,
     note: '직무 단가는 전 솔루션 공통, 1 M/M 기준입니다.',
     injectOnCreate: { solution: 'PROCURE' }, // solution 은 NOT NULL — 신규만 넣는다
     fields: [
@@ -75,6 +93,7 @@ export async function renderPricing(root) {
   const defaultSolution = solutions.find((s) => s.code === 'PROCURE')?.code || solutions[0]?.code || '';
 
   const state = { tab: TABS[0].key, solution: defaultSolution, deployment: '' };
+  const solName = () => solutions.find((x) => x.code === state.solution)?.name || state.solution;
   let rows = [];     // [{ orig, form, isNew, checked, seq }]
   let deleted = [];  // 행삭제한 기존 행 — 저장할 때 사용 중지(active=0)
   let sort = { key: null, dir: null };
@@ -82,12 +101,34 @@ export async function renderPricing(root) {
   let tbody, headCells = [];
 
   const current = () => TABS.find((t) => t.key === state.tab);
-  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r));
+  const isDirty = () => (current().custom ? saasDirty() : deleted.length > 0 || rows.some((r) => r.isNew || changed(r)));
 
-  // ── 탭 상자: 탭줄 + 내용 ──
+  // ── 1단계: 솔루션 레일 / 2단계: 탭(SaaS | On-premise | 전체 품목 | 직무별 단가) ──
+  document.querySelector('.ss-app')?.classList.add('ss-app--railtitle');
+  const railList = h('div');
+  const rail = h('aside', { class: 'ss-rail ss-rail--code', style: '--ss-rail-w:240px' },
+    h('div', { class: 'ss-rail__head ss-rail__head--title' }, '솔루션'), railList);
+  const subtitle = h('div', { class: 'ss-subtitle' });
   const tabs = h('div', { class: 'ss-tabs' });
   const pane = h('div', { class: 'ss-tabbox__pane' });
-  root.appendChild(h('div', { class: 'ss-tabbox' }, tabs, pane));
+  root.appendChild(h('div', { class: 'ss-railview' }, rail,
+    h('div', { class: 'ss-railview__body', style: 'overflow:auto;display:flex;flex-direction:column' },
+      subtitle, h('div', { class: 'ss-tabbox', style: 'margin-top:16px;flex:1 0 360px' }, tabs, pane))));
+
+  function paintRail() {
+    clear(railList);
+    for (const sol of solutions) {
+      railList.appendChild(h('div', {
+        class: 'ss-rail__code' + (sol.code === state.solution ? ' ss-rail__code--active' : ''),
+        onclick: () => {
+          if (sol.code === state.solution) return;
+          if (isDirty()) return toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
+          state.solution = sol.code;
+          refresh();
+        },
+      }, h('span', { class: 'ss-rail__code-key' }, sol.code), h('span', { class: 'ss-rail__code-name' }, sol.name || sol.code)));
+    }
+  }
 
   function paintTabs() {
     clear(tabs);
@@ -104,19 +145,15 @@ export async function renderPricing(root) {
 
   function refresh() {
     rows = []; deleted = []; sort = { key: null, dir: null };
+    paintRail();
     paintTabs();
     clear(pane);
     const t = current();
+    subtitle.textContent = t.key === 'labor' ? '직무별 단가 (전 솔루션 공통)' : `${solName()} 가격정책`;
+    if (t.custom) { paintSaas(); return; }
 
-    // 머리: 솔루션 선택 상자(라벨 글자 없이) + 행추가 · 행삭제 · 저장
+    // 머리: (전체 품목) 구축형태 거르기 + 행추가 · 행삭제 · 저장 — 솔루션은 왼쪽 레일에서 고른다
     const fields = h('div', { class: 'ss-edithead__fields' });
-    if (t.scoped) {
-      fields.appendChild(h('div', { class: 'ss-field' },
-        h('select', { class: 'ss-select', 'aria-label': '솔루션', onchange: (e) => {
-          if (isDirty()) { toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err'); e.target.value = state.solution; return; }
-          state.solution = e.target.value; load();
-        } }, ...solutions.map((s) => h('option', { value: s.code, selected: s.code === state.solution }, s.name || s.code)))));
-    }
     if (t.deploymentFilter) {
       fields.appendChild(h('div', { class: 'ss-field' },
         h('select', { class: 'ss-select', 'aria-label': '구축형태', onchange: (e) => {
@@ -308,6 +345,116 @@ export async function renderPricing(root) {
       toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
     }
     load();
+  }
+
+  // ── SaaS: 인원 구간 · 건수 구간 (구간 월 금액) ─────────────────────
+  // 솔루션마다 한 벌. {접두}_SAAS_RANGE 품목(BAND · 월)의 variants 에 key USER / COUNT 로 둔다 — 없으면 처음 저장할 때 만든다.
+  // 끝을 비우면 '이상'(마지막 구간). 저장할 때 시작 순으로 정렬하고 겹치는 구간은 막는다.
+  const RANGE_PREFIX = { EXPENSE: 'EXP', PROCURE: 'PRO', SEAL: 'SEAL' };
+  const rangeCode = () => `${RANGE_PREFIX[state.solution] || state.solution}_SAAS_RANGE`;
+  const RANGE_KINDS = [['USER', '인원 구간', '인'], ['COUNT', '건수 구간', '건']];
+  let saas = null; // { item, lists: { USER: [], COUNT: [] }, base }
+  const rangeJson = () => JSON.stringify(saas && RANGE_KINDS.map(([k]) => saas.lists[k].map((r) => [r.min, r.max, r.price])));
+  const saasDirty = () => !!saas && rangeJson() !== saas.base;
+  const toNum = (v) => (v === '' || v == null ? null : Number(v));
+
+  async function paintSaas() {
+    saas = null;
+    pane.appendChild(h('div', { class: 'ss-edithead', style: 'margin-top:16px' }, h('div', { class: 'ss-edithead__fields' }),
+      h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: saveSaas }, '저장'))));
+    pane.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
+      h('span', { class: 'ss-detailbar__note' }, '인원 · 건수 구간마다 월 금액을 넣습니다. 그 구간이면 월 사용료가 이 금액입니다. 끝을 비우면 \'이상\'(마지막 구간)입니다.')));
+    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:8px' });
+    pane.appendChild(box);
+    box.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
+    try {
+      const r = await api.pricing(state.solution, 'SAAS', true);
+      const item = (r.items || []).find((x) => x.code === rangeCode()) || null;
+      const lists = { USER: [], COUNT: [] };
+      for (const v of (item && item.variants) || []) {
+        (v.key === 'COUNT' ? lists.COUNT : lists.USER).push({ min: toNum(v.min_qty), max: toNum(v.max_qty), price: toNum(v.price), checked: false });
+      }
+      saas = { item, lists };
+      saas.base = rangeJson();
+    } catch (err) {
+      clear(box).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
+      return;
+    }
+    clear(box);
+    for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(k, label, unit));
+  }
+
+  function rangeCard(kind, label, unit) {
+    const list = saas.lists[kind];
+    const tbody = h('tbody');
+    const paint = () => {
+      clear(tbody);
+      if (!list.length) { tbody.appendChild(h('tr', {}, h('td', { colspan: 5, class: 'ss-cell--empty' }, '구간이 없습니다. 행추가로 넣으세요.'))); return; }
+      for (const r of list) {
+        const show = h('td', { style: 'color:var(--ss-ink-3)' });
+        const sync = () => { show.textContent = r.min == null ? '' : r.max == null ? `${r.min}${unit} 이상` : `${r.min}~${r.max}${unit}`; };
+        const cell = (key, money) => h('td', { class: 'ss-cell--input' },
+          numInput(r[key], (v) => { r[key] = toNum(v); sync(); }, { class: 'ss-cellinput', 'aria-label': key, style: money ? 'text-align:right' : 'text-align:center' }, !money));
+        sync();
+        tbody.appendChild(h('tr', {},
+          h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
+          cell('min'), cell('max'), show, cell('price', true)));
+      }
+    };
+    paint();
+    const cols = [['선택', 60], [`시작 (${unit})`, 100], [`끝 (${unit})`, 100], ['구간', 130], ['월 금액 (원)', 160]];
+    return h('div', { style: 'flex:1 1 520px;min-width:0' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${label}`),
+        h('div', { class: 'ss-detailbar__spacer' }),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          // 다음 구간은 앞 구간 끝 + 1 에서 시작
+          const last = list[list.length - 1];
+          list.push({ min: last ? (last.max != null ? last.max + 1 : null) : 1, max: null, price: null, checked: false });
+          paint();
+        } }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          if (!list.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
+          const keep = list.filter((r) => !r.checked);
+          list.length = 0;
+          list.push(...keep);
+          paint();
+        } }, '행삭제')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          tbody)));
+  }
+
+  async function saveSaas() {
+    if (!saas) return;
+    if (!saasDirty()) return toast('변경된 내용이 없습니다.', 'ok');
+    const variants = [];
+    for (const [k, label, unit] of RANGE_KINDS) {
+      const list = [...saas.lists[k]].sort((a, b) => (a.min ?? 0) - (b.min ?? 0));
+      for (let i = 0; i < list.length; i++) {
+        const r = list[i];
+        if (r.min == null || r.price == null) return toast(`${label} ${i + 1}번째: 시작과 월 금액을 넣으세요.`, 'err');
+        if (r.max != null && r.max < r.min) return toast(`${label} ${r.min}${unit}: 끝이 시작보다 작습니다.`, 'err');
+        const next = list[i + 1];
+        if (next && (r.max == null || r.max >= next.min)) return toast(`${label}: ${r.min}${unit} 구간과 ${next.min}${unit} 구간이 겹칩니다.`, 'err');
+        variants.push({ key: k, label: r.max == null ? `${r.min}${unit} 이상` : `${r.min}~${r.max}${unit}`,
+          min_qty: r.min, max_qty: r.max, price: r.price, sort: variants.length });
+      }
+    }
+    try {
+      if (saas.item) await api.updatePriceItem(saas.item.id, { variants, active: 1 });
+      else {
+        await api.createPriceItem({ solution: state.solution, deployment: 'SAAS', code: rangeCode(), name: `${solName()} SaaS 이용료`,
+          category: '서비스이용료', pricing_type: 'BAND', unit: '월', recurring: 1, base_price: 0, qty_default: 1, sort: 0, variants });
+      }
+      toast('저장되었습니다.', 'ok');
+      store.master = null;
+    } catch (err) {
+      return toast(err.message, 'err');
+    }
+    refresh();
   }
 
   refresh();
