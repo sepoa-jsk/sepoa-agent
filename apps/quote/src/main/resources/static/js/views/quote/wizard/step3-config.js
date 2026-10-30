@@ -110,17 +110,66 @@ export const BAND_KINDS = { USER: ['인원', '명'], COUNT: ['건수', '건'] };
 export const bandLine = (it) => (it.band && BAND_KINDS[it.band]
   ? `(${BAND_KINDS[it.band][0]} ${num(it.band_qty)}${BAND_KINDS[it.band][1]} 기준)` : null);
 export const BAND_LINE_RE = /\n?\((인원|건수) [\d.]+(명|건) 기준\)$/;
-const bandCache = {}; // 솔루션 → { 품목코드: variants }
-async function loadBands(solution) {
-  if (!solution) return {};
-  if (!bandCache[solution]) {
+// SaaS 품목 목록 — 솔루션마다 한 번 받는다. 서비스(S2C · S2P …) = 구간형(BAND) 품목
+const catalogCache = {};
+export async function loadSaasCatalog(solution) {
+  if (!solution) return { items: [], services: [] };
+  if (!catalogCache[solution]) {
     try {
-      const { items } = await http.pricing(solution, 'SAAS');
-      bandCache[solution] = Object.fromEntries((items || [])
-        .filter((x) => x.pricing_type === 'BAND' && (x.variants || []).length).map((x) => [x.code, x.variants]));
-    } catch { return {}; } // 못 받으면 구간 없이 — 손으로 넣는다
+      const items = (await http.pricing(solution, 'SAAS')).items || [];
+      const services = items.filter((x) => x.pricing_type === 'BAND')
+        .map((x) => ({ code: x.code, label: String(x.name || x.service_type || x.code).replace(/\s*서비스\s*이용료$/, ''), item: x }));
+      catalogCache[solution] = { items, services };
+    } catch { return { items: [], services: [] }; } // 못 받으면 구간 · 서비스 선택 없이 — 손으로 넣는다
   }
-  return bandCache[solution];
+  return catalogCache[solution];
+}
+async function loadBands(solution) {
+  const { items } = await loadSaasCatalog(solution);
+  return Object.fromEntries(items.filter((x) => x.pricing_type === 'BAND' && (x.variants || []).length).map((x) => [x.code, x.variants]));
+}
+
+// SaaS 견적의 서비스(S2C · S2P …) — 2단계(기본정보)에서 고른 것(type.service), 없으면 견적에 들어 있는 서비스 행
+export function quoteService(state, services) {
+  const codes = services.map((x) => x.code);
+  if (state.type.service && codes.includes(state.type.service)) return state.type.service;
+  for (const b of state.blocks || []) for (const it of b.items || []) if (codes.includes(it.item_code)) return it.item_code;
+  return null;
+}
+
+// 고른 서비스에 맞춰 구성 행을 바꾼다 — 다른 서비스의 이용료 행은 고른 서비스로,
+// '(S2C)' 처럼 서비스가 붙은 품목(독립인프라 등)은 같은 이름의 고른 서비스 품목으로. 맞는 품목이 없으면 그대로 둔다.
+// 바꾼 행은 가격정책 기준가(이용료는 인원 · 건수 구간 금액)로 다시 채운다. 바꾼 행 수를 돌려준다
+function syncService(state, code, catalog) {
+  const svc = catalog.services.find((x) => x.code === code);
+  if (!svc) return 0;
+  const others = catalog.services.filter((x) => x.code !== code);
+  let n = 0;
+  for (const b of state.blocks || []) {
+    for (const it of b.items || []) {
+      let to = null;
+      if (others.some((x) => x.code === it.item_code)) to = svc.item;
+      else {
+        const o = others.find((x) => String(it.name || '').endsWith(`(${x.label})`));
+        if (o) {
+          const want = String(it.name).slice(0, -(o.label.length + 2)) + `(${svc.label})`;
+          to = catalog.items.find((x) => x.name === want) || null;
+        }
+      }
+      if (!to) continue;
+      it.item_code = to.code; it.name = to.name; it.spec = to.spec || it.spec; it.unit = to.unit || it.unit;
+      let price = to.base_price != null ? Number(to.base_price) : null;
+      if (to.pricing_type === 'BAND') {
+        it.band = it.band || 'USER';
+        if (it.band_qty == null) it.band_qty = 1;
+        const v = bandOf(to.variants, it.band, num(it.band_qty));
+        price = v ? num(v.price) : null;
+      }
+      it.base_price = price; it.proposed_price = price || 0;
+      n++;
+    }
+  }
+  return n;
 }
 // n 이 들어가는 구간 — 끝(max_qty)이 비어 있으면 '이상'
 export function bandOf(variants, key, n) {
@@ -312,6 +361,11 @@ export async function renderStep3(root, state, wiz) {
   const st0 = wiz.get();
   const solution0 = st0.type.solution || (st0.applied && st0.applied.solution);
   const bands = await loadBands(solution0);
+  // SaaS — 2단계에서 고른 서비스로 구성 행을 맞춘다(템플릿이 S2C 로 만들어 두었어도 S2P 를 고르면 S2P 행으로)
+  if (st0.type.deployment === 'SAAS' && st0.type.service) {
+    const n = syncService(st0, st0.type.service, await loadSaasCatalog(solution0));
+    if (n) { wiz.patch({}); toast(`서비스에 맞춰 ${n}개 행을 바꿨습니다.`, 'ok'); }
+  }
   const policyItems = st0.type.deployment === 'SAAS' ? await loadPolicyItems(solution0) : {};
 
   // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
