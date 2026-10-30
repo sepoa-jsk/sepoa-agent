@@ -426,7 +426,7 @@ export async function renderPricing(root) {
     if (saasPart === 'info') { body.appendChild(infoCard()); return; }
     body.appendChild(serviceCard());
     if (!saas.pick) return;
-    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;align-items:flex-start' });
+    const box = h('div', { style: 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start' }); // 인원 · 건수 50%씩
     for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(saas.pick, k, label, unit));
     body.appendChild(box);
   }
@@ -534,9 +534,10 @@ export async function renderPricing(root) {
           if (!saas.services.includes(saas.pick)) saas.pick = saas.services[0] || null;
           paintSaasBody();
         } }, '행삭제')),
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px` },
-          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+      // 화면 폭에 맞춘다 — 선택 칸만 고정, 나머지는 비율
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
+          h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i ? `width:${Math.round((w / 450) * 100)}%` : `width:${w}px` }))),
           h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
           tbody)));
   }
@@ -561,7 +562,7 @@ export async function renderPricing(root) {
     paint();
     const cols = [['선택', 60], [`시작 (${unit})`, 100], [`끝 (${unit})`, 100], ['구간', 130], ['월 금액 (원)', 160]];
     const width = cols.reduce((x, [, w]) => x + w, 0);
-    return h('div', { style: `width:${width + 2}px;max-width:100%` },
+    return h('div', { style: 'min-width:0' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${shortName(svc)} — ${label}`),
         h('div', { class: 'ss-detailbar__spacer' }),
@@ -578,9 +579,10 @@ export async function renderPricing(root) {
           list.push(...keep);
           paint();
         } }, '행삭제')),
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${width}px` },
-          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+      // 칸(50%) 폭에 맞춘다 — 선택 칸만 고정, 나머지는 비율
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
+          h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i ? `width:${Math.round((w / (width - 60)) * 100)}%` : `width:${w}px` }))),
           h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
           tbody)));
   }
