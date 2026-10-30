@@ -366,7 +366,7 @@ export async function renderPricing(root) {
   let saasPart = 'info'; // SaaS 하위 탭 — info | price
   let saas = null; // { services, deleted, pick, info: { rows }, infoBase, policy: { current, history } }
   const toNum = (v) => (v === '' || v == null ? null : Number(v));
-  const svcForm = (it) => ({ code: it.code || '', name: it.name || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
+  const svcForm = (it) => ({ code: it.code || '', name: it.name || '', spec: it.spec || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
   const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
   const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
   const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.type, r.values]));
@@ -490,17 +490,31 @@ export async function renderPricing(root) {
           paintSaasBody();
         } }, '행삭제')),
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%;overflow:auto' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((x, w) => x + w, 0)}px` },
+        sized(h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((x, w) => x + w, 0)}px` },
           h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
-          h('thead', {}, h('tr', {}, h('th', {}, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '형식'),
+          h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '형식'),
             ...cols.map((svc) => h('th', {}, shortName(svc))))),
-          tbody)));
+          tbody), 'info')));
   }
+
+  // 칸 경계를 끌어 너비 조절 — 조절한 너비는 이 브라우저에 기억(두 번 누르면 처음 너비). 선택 칸은 고정
+  const sized = (table, key) => { resizableColumns(table, `quote2:pricing-saas:${key}`); return table; };
 
   // 서비스 표 — 코드 · 서비스. 이미 있는 서비스의 코드는 템플릿 · 견적이 참조하므로 잠근다. 행을 누르면 아래에 그 서비스의 구간표
   function serviceCard() {
     const tbody = h('tbody');
-    const cols = [['선택', 60], ['코드', 190], ['서비스', 260]];
+    const cols = [['선택', 60], ['코드', 160], ['서비스', 220], ['상세 내용', 560]];
+    const pct = cols.slice(1).reduce((x, [, w]) => x + w, 0);
+    // 상세 내용 — 여러 줄. 줄 수만큼 칸이 늘어난다
+    const detail = (svc) => {
+      const ta = h('textarea', { class: 'ss-cellinput', 'aria-label': '상세 내용', placeholder: '제공 기능 · 조건 등 서비스 설명',
+        rows: Math.max(1, String(svc.form.spec || '').split('\n').length),
+        style: 'height:auto;resize:none;border:0;background:transparent;line-height:1.5;padding:4px 6px;text-align:left',
+        onclick: (e) => e.stopPropagation(),
+        oninput: (e) => { svc.form.spec = e.target.value; e.target.rows = Math.max(1, e.target.value.split('\n').length); } });
+      ta.value = svc.form.spec || '';
+      return h('td', { class: 'ss-cell--input' }, ta);
+    };
     const txt = (svc, key, attrs = {}) => h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', 'aria-label': key, value: svc.form[key] ?? '', ...attrs,
       onclick: (e) => e.stopPropagation(), oninput: (e) => { svc.form[key] = e.target.value; } }));
     if (!saas.services.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' }, '서비스가 없습니다. 행추가로 넣으세요 (예: S2C, S2P).')));
@@ -511,7 +525,7 @@ export async function renderPricing(root) {
       },
       h('td', {}, h('input', { type: 'checkbox', checked: svc.checked, 'aria-label': '선택', onclick: (e) => e.stopPropagation(), onchange: (e) => { svc.checked = e.target.checked; } })),
       svc.isNew ? txt(svc, 'code', { style: 'text-align:center' }) : h('td', { class: 'ss-cell--link', style: 'text-align:center', title: '템플릿이 참조하는 코드라 고칠 수 없습니다' }, svc.form.code),
-      txt(svc, 'name')));
+      txt(svc, 'name'), detail(svc)));
     }
     return h('div', { style: 'margin-top:16px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
@@ -536,10 +550,10 @@ export async function renderPricing(root) {
         } }, '행삭제')),
       // 화면 폭에 맞춘다 — 선택 칸만 고정, 나머지는 비율
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
-          h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i ? `width:${Math.round((w / 450) * 100)}%` : `width:${w}px` }))),
-          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
-          tbody)));
+        sized(h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
+          h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i ? `width:${Math.round((w / pct) * 100)}%` : `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t], i) => h('th', i ? {} : { 'data-fixed': '' }, t)))),
+          tbody), 'service')));
   }
 
   function rangeCard(svc, kind, label, unit) {
@@ -581,10 +595,10 @@ export async function renderPricing(root) {
         } }, '행삭제')),
       // 칸(50%) 폭에 맞춘다 — 선택 칸만 고정, 나머지는 비율
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
+        sized(h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
           h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i ? `width:${Math.round((w / (width - 60)) * 100)}%` : `width:${w}px` }))),
-          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
-          tbody)));
+          h('thead', {}, h('tr', {}, ...cols.map(([t], i) => h('th', i ? {} : { 'data-fixed': '' }, t)))),
+          tbody), `range-${kind}`)));
   }
 
   // 구간 → variants. 잘못된 구간은 서비스 이름과 함께 알리고 null
@@ -619,7 +633,7 @@ export async function renderPricing(root) {
       rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub, type: r.type,
         values: Object.fromEntries(saas.services.map((svc) => [svc.form.code, r.values[svc.form.code] || ''])) })),
     },
-    services: saas.services.map((svc) => ({ code: svc.form.code, name: svc.form.name, unit: svc.form.unit,
+    services: saas.services.map((svc) => ({ code: svc.form.code, name: svc.form.name, spec: svc.form.spec || '', unit: svc.form.unit,
       ranges: Object.fromEntries(RANGE_KINDS.map(([k]) => [k, [...svc.lists[k]].sort((a, b) => a.min - b.min).map((r) => [r.min, r.max, r.price])])) })),
   });
 
@@ -678,7 +692,7 @@ export async function renderPricing(root) {
     try {
       for (const o of saas.deleted) { await api.deletePriceItem(o.id); done++; }
       for (const [svc, variants] of plan) {
-        const f = { name: svc.form.name.trim(), unit: svc.form.unit?.trim() || null, base_price: svc.form.base_price ?? 0, sort: svc.form.sort ?? 0, variants };
+        const f = { name: svc.form.name.trim(), spec: String(svc.form.spec || '').trim() || null, unit: svc.form.unit?.trim() || null, base_price: svc.form.base_price ?? 0, sort: svc.form.sort ?? 0, variants };
         if (svc.isNew) {
           await api.createPriceItem({ ...f, solution: state.solution, deployment: 'SAAS', code: svc.form.code.trim(),
             category: '서비스이용료', pricing_type: 'BAND', recurring: 1, qty_default: 1 });
@@ -736,6 +750,10 @@ export async function renderPricing(root) {
             ? h('td', { style: 'text-align:right' }, comma(cleanNum(r.values && r.values[x.code])))
             : h('td', { style: 'text-align:center' }, ...lines(r.values && r.values[x.code])))))))));
       for (const svc of c.services || []) {
+        if (svc.spec) {
+          view.appendChild(h('div', { style: 'margin-top:12px;font-size:12px;line-height:1.5;color:var(--ss-ink-2)' },
+            h('b', {}, `${String(svc.name || svc.code).replace(/\s*서비스\s*이용료$/, '')} 상세 내용`), h('br'), ...lines(svc.spec)));
+        }
         const box = h('div', { style: 'display:flex;gap:16px;flex-wrap:wrap;margin-top:12px' });
         for (const [k, label, unit] of RANGE_KINDS) {
           const rs = (svc.ranges && svc.ranges[k]) || [];

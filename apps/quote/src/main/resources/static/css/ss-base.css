@@ -407,6 +407,8 @@ select.ss-cellinput { cursor: pointer; }
 /* 칸 너비 조절 손잡이 — 머리 칸 오른쪽 끝 (머리 칸이 sticky 라 손잡이 위치의 기준이 된다) */
 .ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
 .ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
+/* 마지막 칸 손잡이는 표 안쪽에 — 밖으로 3px 나가면 화면 폭에 맞춘 표에 가로 스크롤이 생긴다 */
+th:last-child > .ss-colgrip { right: 0; }
 body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
 /* 칸 너비대로 만든 표(--sized) · 너비를 줄인 표 — 상자보다 좁아도 마지막 칸 오른쪽 선이 보이게 */
 .ss-grid--sized thead tr > th:last-child, .ss-grid.is-resized thead tr > th:last-child { border-right: 1px solid #E7EAF0; }
