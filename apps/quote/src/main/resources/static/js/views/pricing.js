@@ -369,7 +369,8 @@ export async function renderPricing(root) {
   const svcForm = (it) => ({ code: it.code || '', name: it.name || '', spec: it.spec || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
   const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
   const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
-  const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.type, r.values]));
+  const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.desc, r.type, r.values]));
+  // 행마다 상세 설명(desc) — 세부 항목이 무엇인지 쓰는 여러 줄 글. 서비스별 값이 아니라 그 행 하나에 하나(2026-10-30 사용자 요청)
   // 기본정보 항목은 분류 — 기본 / 부가 / 옵션 중 하나, 설명은 세부에 쓴다(2026-10-30 사용자 요청). 표는 이 순서로 묶어 보인다.
   // 예전 행(항목에 '서비스구분' · '셋업비용' 같은 이름)은 읽을 때 바꾼다: 그 이름은 세부로, 항목은 이름으로 정한 분류
   //   '옵션 기능' + '1. 협력사평가' → 옵션 + '1. 협력사평가' / 셋업 · Poa-BiA · 인프라 · 연계 · 유지보수 → 부가 / 나머지 → 기본
@@ -421,8 +422,8 @@ export async function renderPricing(root) {
       const rows = saved && Array.isArray(saved.rows) ? saved.rows.map((x) => {
         const type = x.type || inferType(x.values);
         const n = normInfo(x);
-        return { label: n.label, sub: n.sub, type, values: type === 'money' ? moneyValues(x.values) : { ...(x.values || {}) }, checked: false };
-      }) : INFO_ROWS.map(([label, sub, type]) => ({ ...normInfo({ label, sub }), type: type || 'text', values: {}, checked: false }));
+        return { label: n.label, sub: n.sub, desc: x.desc || '', type, values: type === 'money' ? moneyValues(x.values) : { ...(x.values || {}) }, checked: false };
+      }) : INFO_ROWS.map(([label, sub, type]) => ({ ...normInfo({ label, sub }), desc: '', type: type || 'text', values: {}, checked: false }));
       saas = { services, deleted: [], pick: services[0] || null, info: { rows: sortInfo(rows) }, policy };
       saas.infoBase = infoJson();
       const savedConds = policy.current && policy.current.content && policy.current.content.conds;
@@ -492,7 +493,7 @@ export async function renderPricing(root) {
       style: `text-align:center;font-weight:600;background:#F8FAFC;${same ? 'color:#B6BDC8' : ''}`,
       onchange: (e) => { r.label = e.target.value; saas.info.rows = sortInfo(saas.info.rows); paintSaasBody(); } },
       ...INFO_GROUPS.map((g) => h('option', { value: g, selected: g === r.label }, g))));
-    const widths = [60, 90, 240, 80, ...cols.map(() => 300)];
+    const widths = [60, 90, 220, 320, 80, ...cols.map(() => 300)];
     const tbody = h('tbody');
     saas.info.rows.forEach((r, i) => {
       const prev = saas.info.rows[i - 1];
@@ -500,6 +501,7 @@ export async function renderPricing(root) {
         h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
         groupSel(r, prev && prev.label === r.label),
         area(r.sub, (v) => { r.sub = v; }, 'font-weight:600;background:#F8FAFC'),
+        area(r.desc, (v) => { r.desc = v; }, 'text-align:left;color:var(--ss-ink-2)'),
         typeSel(r),
         ...cols.map((svc) => (r.type === 'money' ? money(r, svc.form.code)
           : area(r.values[svc.form.code], (v) => { r.values[svc.form.code] = v; }, 'text-align:center')))));
@@ -510,7 +512,7 @@ export async function renderPricing(root) {
         h('span', { class: 'ss-detailbar__note' }, '칸을 눌러 고칩니다. 형식이 금액인 행은 숫자만 받습니다. 글자 칸의 줄바꿈은 Enter.'),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { const last = saas.info.rows[saas.info.rows.length - 1];
-          saas.info.rows.push({ label: last ? last.label : '기본', sub: '', type: 'text', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
+          saas.info.rows.push({ label: last ? last.label : '기본', sub: '', desc: '', type: 'text', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           if (!saas.info.rows.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
           saas.info.rows = saas.info.rows.filter((r) => !r.checked);
@@ -519,9 +521,9 @@ export async function renderPricing(root) {
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%;overflow:auto' },
         sized(h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((x, w) => x + w, 0)}px` },
           h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
-          h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '형식'),
+          h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '상세 설명'), h('th', {}, '형식'),
             ...cols.map((svc) => h('th', {}, shortName(svc))))),
-          tbody), 'info3')));
+          tbody), 'info4')));
   }
 
   // 칸 경계를 끌어 너비 조절 — 조절한 너비는 이 브라우저에 기억(두 번 누르면 처음 너비). 선택 칸은 고정
@@ -700,7 +702,7 @@ export async function renderPricing(root) {
   const policyContent = () => ({
     info: {
       columns: saas.services.map((svc) => ({ code: svc.form.code, label: shortName(svc) })),
-      rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub, type: r.type,
+      rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub, desc: (r.desc || '').trim(), type: r.type,
         values: Object.fromEntries(saas.services.map((svc) => [svc.form.code, r.values[svc.form.code] || ''])) })),
     },
     conds: saas.conds.map((r) => r.text.trim()).filter(Boolean),
@@ -814,9 +816,10 @@ export async function renderPricing(root) {
       clear(view).appendChild(h('div', { style: 'font-size:13px;font-weight:600;color:var(--ss-primary);margin-bottom:6px' },
         `${v.version} · ${when(v.created_at)} · ${v.created_by_name || '-'}${v.note ? ' · ' + v.note : ''}`));
       view.appendChild(h('table', { class: 'ss-grid' },
-        h('thead', {}, h('tr', {}, h('th', {}, '항목'), h('th', {}, '세부'), ...cols.map((x) => h('th', {}, x.label)))),
+        h('thead', {}, h('tr', {}, h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '상세 설명'), ...cols.map((x) => h('th', {}, x.label)))),
         h('tbody', {}, ...sortInfo(((c.info && c.info.rows) || []).map(normInfo)).map((r) => h('tr', {},
           h('td', { style: 'text-align:center;font-weight:600' }, r.label), h('td', { style: 'font-weight:600' }, r.sub),
+          h('td', { style: 'text-align:left' }, ...lines(r.desc)),
           ...cols.map((x) => ((r.type || inferType(r.values)) === 'money'
             ? h('td', { style: 'text-align:right' }, comma(cleanNum(r.values && r.values[x.code])))
             : h('td', { style: 'text-align:center' }, ...lines(r.values && r.values[x.code])))))))));
