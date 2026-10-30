@@ -361,12 +361,20 @@ export async function renderStep3(root, state, wiz) {
   const st0 = wiz.get();
   const solution0 = st0.type.solution || (st0.applied && st0.applied.solution);
   const bands = await loadBands(solution0);
-  // SaaS — 2단계에서 고른 서비스로 구성 행을 맞춘다(템플릿이 S2C 로 만들어 두었어도 S2P 를 고르면 S2P 행으로)
+  // SaaS — 1단계에서 고른 서비스로 구성 행을 맞춘다(템플릿이 S2C 로 만들어 두었어도 S2P 를 고르면 S2P 행으로)
   if (st0.type.deployment === 'SAAS' && st0.type.service) {
     const n = syncService(st0, st0.type.service, await loadSaasCatalog(solution0));
     if (n) { wiz.patch({}); toast(`서비스에 맞춰 ${n}개 행을 바꿨습니다.`, 'ok'); }
   }
   const policyItems = st0.type.deployment === 'SAAS' ? await loadPolicyItems(solution0) : {};
+  // SaaS — 서비스 이용료 행(구간형 품목)의 모듈 이름은 가격정책 용어(기본의 '서비스 이용료')로 쓴다.
+  // 어느 서비스인지는 1단계에서 고르고 세부기능이 말해 준다(2026-10-30 사용자 요청 — 예전 'S2C 서비스 이용료')
+  const svcTerm = ((policyItems['기본'] || []).find((x) => /서비스 이용료$/.test(x.sub)) || {}).sub;
+  if (svcTerm) {
+    let n = 0;
+    for (const b of st0.blocks || []) for (const it of b.items || []) if (bands[it.item_code] && it.name !== svcTerm) { it.name = svcTerm; n++; }
+    if (n) wiz.patch({});
+  }
 
   // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
   const left = h('div', { style: 'min-width:0' });
