@@ -30,11 +30,8 @@ export function recalcBlocks(state) {
     // 같은 블록의 셋업 품목에 들어 있다(3.7MM × 12,000,000 = 44,400,000).
     // 여기서 합산하면 화면 미리보기만 서버 PDF 보다 커진다.
     const isLabor = b.block_code === 'LABOR';
-    // 구간 행(band — SaaS 인원 · 건수)은 구간 월 금액이 곧 금액이다: 수량은 보여 주기만 하고 곱하지 않는다
-    for (const it of b.items || []) {
-      it.amount = Math.round(num(it.proposed_price) * (it.band ? (num(it.qty) ? 1 : 0) : num(it.qty)));
-      sub += it.amount;
-    }
+    // 구간 행(band — SaaS 인원 · 건수)도 같다: 단가(구간 월 금액) × 수량
+    for (const it of b.items || []) { it.amount = Math.round(num(it.proposed_price) * num(it.qty)); sub += it.amount; }
     for (const l of b.labor || []) {
       if (isLabor) {
         l.amount = Math.round(num(l.proposed_price) * num(l.mm));
@@ -98,17 +95,21 @@ export function toBlocksPayload(state) {
 function mapItems(b) {
   return (b.items || []).map((it) => ({
     item_code: it.item_code || null, category: it.category || null, name: it.name,
-    spec: it.spec || null, qty: num(it.qty), unit: it.unit || null,
+    spec: [it.spec, bandLine(it)].filter(Boolean).join('\n') || null, qty: num(it.qty), unit: it.unit || null,
     base_price: it.base_price, proposed_price: num(it.proposed_price), amount: it.amount,
-    note: it.band ? 'BAND:' + it.band : null,
+    note: it.band ? `BAND:${it.band}:${num(it.band_qty)}` : null,
   }));
 }
 
 // ── SaaS 구간 금액 ─────────────────────────────────────────
 // 가격정책 SaaS 의 구간형 서비스(S2C · S2P …)는 인원 구간(USER) · 건수 구간(COUNT)마다 '구간 월 금액' 이 있다.
 // 견적 행에서 인원 / 건수를 고르고 수량을 넣으면 맞는 구간의 월 금액을 기준단가 · 제안단가로 채운다.
-// 금액은 구간 월 금액 그대로다(수량을 곱하지 않는다 — 2026-10-30 사용자 결정 "수량엔 인원, 금액은 그대로").
+// 인원 · 건수는 수량과 따로 넣는다(2026-10-30 사용자 요청 — '인원·건수' 칸). 금액 = 구간 월 금액 × 수량.
+// 견적서에는 세부기능 아래에 '(건수 40건 기준)' 한 줄로 나온다. 저장할 때 note 에 BAND:키:숫자 로 남기고, 다시 열 때 그 줄을 떼어 낸다.
 export const BAND_KINDS = { USER: ['인원', '명'], COUNT: ['건수', '건'] };
+export const bandLine = (it) => (it.band && BAND_KINDS[it.band]
+  ? `(${BAND_KINDS[it.band][0]} ${num(it.band_qty)}${BAND_KINDS[it.band][1]} 기준)` : null);
+export const BAND_LINE_RE = /\n?\((인원|건수) [\d.]+(명|건) 기준\)$/;
 const bandCache = {}; // 솔루션 → { 품목코드: variants }
 async function loadBands(solution) {
   if (!solution) return {};
@@ -310,7 +311,11 @@ export async function renderStep3(root, state, wiz) {
   const LABOR_COLS = [['선택', 44], ['역할', 140], ['직무 (노임단가)', 190], ['등급', 90], ['업무', 340], ['공수 (MM)', 76],
     ['기준단가 (원)', 122], ['제안단가 (원)', 122], ['제안금액 (원)', 130]];
 
-  function rowEl(b, r, isLabor, picked) {
+  const BAND_COL = ['인원·건수', 170];
+  const itemCols = (rows) => (rows.some((r) => bands[r.item_code])
+    ? [...ITEM_COLS.slice(0, 4), BAND_COL, ...ITEM_COLS.slice(4)] : ITEM_COLS);
+
+  function rowEl(b, r, isLabor, picked, hasBand) {
     const amtCell = h('td', { class: 'ss-cell--amount' }, num(r.qty) === 0 && !isLabor ? '' : won(r.amount || 0));
     const upd = () => {
       const c = recalcBlocks(wiz.get());
@@ -354,19 +359,20 @@ export async function renderStep3(root, state, wiz) {
     }
     const variants = bands[r.item_code];
     if (!variants) {
-      return h('tr', {}, sel, txt('category'), txt('name'), td(spec), numIn('qty'), txt('unit', '', 'center'),
+      return h('tr', {}, sel, txt('category'), txt('name'), td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
         money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
     }
-    // 구간형 서비스 — [인원 / 건수] 를 고르고 수량을 넣으면 구간 월 금액을 단가로 채운다
+    // 구간형 서비스 — 인원·건수 칸에서 [인원 / 건수] 를 고르고 숫자를 넣으면 구간 월 금액을 단가로 채운다. 수량 · 단위는 그대로
     const base = money('base_price');
     const PSTYLE = 'background:var(--primary-weak);color:var(--primary);font-weight:600';
-    const qtyIn = numInput(r.qty, (v) => { r.qty = v === '' ? null : v; applyBand(); upd(); },
-      { class: 'ss-cellinput', style: 'text-align:right' });
+    const onBandQty = (v) => { r.band_qty = v === '' ? null : v; applyBand(); upd(); };
+    let bandIn = numInput(r.band_qty, onBandQty, { class: 'ss-cellinput', style: 'text-align:right;flex:1;min-width:0', 'aria-label': '인원·건수' });
     function applyBand(fill = true) {
-      if (!r.band) { qtyIn.title = ''; qtyIn.style.color = ''; return; }
-      const v = bandOf(variants, r.band, num(r.qty));
-      qtyIn.title = v ? `${v.label} 구간 — 월 ${won(v.price)}원` : '가격정책에 맞는 구간이 없습니다';
-      qtyIn.style.color = v ? '' : 'var(--ss-red, #FF5252)';
+      bandIn.disabled = !r.band;
+      if (!r.band) { bandIn.title = ''; bandIn.style.color = ''; return; }
+      const v = bandOf(variants, r.band, num(r.band_qty));
+      bandIn.title = v ? `${v.label} 구간 — 월 ${won(v.price)}원` : '가격정책에 맞는 구간이 없습니다';
+      bandIn.style.color = v ? '' : 'var(--ss-red, #FF5252)';
       if (!fill) return;
       r.base_price = v ? num(v.price) : null;
       r.proposed_price = v ? num(v.price) : 0;
@@ -376,16 +382,22 @@ export async function renderStep3(root, state, wiz) {
     }
     const kinds = Object.keys(BAND_KINDS).filter((k) => variants.some((v) => (v.key === 'COUNT' ? 'COUNT' : 'USER') === k));
     // 직접 입력은 없다 — 인원 / 건수만(2026-10-30 사용자 요청). 예전에 저장한 견적(구간 없음)은 '선택' 으로 보이고, 고르면 구간 금액이 들어간다
-    const bandSel = h('select', { class: 'ss-cellinput', style: 'text-align:center', title: '가격정책 구간으로 금액 채우기' },
+    const bandSel = h('select', { class: 'ss-cellinput', style: 'text-align:center;width:72px;flex:none', title: '가격정책 구간으로 금액 채우기' },
       ...(r.band ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
       ...kinds.map((k) => h('option', { value: k, selected: r.band === k }, BAND_KINDS[k][0])));
     bandSel.addEventListener('change', () => {
       r.band = bandSel.value || null;
-      if (r.band) r.unit = BAND_KINDS[r.band][1];
+      if (r.band && r.band_qty == null) r.band_qty = 1;
+      bandUnit.textContent = r.band ? BAND_KINDS[r.band][1] : '';
+      // 숫자 칸을 새 값으로 다시 만든다(numInput 은 값을 안에 쥐고 있다) — 처음 고르면 1
+      const fresh = numInput(r.band_qty, onBandQty, { class: bandIn.className, style: bandIn.style.cssText, 'aria-label': '인원·건수' });
+      bandIn.replaceWith(fresh); bandIn = fresh;
       applyBand(); upd();
     });
+    const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, r.band ? BAND_KINDS[r.band][1] : '');
     applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
-    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), td(qtyIn), td(bandSel),
+    const bandCell = h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' }, bandSel, bandIn, bandUnit));
+    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
       base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
 
@@ -427,7 +439,8 @@ export async function renderStep3(root, state, wiz) {
     const isLabor = b.block_code === 'LABOR';
     const rows = isLabor ? b.labor : b.items;
     const picked = new Set();
-    const cols = isLabor ? LABOR_COLS : ITEM_COLS;
+    const cols = isLabor ? LABOR_COLS : itemCols(rows);
+    const hasBand = cols.includes(BAND_COL);
     const gbtn = (label, onclick, cls = 'ss-btn--gridrow') => h('button', { class: 'ss-btn ' + cls, onclick }, label);
 
     const addRow = () => {
@@ -487,7 +500,7 @@ export async function renderStep3(root, state, wiz) {
       gbtn('행삭제', delRows), gbtn('블록 빼기', dropBlock, 'ss-btn--delete'));
 
     const tbody = h('tbody');
-    rows.forEach((r) => tbody.appendChild(rowEl(b, r, isLabor, picked)));
+    rows.forEach((r) => tbody.appendChild(rowEl(b, r, isLabor, picked, hasBand)));
     if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' },
       isLabor ? '[직무 선택] 으로 노임단가 직무를 넣거나 [행추가] 로 직접 입력하세요.' : '[품목 선택] 으로 가격정책 품목을 넣거나 [행추가] 로 직접 입력하세요.')));
     // 소계 행 — 견적서와 같은 자리

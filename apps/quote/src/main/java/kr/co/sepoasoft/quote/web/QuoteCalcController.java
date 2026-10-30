@@ -63,7 +63,7 @@ public class QuoteCalcController {
                         + " FROM sq_template_blocks tb JOIN sq_blocks b ON b.code = tb.block_code"
                         + " WHERE tb.template_id = ? ORDER BY tb.sort", tid);
         List<Map<String, Object>> titems = db.query(
-                "SELECT block_code, item_code, qty_default, band_key FROM sq_template_items WHERE template_id = ? ORDER BY block_code, sort", tid);
+                "SELECT block_code, item_code, qty_default, band_key, band_qty FROM sq_template_items WHERE template_id = ? ORDER BY block_code, sort", tid);
         List<Map<String, Object>> tlabor = db.query(
                 "SELECT block_code, role_code, role_label, grade, task, mm_default FROM sq_template_labor WHERE template_id = ? ORDER BY sort", tid);
 
@@ -126,7 +126,7 @@ public class QuoteCalcController {
                 it.put("unit", or(p.get("unit"), null));
                 it.put("recurring", Rows.truthy(p.get("recurring")));
                 it.put("registered", priceMap.containsKey(t.get("item_code")));
-                applyBand(it, t.get("band_key"), bandMap.get(p.get("id")));
+                applyBand(it, t.get("band_key"), t.get("band_qty"), bandMap.get(p.get("id")));
                 items.add(it);
             }
             List<Map<String, Object>> labor = new ArrayList<>();
@@ -264,17 +264,17 @@ public class QuoteCalcController {
     }
 
     /**
-     * SaaS 구간형 서비스 행 — 구간 단위(USER 인원 / COUNT 건수)와 수량이 들어가는 구간의 '구간 월 금액' 을 기준단가로 넣는다.
-     * 금액은 구간 월 금액 그대로다(수량을 곱하지 않는다 — 화면 recalcBlocks 가 band 행을 그렇게 계산한다).
-     * 템플릿에 단위가 없으면 인원으로 본다. 구간이 없는 품목은 그대로 둔다(band 키도 넣지 않는다).
+     * SaaS 구간형 서비스 행 — 구간 단위(USER 인원 / COUNT 건수)와 인원 · 건수(band_qty)가 들어가는 구간의 '구간 월 금액' 을 기준단가로 넣는다.
+     * 수량 · 단위는 그대로다: 금액 = 단가 × 수량(다른 행과 같다).
+     * 템플릿에 단위가 없으면 인원, 숫자가 없으면 1 로 본다. 구간이 없는 품목은 그대로 둔다(band 키도 넣지 않는다).
      * 예전에 넣은 인원 구간은 key 가 비어 있다 — 가격정책 화면처럼 COUNT 가 아니면 인원이다.
      */
-    private static void applyBand(Map<String, Object> it, Object bandKey, List<Map<String, Object>> variants) {
+    private static void applyBand(Map<String, Object> it, Object bandKey, Object bandQty, List<Map<String, Object>> variants) {
         if (variants == null || variants.isEmpty()) return;
         String band = "COUNT".equals(bandKey) ? "COUNT" : "USER";
-        double n = Js.toNumber(it.get("qty"));
+        double n = bandQty == null ? 1 : Js.toNumber(bandQty);
         it.put("band", band);
-        it.put("unit", "COUNT".equals(band) ? "건" : "명");
+        it.put("band_qty", Js.json(n));
         Object price = null;
         for (Map<String, Object> v : variants) {
             String k = "COUNT".equals(v.get("key")) ? "COUNT" : "USER";

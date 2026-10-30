@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, resizableColumns, numInput, won, openModal, previewControls } from '../ui.js';
-import { BAND_KINDS, bandOf } from './quote/wizard/step3-config.js';
+import { BAND_KINDS, bandOf, bandLine } from './quote/wizard/step3-config.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
@@ -89,7 +89,8 @@ export async function renderTemplates(root) {
       const t = d.template;
       const items = Object.values(d.items || {}).flat()
         .sort((a, b) => order(a.block_code) - order(b.block_code) || a.sort - b.sort)
-        .map((it) => ({ block_code: it.block_code, item_code: it.item_code, qty_default: num(it.qty_default, 1), band_key: it.band_key || null, checked: false }));
+        .map((it) => ({ block_code: it.block_code, item_code: it.item_code, qty_default: num(it.qty_default, 1), band_key: it.band_key || null,
+          band_qty: it.band_qty == null ? null : Number(it.band_qty), checked: false }));
       const labor = (d.labor || []).map((l) => ({
         block_code: l.block_code || 'LABOR', role_code: l.role_code, role_label: l.role_label, grade: l.grade,
         task: l.task, mm_default: num(l.mm_default, 0), checked: false,
@@ -284,12 +285,13 @@ export async function renderTemplates(root) {
       cur.items.push({ block_code: blockOpts[0]?.[0] || null, item_code: null, qty_default: 1, checked: false });
       paintTabs();
     }, () => cur.items);
-    // SaaS 구간형 서비스(S2C · S2P …)는 단위를 인원 / 건수로 고르고, 기준단가는 그 단위 · 기본수량의 구간 월 금액이다(견적 작성과 같은 구조)
+    // SaaS 구간형 서비스(S2C · S2P …)는 인원·건수 칸에서 인원 / 건수를 고르고 숫자를 넣는다.
+    // 기준단가는 그 구간의 월 금액, 수량(기본수량) · 단위는 따로다 — 견적 작성 3단계와 같은 구조
     const tbody = gridTable(body, [
       { label: '블록', w: 170, req: true }, { label: '품목코드', w: 160 }, { label: '품목', w: 260, req: true },
-      { label: '구축형태', w: 120 }, { label: '단위', w: 100 }, { label: '기본수량', w: 90 }, { label: '기준단가 (원)', w: 140 },
-    ], 'quote2:tpl-items-cols2');
-    if (!cur.items.length) { tbody.appendChild(h('tr', {}, h('td', { colspan: 8, class: 'ss-cell--empty' }, '기본 모듈이 없습니다. 행추가로 넣으세요.'))); return; }
+      { label: '구축형태', w: 120 }, { label: '인원·건수', w: 170 }, { label: '단위', w: 80 }, { label: '기본수량', w: 90 }, { label: '기준단가 (원)', w: 140 },
+    ], 'quote2:tpl-items-cols3');
+    if (!cur.items.length) { tbody.appendChild(h('tr', {}, h('td', { colspan: 9, class: 'ss-cell--empty' }, '기본 모듈이 없습니다. 행추가로 넣으세요.'))); return; }
     for (const r of cur.items) {
       const p = prices.find((x) => x.code === r.item_code);
       // 가격정책에 없는 코드도 그대로 보여준다 (미등록)
@@ -299,17 +301,23 @@ export async function renderTemplates(root) {
       const priceTd = h('td', { style: 'text-align:right' });
       const paintPrice = () => {
         if (!variants) { priceTd.textContent = p ? won(p.base_price) : ''; priceTd.title = ''; return; }
-        const v = bandOf(variants, r.band_key || 'USER', num(r.qty_default, 1));
+        const v = bandOf(variants, r.band_key || 'USER', num(r.band_qty, 1));
         priceTd.textContent = v ? won(v.price) : '구간 없음';
         priceTd.title = v ? `${v.label} 구간 월 금액` : '가격정책에 맞는 구간이 없습니다';
         priceTd.style.color = v ? '' : 'var(--ss-red, #FF5252)';
       };
-      const unitTd = variants
-        ? h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': '단위', style: 'text-align:center',
-          onchange: (e) => { r.band_key = e.target.value; paintPrice(); } },
+      // 인원·건수 — [인원 / 건수] + 숫자(비우면 1). 구간형이 아닌 품목은 빈칸
+      const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, BAND_KINDS[r.band_key || 'USER'][1]);
+      const bandTd = variants
+        ? h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' },
+          h('select', { class: 'ss-cellinput', 'aria-label': '인원·건수 구분', style: 'text-align:center;width:72px;flex:none',
+            onchange: (e) => { r.band_key = e.target.value; bandUnit.textContent = BAND_KINDS[r.band_key][1]; paintPrice(); } },
           ...Object.entries(BAND_KINDS).filter(([k]) => variants.some((v) => bandKey(v) === k))
-            .map(([k, [label]]) => h('option', { value: k, selected: (r.band_key || 'USER') === k }, label))))
-        : h('td', { style: 'text-align:center' }, p ? p.unit || '' : '');
+            .map(([k, [label]]) => h('option', { value: k, selected: (r.band_key || 'USER') === k }, label))),
+          numInput(r.band_qty ?? 1, (v) => { r.band_qty = v === '' ? null : Number(v); paintPrice(); },
+            { class: 'ss-cellinput', 'aria-label': '인원·건수', style: 'text-align:right;flex:1;min-width:0' }),
+          bandUnit))
+        : h('td', {});
       paintPrice();
       const tr = h('tr', {});
       tr.append(
@@ -317,10 +325,11 @@ export async function renderTemplates(root) {
         cellSelect('블록', r.block_code && !blockOpts.some(([v]) => v === r.block_code) ? [[r.block_code, `${r.block_code} (블록 꺼짐)`], ...blockOpts] : blockOpts,
           r.block_code, (v) => { r.block_code = v; }),
         h('td', { class: 'ss-cell--link' }, r.item_code || ''),
-        cellSelect('품목', opts, r.item_code, (v) => { r.item_code = v; r.band_key = null; paintTabs(); }),
+        cellSelect('품목', opts, r.item_code, (v) => { r.item_code = v; r.band_key = null; r.band_qty = null; paintTabs(); }),
         h('td', {}, p ? depName(p.deployment) : ''),
-        unitTd,
-        cellNum('기본수량', r.qty_default, (v) => { r.qty_default = v; paintPrice(); }),
+        bandTd,
+        h('td', { style: 'text-align:center' }, p ? p.unit || '' : ''),
+        cellNum('기본수량', r.qty_default, (v) => { r.qty_default = v; }),
         priceTd);
       tbody.appendChild(tr);
     }
@@ -374,12 +383,13 @@ export async function renderTemplates(root) {
       const items = cur.items.filter((r) => r.block_code === b.code && r.item_code).map((r) => {
         const p = prices.find((x) => x.code === r.item_code);
         const variants = bandVariants(p);
-        if (variants) { // 구간 행 — 금액은 구간 월 금액 그대로(수량을 곱하지 않는다)
-          const band = r.band_key || 'USER';
-          const v = bandOf(variants, band, num(r.qty_default, 1));
+        if (variants) { // 구간 행 — 단가는 구간 월 금액, 금액 = 단가 × 수량. 세부기능 아래에 '(건수 40건 기준)'
+          const band = { band: r.band_key || 'USER', band_qty: num(r.band_qty, 1) };
+          const v = bandOf(variants, band.band, band.band_qty);
           const price = v ? Number(v.price) : null;
-          return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code, spec: p?.spec || null,
-            unit: BAND_KINDS[band][1], qty: num(r.qty_default, 1), base_price: price, proposed_price: price || 0, amount: price || 0 };
+          return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code,
+            spec: [p?.spec, bandLine(band)].filter(Boolean).join('\n'),
+            unit: p?.unit || null, qty: num(r.qty_default, 1), base_price: price, proposed_price: price || 0 };
         }
         const base = p && p.base_price != null ? Number(p.base_price) : null;
         return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code, spec: p?.spec || null,
@@ -444,7 +454,10 @@ export async function renderTemplates(root) {
       include_maintenance: f.include_maintenance ? 1 : 0, include_component: f.include_component ? 1 : 0,
       has_labor_plan: f.has_labor_plan ? 1 : 0, has_pay_plan: f.has_pay_plan ? 1 : 0, active: f.active ? 1 : 0, sort: Number(f.sort) || 0,
       blocks: blocksDef.filter((b) => cur.blocks.has(b.code) || b.code === 'SUMMARY').map((b) => b.code),
-      items: cur.items.map((r) => ({ block_code: r.block_code, item_code: r.item_code, qty_default: r.qty_default ?? 1, band_key: r.band_key || null })),
+      items: cur.items.map((r) => ({ block_code: r.block_code, item_code: r.item_code, qty_default: r.qty_default ?? 1,
+        // 구간형 서비스는 단위를 늘 싣는다(안 고르면 인원) — 서버는 단위가 있어야 인원·건수 숫자를 저장한다
+        ...(bandVariants((priceCache[f.solution] || []).find((x) => x.code === r.item_code))
+          ? { band_key: r.band_key || 'USER', band_qty: r.band_qty ?? null } : { band_key: null, band_qty: null }) })),
       labor: cur.labor.map((r) => ({ block_code: r.block_code, role_code: r.role_code, role_label: trim(r.role_label),
         grade: r.grade || null, task: trim(r.task), mm_default: r.mm_default ?? 0 })),
     };

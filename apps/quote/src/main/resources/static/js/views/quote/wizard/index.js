@@ -20,7 +20,7 @@ import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
-import { renderStep3, openPreview } from './step3-config.js';
+import { renderStep3, openPreview, BAND_LINE_RE } from './step3-config.js';
 import { openQuotePicker } from './quote-picker.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
@@ -76,6 +76,13 @@ function dcOf(type, value) {
   // 저장 시 할인 없음은 type null 로 남는다. TARGET 0 은 무상제공이라 값 0 을 살린다.
   return type ? { mode: type, value: n0(value) ?? 0 } : { mode: 'TARGET', value: null };
 }
+// SaaS 구간 행(step3-config.js) — note 'BAND:키:숫자' 를 읽고, 저장할 때 붙인 세부기능 끝 '(건수 40건 기준)' 줄을 떼어 낸다
+function bandOfNote(it) {
+  const m = /^BAND:(USER|COUNT)(?::([\d.]+))?$/.exec(it.note || '');
+  if (!m) return { spec: it.spec };
+  return { spec: String(it.spec || '').replace(BAND_LINE_RE, ''), band: m[1], band_qty: m[2] != null ? Number(m[2]) : Number(it.qty) || 1 };
+}
+
 function fromQuote(q, tpl, tplConds) {
   const st = blankState();
   const memo = {};
@@ -93,10 +100,10 @@ function fromQuote(q, tpl, tplConds) {
   st.blocks = (q.blocks || []).map((b) => ({
     block_code: b.block_code, name: b.title, recurring: !!b.recurring,
     items: (b.items || []).map((it) => ({
-      item_code: it.item_code, category: it.category, name: it.name, spec: it.spec, unit: it.unit,
+      item_code: it.item_code, category: it.category, name: it.name, unit: it.unit,
+      ...bandOfNote(it),
       qty: Number(it.qty), base_price: n0(it.base_price), proposed_price: Number(it.proposed_price) || 0,
       amount: Number(it.amount) || 0,
-      band: (/^BAND:(USER|COUNT)$/.exec(it.note || '') || [])[1] || null, // SaaS 구간 행(step3-config.js)
     })),
     labor: (b.labor || []).map((l) => ({
       role_code: l.role_code, role_name: l.role_name, role_label: l.role_label, grade: l.grade, task: l.task,
