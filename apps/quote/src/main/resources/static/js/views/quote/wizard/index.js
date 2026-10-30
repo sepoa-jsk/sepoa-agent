@@ -140,12 +140,21 @@ function loadDraft() {
   } catch { return null; }
 }
 
+// 작성 · 수정 중인 내용 — 화면 주소(#/quotes/new · #/quotes/5/edit)마다 메모리에 둔다.
+// 하단 탭으로 다른 화면(가격정책 등)에 갔다 와도 이어서 쓴다(2026-10-30 오류 수정 — 예전에는 새로 그리며 비웠다).
+// 탭을 닫거나(×) 발행 · 취소하면 지운다. 새로 고침(F5)하면 비어 있는 것은 예전과 같다.
+const live = new Map();
+window.addEventListener('ss:tabclose', (e) => { if (e.detail === 'new') live.clear(); });
+
 export async function renderWizard(root, opts = {}) {
   resetTemplateCache(); // 견적 템플릿 화면에서 바꾼 내용을 다시 받는다
   const editMode = !!opts.quote;
   const readOnly = !!opts.readOnly;
   let state;
-  if (editMode) {
+  const liveKey = location.hash;
+  if (!readOnly && live.has(liveKey)) {
+    state = live.get(liveKey);
+  } else if (editMode) {
     let tpl = null;
     let tplConds = null;
     if (opts.quote.template_code) {
@@ -161,6 +170,7 @@ export async function renderWizard(root, opts = {}) {
     localStorage.removeItem(DRAFT_KEY);
     state = blankState();
   }
+  if (!readOnly) live.set(liveKey, state);
 
   const api = {
     patch(part) { state = deepMerge(state, part); persist(); paintFooterState(); },
@@ -176,11 +186,12 @@ export async function renderWizard(root, opts = {}) {
     },
     next() { api.go(state.step + 1); },
     prev() { api.go(state.step - 1); },
-    reset() { localStorage.removeItem(DRAFT_KEY); state = blankState(); paint(); },
+    reset() { localStorage.removeItem(DRAFT_KEY); state = blankState(); persist(); paint(); },
     // 발행 후 정리 — 이 견적을 담고 있던 브라우저 보관분만 지운다
     finish(id) {
       const d = loadDraft();
       if (!editMode || (d && d.quoteId === id)) localStorage.removeItem(DRAFT_KEY);
+      live.delete(liveKey);
     },
     addDays,
     focusCustomer: () => focusCustomer(), // STEP⑤ 가 수신처 없음 오류에서 쓴다
@@ -210,7 +221,7 @@ export async function renderWizard(root, opts = {}) {
   }
 
   // 브라우저 자동 보관은 하지 않는다(신규는 늘 빈 화면). 저장은 [임시저장] · [발행] 으로 서버에.
-  function persist() { /* 의도적으로 비움 */ }
+  function persist() { if (!readOnly) live.set(liveKey, state); } // 브라우저 보관(localStorage)은 하지 않는다 — 메모리만
 
   // 서버 임시저장 — 상태는 그대로 '작성중'. 견적 구성(블록)이 생긴 뒤부터 저장할 수 있다.
   let saving = false;
@@ -308,7 +319,7 @@ export async function renderWizard(root, opts = {}) {
       title: head,
       path,
       actions: [
-        ...(editMode ? [{ label: '취소', onClick: () => switchTo(`#/quotes/${state.quoteId}`) }] : []),
+        ...(editMode ? [{ label: '취소', onClick: () => { live.delete(liveKey); switchTo(`#/quotes/${state.quoteId}`); } }] : []),
         { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },

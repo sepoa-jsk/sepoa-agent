@@ -31,6 +31,7 @@ function closeTab(key) {
   const idx = tabs.findIndex((t) => t.key === key);
   if (idx < 0) return;
   tabs.splice(idx, 1);
+  window.dispatchEvent(new CustomEvent('ss:tabclose', { detail: key })); // 화면이 붙들고 있던 작성 내용을 놓는다(견적 작성)
   if (key === activeKey) {
     const next = tabs[idx - 1] || tabs[idx] || null;
     activeKey = null;
