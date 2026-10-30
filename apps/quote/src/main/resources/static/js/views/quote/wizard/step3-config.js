@@ -97,7 +97,7 @@ function mapItems(b) {
     item_code: it.item_code || null, category: it.category || null, name: it.name,
     spec: [it.spec, bandLine(it)].filter(Boolean).join('\n') || null, qty: num(it.qty), unit: it.unit || null,
     base_price: it.base_price, proposed_price: num(it.proposed_price), amount: it.amount,
-    note: it.band ? `BAND:${it.band}:${num(it.band_qty)}` : null,
+    note: it.band && it.band_qty != null && it.band_qty !== '' ? `BAND:${it.band}:${num(it.band_qty)}` : null,
   }));
 }
 
@@ -107,7 +107,8 @@ function mapItems(b) {
 // 인원 · 건수는 수량과 따로 넣는다(2026-10-30 사용자 요청 — '인원·건수' 칸). 금액 = 구간 월 금액 × 수량.
 // 견적서에는 세부기능 아래에 '(건수 40건 기준)' 한 줄로 나온다. 저장할 때 note 에 BAND:키:숫자 로 남기고, 다시 열 때 그 줄을 떼어 낸다.
 export const BAND_KINDS = { USER: ['인원', '명'], COUNT: ['건수', '건'] };
-export const bandLine = (it) => (it.band && BAND_KINDS[it.band]
+// 인원 · 건수 숫자를 아직 안 넣었으면(band_qty 비어 있음) 줄도 없다
+export const bandLine = (it) => (it.band && BAND_KINDS[it.band] && it.band_qty != null && it.band_qty !== ''
   ? `(${BAND_KINDS[it.band][0]} ${num(it.band_qty)}${BAND_KINDS[it.band][1]} 기준)` : null);
 export const BAND_LINE_RE = /\n?\((인원|건수) [\d.]+(명|건) 기준\)$/;
 // 서비스 이용료 행의 단위 — 인원이면 '명', 건수면 '건'(2026-10-30 사용자 요청 — 예전 가격정책 단위 'User/월'). 구간이 없으면 null
@@ -163,9 +164,8 @@ function syncService(state, code, catalog) {
       let price = to.base_price != null ? Number(to.base_price) : null;
       if (to.pricing_type === 'BAND') {
         it.band = it.band || 'USER';
-        if (it.band_qty == null) it.band_qty = 1;
         it.unit = bandUnitOf(it.band);
-        const v = bandOf(to.variants, it.band, num(it.band_qty));
+        const v = it.band_qty == null || it.band_qty === '' ? null : bandOf(to.variants, it.band, num(it.band_qty)); // 숫자를 넣기 전이면 금액 없음
         price = v ? num(v.price) : null;
       }
       it.base_price = price; it.proposed_price = price || 0;
@@ -298,7 +298,7 @@ async function loadPolicyItems(solution) {
       const out = {};
       for (const r of rows) {
         if (!POLICY_GROUPS.includes(r.label) || !String(r.sub || '').trim()) continue; // 예전 형식(분류 전) 행은 쓰지 않는다
-        (out[r.label] = out[r.label] || []).push({ sub: String(r.sub).trim(), desc: String(r.desc || '').trim() });
+        (out[r.label] = out[r.label] || []).push({ sub: String(r.sub).trim(), desc: String(r.desc || '').trim(), money: r.type === 'money' });
       }
       policyCache[solution] = out;
     } catch { return {}; } // 못 받으면 모듈은 손으로 넣는다
@@ -373,9 +373,10 @@ export async function renderStep3(root, state, wiz) {
       h('div', {}, h('b', {}, '1단계(유형 선택)에서 템플릿을 고르거나 [직접 작성] 을 선택하세요.'), ' 1단계의 [견적서 불러오기] 로 기존 견적을 불러와도 됩니다.')));
     return;
   }
+  let fresh = false; // 이번에 템플릿을 새로 적용했는가 — 그때만 SaaS 금액을 가격정책 기준으로 비운다(저장된 견적은 그대로)
   if (!state.blocks.length && state.type.template_code) {
     root.appendChild(h('div', { class: 'empty' }, '템플릿을 적용하는 중…'));
-    try { await applyTemplate(state, wiz); }
+    try { await applyTemplate(state, wiz); fresh = true; }
     catch (err) { root.replaceChildren(h('div', { class: 'empty' }, err.message)); return; }
     root.replaceChildren();
   }
@@ -396,6 +397,20 @@ export async function renderStep3(root, state, wiz) {
     let n = 0;
     for (const b of st0.blocks || []) for (const it of b.items || []) if (bands[it.item_code] && it.name !== svcTerm) { it.name = svcTerm; n++; }
     if (n) wiz.patch({});
+  }
+  // SaaS 템플릿으로 막 시작했으면 템플릿에 없는 금액은 비운다(2026-10-30 사용자 요청).
+  //   서비스 이용료(인원 · 건수 구간) — 인원 · 건수 숫자를 넣어야 구간 금액이 들어간다(템플릿의 숫자는 쓰지 않는다)
+  //   가격정책 기본정보에 금액(money)이 아닌 값(별도협의 등)인 세부 — 내부시스템 연계 · 커스터마이징 → 단가 빈칸
+  //   그 밖에 가격정책에 금액이 있는 행(기본 셋업비 · Poa-BiA · 독립인프라 · 옵션)은 그 금액 그대로
+  if (fresh && st0.type.deployment === 'SAAS') {
+    const rows = Object.values(policyItems).flat();
+    for (const b of st0.blocks || []) for (const it of b.items || []) {
+      const pol = rows.find((x) => x.sub === it.name);
+      if (bands[it.item_code]) it.band_qty = null;
+      else if (!pol || pol.money) continue;
+      it.base_price = null; it.proposed_price = null; it.amount = 0;
+    }
+    wiz.patch({});
   }
   // 서비스 이용료 행의 단위도 인원 · 건수에 맞춘다(명 / 건) — 예전 견적 · 템플릿의 'User/월' 도 열면 바뀐다(저장해야 견적서에 반영)
   {
@@ -443,10 +458,12 @@ export async function renderStep3(root, state, wiz) {
     ? [...ITEM_COLS.slice(0, 4), BAND_COL, ...ITEM_COLS.slice(4)] : ITEM_COLS);
 
   function rowEl(b, r, isLabor, picked, hasBand) {
-    const amtCell = h('td', { class: 'ss-cell--amount' }, num(r.qty) === 0 && !isLabor ? '' : won(r.amount || 0));
+    // 수량 0 이거나 단가를 아직 안 넣은 행(템플릿에 없는 금액 — 서비스 이용료 인원·건수 입력 전 등)은 금액 칸을 비운다
+    const amtText = () => (!isLabor && (num(r.qty) === 0 || r.proposed_price == null || r.proposed_price === '') ? '' : won(r.amount || 0));
+    const amtCell = h('td', { class: 'ss-cell--amount' }, amtText());
     const upd = () => {
       const c = recalcBlocks(wiz.get());
-      amtCell.textContent = num(r.qty) === 0 && !isLabor ? '' : won(r.amount || 0);
+      amtCell.textContent = amtText();
       const sub = document.getElementById('sub-' + b.block_code);
       if (sub) sub.textContent = won(b._sub || 0);
       wiz.patch({}); syncTotals(c); preview.schedule(wiz);
@@ -527,7 +544,7 @@ export async function renderStep3(root, state, wiz) {
       bandIn.style.color = v ? '' : 'var(--ss-red, #FF5252)';
       if (!fill) return;
       r.base_price = v ? num(v.price) : null;
-      r.proposed_price = v ? num(v.price) : 0;
+      r.proposed_price = v ? num(v.price) : null; // 맞는 구간이 없으면 빈칸
       // 단가 칸을 새 값으로 다시 만든다(numInput 은 값을 안에 쥐고 있다)
       base.replaceChildren(money('base_price').firstChild);
       proposed.replaceChildren(money('proposed_price', PSTYLE).firstChild);
