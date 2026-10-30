@@ -370,6 +370,19 @@ export async function renderPricing(root) {
   const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
   const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
   const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.type, r.values]));
+  // 기본정보 항목은 분류 — 기본 / 부가 / 옵션 중 하나, 설명은 세부에 쓴다(2026-10-30 사용자 요청). 표는 이 순서로 묶어 보인다.
+  // 예전 행(항목에 '서비스구분' · '셋업비용' 같은 이름)은 읽을 때 바꾼다: 그 이름은 세부로, 항목은 이름으로 정한 분류
+  //   '옵션 기능' + '1. 협력사평가' → 옵션 + '1. 협력사평가' / 셋업 · Poa-BiA · 인프라 · 연계 · 유지보수 → 부가 / 나머지 → 기본
+  const INFO_GROUPS = ['기본', '부가', '옵션'];
+  const groupOrder = (g) => Math.max(0, INFO_GROUPS.indexOf(g));
+  const normInfo = (x) => {
+    const label = String(x.label || '').trim();
+    const sub = String(x.sub || '').trim();
+    if (INFO_GROUPS.includes(label)) return { ...x, label, sub };
+    if (/옵션/.test(label)) return { ...x, label: '옵션', sub: sub || label };
+    return { ...x, label: /셋업|Poa-BiA|인프라|연계|유지보수/i.test(label) ? '부가' : '기본', sub: [label, sub].filter(Boolean).join(' ') };
+  };
+  const sortInfo = (rows) => rows.map((r, i) => [r, i]).sort((a, b) => groupOrder(a[0].label) - groupOrder(b[0].label) || a[1] - b[1]).map(([r]) => r);
   // 기본정보 행 형식 — text(글자) | money(금액: 숫자만, 커서가 나가면 콤마). 정하지 않은 옛 행은 값이 모두 숫자면 금액
   const INFO_TYPES = [['text', '글자'], ['money', '금액']];
   const inferType = (values) => {
@@ -404,9 +417,10 @@ export async function renderPricing(root) {
       const saved = policy.current && policy.current.content && policy.current.content.info;
       const rows = saved && Array.isArray(saved.rows) ? saved.rows.map((x) => {
         const type = x.type || inferType(x.values);
-        return { label: x.label || '', sub: x.sub || '', type, values: type === 'money' ? moneyValues(x.values) : { ...(x.values || {}) }, checked: false };
-      }) : INFO_ROWS.map(([label, sub, type]) => ({ label, sub: sub || '', type: type || 'text', values: {}, checked: false }));
-      saas = { services, deleted: [], pick: services[0] || null, info: { rows }, policy };
+        const n = normInfo(x);
+        return { label: n.label, sub: n.sub, type, values: type === 'money' ? moneyValues(x.values) : { ...(x.values || {}) }, checked: false };
+      }) : INFO_ROWS.map(([label, sub, type]) => ({ ...normInfo({ label, sub }), type: type || 'text', values: {}, checked: false }));
+      saas = { services, deleted: [], pick: services[0] || null, info: { rows: sortInfo(rows) }, policy };
       saas.infoBase = infoJson();
     } catch (err) {
       clear(body).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
@@ -466,14 +480,19 @@ export async function renderPricing(root) {
         }
         paintSaasBody();
       } }, ...INFO_TYPES.map(([v, l]) => h('option', { value: v, selected: v === r.type }, l))));
-    const widths = [60, 190, 140, 80, ...cols.map(() => 300)];
+    // 항목 = 분류(기본 / 부가 / 옵션) — 고르면 그 묶음으로 옮긴다. 같은 분류가 이어지면 흐리게
+    const groupSel = (r, same) => h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': '항목',
+      style: `text-align:center;font-weight:600;background:#F8FAFC;${same ? 'color:#B6BDC8' : ''}`,
+      onchange: (e) => { r.label = e.target.value; saas.info.rows = sortInfo(saas.info.rows); paintSaasBody(); } },
+      ...INFO_GROUPS.map((g) => h('option', { value: g, selected: g === r.label }, g))));
+    const widths = [60, 90, 240, 80, ...cols.map(() => 300)];
     const tbody = h('tbody');
     saas.info.rows.forEach((r, i) => {
-      const same = i > 0 && r.label && r.label === saas.info.rows[i - 1].label; // 같은 항목이 이어지면 이름을 흐리게
+      const prev = saas.info.rows[i - 1];
       tbody.appendChild(h('tr', {},
         h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
-        area(r.label, (v) => { r.label = v; }, `font-weight:600;background:#F8FAFC;${same ? 'color:#B6BDC8' : ''}`),
-        area(r.sub, (v) => { r.sub = v; }, 'background:#F8FAFC'),
+        groupSel(r, prev && prev.label === r.label),
+        area(r.sub, (v) => { r.sub = v; }, 'font-weight:600;background:#F8FAFC'),
         typeSel(r),
         ...cols.map((svc) => (r.type === 'money' ? money(r, svc.form.code)
           : area(r.values[svc.form.code], (v) => { r.values[svc.form.code] = v; }, 'text-align:center')))));
@@ -483,7 +502,8 @@ export async function renderPricing(root) {
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ SaaS 정책 기본정보'),
         h('span', { class: 'ss-detailbar__note' }, '칸을 눌러 고칩니다. 형식이 금액인 행은 숫자만 받습니다. 글자 칸의 줄바꿈은 Enter.'),
         h('div', { class: 'ss-detailbar__spacer' }),
-        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { saas.info.rows.push({ label: '', sub: '', type: 'text', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { const last = saas.info.rows[saas.info.rows.length - 1];
+          saas.info.rows.push({ label: last ? last.label : '기본', sub: '', type: 'text', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           if (!saas.info.rows.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
           saas.info.rows = saas.info.rows.filter((r) => !r.checked);
@@ -494,7 +514,7 @@ export async function renderPricing(root) {
           h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
           h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '형식'),
             ...cols.map((svc) => h('th', {}, shortName(svc))))),
-          tbody), 'info')));
+          tbody), 'info3')));
   }
 
   // 칸 경계를 끌어 너비 조절 — 조절한 너비는 이 브라우저에 기억(두 번 누르면 처음 너비). 선택 칸은 고정
@@ -744,8 +764,8 @@ export async function renderPricing(root) {
         `${v.version} · ${when(v.created_at)} · ${v.created_by_name || '-'}${v.note ? ' · ' + v.note : ''}`));
       view.appendChild(h('table', { class: 'ss-grid' },
         h('thead', {}, h('tr', {}, h('th', {}, '항목'), h('th', {}, '세부'), ...cols.map((x) => h('th', {}, x.label)))),
-        h('tbody', {}, ...((c.info && c.info.rows) || []).map((r) => h('tr', {},
-          h('td', { style: 'font-weight:600' }, r.label), h('td', {}, r.sub),
+        h('tbody', {}, ...sortInfo(((c.info && c.info.rows) || []).map(normInfo)).map((r) => h('tr', {},
+          h('td', { style: 'text-align:center;font-weight:600' }, r.label), h('td', { style: 'font-weight:600' }, r.sub),
           ...cols.map((x) => ((r.type || inferType(r.values)) === 'money'
             ? h('td', { style: 'text-align:right' }, comma(cleanNum(r.values && r.values[x.code])))
             : h('td', { style: 'text-align:center' }, ...lines(r.values && r.values[x.code])))))))));
