@@ -2,7 +2,7 @@
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
-import { kindBadge, openTemplatePreview } from './template-picker.js';
+import { kindBadge, openTemplatePicker } from './template-picker.js';
 import { loadSaasCatalog, quoteService } from './step3-config.js';
 
 const DEP_LABEL = {
@@ -52,34 +52,28 @@ function deploymentCards(all, state, root, wiz) {
   });
 }
 
-// 템플릿 카드 — 누르면 그 템플릿으로 2단계(기본정보)로 간다. [미리보기] 는 견적서 모양만 보여 주고 넘어가지 않는다
-function tplCards(list, state, root, wiz) {
-  return list.map((tpl) => {
-    const on = state.type.template_code === tpl.code;
-    const start = () => {
-      if (wiz.readOnly) return; // 상세(읽기 전용)
-      // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
-      // STEP③ 은 `!state.blocks.length` 일 때만 apply-template 을 부르므로,
-      // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.
-      const cur = wiz.get();
-      const changed = cur.type.template_code && cur.type.template_code !== tpl.code;
-      wiz.patch({ type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code, manual: false, solution: tpl.solution },
-        ...(changed || cur.type.manual ? { blocks: [], applied: null, conds: [], pay_plan: null } : {}) });
-      wiz.go(2);
-    };
-    const preview = h('button', { class: 'btn', 'data-keep': '', style: 'margin-left:8px',
-      onclick: (e) => { e.stopPropagation(); openTemplatePreview({ state: wiz.get(), tpl, onStart: start }); } }, '미리보기');
-    const card = h('div', { class: 'factor' + (on ? ' on' : ''), title: '눌러서 이 템플릿으로 시작' },
-      h('div', { class: 't' },
-        h('b', {}, tpl.name),
-        h('span', {}, (tpl.block_codes || []).join(' + ') || '블록 미정'),
-        h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
-      kindBadge(tpl.kind),
-      tpl.has_labor_plan ? h('span', { class: 'badge badge-gray' }, '인력투입계획') : null,
-      preview);
-    card.addEventListener('click', start);
-    return card;
-  });
+// 템플릿으로 시작 — 그 템플릿으로 2단계(기본정보)로 간다
+function startTemplate(tpl, wiz) {
+  if (wiz.readOnly) return; // 상세(읽기 전용)
+  // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
+  // STEP③ 은 `!state.blocks.length` 일 때만 apply-template 을 부르므로,
+  // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.
+  const cur = wiz.get();
+  const changed = cur.type.template_code && cur.type.template_code !== tpl.code;
+  wiz.patch({ type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code, manual: false, solution: tpl.solution },
+    ...(changed || cur.type.manual ? { blocks: [], applied: null, conds: [], pay_plan: null } : {}) });
+  wiz.go(2);
+}
+
+// 지금 적용한 템플릿 한 줄 — 목록은 [템플릿 불러오기] 창에서 본다(화면이 아래로 늘어나지 않게)
+function currentTplLine(tpl) {
+  return h('div', { class: 'factor on', style: 'cursor:default' },
+    h('div', { class: 't' },
+      h('b', {}, tpl.name),
+      h('span', {}, (tpl.block_codes || []).join(' + ') || '블록 미정'),
+      h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
+    kindBadge(tpl.kind),
+    tpl.has_labor_plan ? h('span', { class: 'badge badge-gray' }, '인력투입계획') : null);
 }
 
 // 직접 작성 — 템플릿 없이 고른 솔루션 · 구축형태로 시작(→ 2단계 기본정보), 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
@@ -99,7 +93,7 @@ function startManual(state, wiz, sol) {
 }
 
 // 순서(2026-10-30 사용자 요청): 1. 솔루션 → 2. 구축형태(온프레미스 · SaaS …) → 3. SaaS 서비스(SaaS 일 때) → 템플릿.
-// 앞 단계를 고르면 다음 단계가 그 값으로 걸러진다. 템플릿 대신 [직접 작성으로 시작] · [견적서 불러오기] 도 템플릿 칸에 있다.
+// 앞 단계를 고르면 다음 단계가 그 값으로 걸러진다. 템플릿 칸에 [템플릿 불러오기] · [직접 작성으로 시작] · [견적서 불러오기] 가 있다.
 export async function renderStep2(root, state, wiz) {
   const loaded = await loadTemplates();
   const sols = ((await store.getMaster()) || {}).solutions || [];
@@ -133,15 +127,22 @@ export async function renderStep2(root, state, wiz) {
   // 3. SaaS 서비스 (SaaS 일 때)
   if (svcCard) { svcCard.querySelector('h2').textContent = `${++no}. SaaS 서비스`; root.appendChild(svcCard); }
 
-  // 템플릿 — 고른 솔루션 · 구축형태 것만. 직접 작성 · 견적서 불러오기도 여기서
+  // 템플릿 — 고른 솔루션 · 구축형태 것만. [템플릿 불러오기] 창(왼쪽 목록 + 오른쪽 견적서 미리보기)에서 고른다.
+  // 견적서 불러오기 창과 같은 구조(2026-10-30 사용자 요청). 직접 작성 · 견적서 불러오기도 여기서
   const list = dep ? all.filter((x) => x.deployment === dep) : [];
+  const curTpl = list.find((x) => x.code === state.type.template_code);
+  const pickTpl = () => openTemplatePicker({ state: wiz.get(), list, currentCode: state.type.template_code,
+    title: `템플릿 불러오기 — ${solName} · ${DEP_LABEL[dep] || dep}`, onStart: (tpl) => startTemplate(tpl, wiz) });
   root.appendChild(card('템플릿 선택',
-    dep ? `${solName} · ${DEP_LABEL[dep] || dep} · ${list.length}종 — 누르면 그 템플릿으로 다음 단계, [미리보기] 는 견적서 모양만` : '구축형태를 먼저 고르세요',
+    dep ? `${solName} · ${DEP_LABEL[dep] || dep} · ${list.length}종` : '구축형태를 먼저 고르세요',
     h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
-      ...(!dep ? [h('div', { class: 'empty' }, '위에서 구축형태를 고르면 템플릿이 나옵니다.')]
-        : list.length ? tplCards(list, state, root, wiz)
-          : [h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')])),
-    [h('button', { class: 'btn' + (state.type.manual ? ' btn-primary' : ''), disabled: !dep, title: '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다',
+      !dep ? h('div', { class: 'empty' }, '위에서 구축형태를 고르면 템플릿을 불러올 수 있습니다.')
+        : !list.length ? h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')
+          : curTpl ? currentTplLine(curTpl)
+            : h('div', { class: 'empty' }, '[템플릿 불러오기] 를 눌러 템플릿을 고르세요. 견적서 모양을 보고 고를 수 있습니다.')),
+    [h('button', { class: 'btn' + (state.type.manual ? '' : ' btn-primary'), disabled: !dep || !list.length || wiz.readOnly,
+      onclick: pickTpl }, curTpl ? '템플릿 다시 불러오기' : '템플릿 불러오기'),
+    h('button', { class: 'btn' + (state.type.manual ? ' btn-primary' : ''), disabled: !dep, title: '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다',
       onclick: () => startManual(wiz.get(), wiz, sol) }, state.type.manual ? '직접 작성 중 — 다시 적용' : '직접 작성으로 시작'),
     h('button', { class: 'btn', onclick: () => wiz.pickQuote() }, '견적서 불러오기')]));
 
