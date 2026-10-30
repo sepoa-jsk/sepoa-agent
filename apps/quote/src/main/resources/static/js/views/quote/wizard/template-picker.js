@@ -1,10 +1,11 @@
 // 템플릿 불러오기 창 — 견적 작성 1단계 [템플릿 불러오기] 로 연다. 견적서 불러오기 창(quote-picker.js)과 같은 구조(2026-10-30 사용자 요청).
-// 왼쪽: 고른 솔루션 · 구축형태의 템플릿 목록(코드 · 이름 검색) / 오른쪽: 고른 템플릿의 견적서 미리보기.
-// 미리보기는 지금 작성 중인 기본정보(수신처 · 견적용도 등)에 템플릿의 구성 · 인력 · 견적조건을 얹어 그린다.
+// 왼쪽: 고른 솔루션 · 구축형태의 템플릿 목록(코드 · 이름 검색) / 오른쪽: 고른 템플릿에 들어 있는 내용.
+// 오른쪽은 템플릿 내용만 — 블록별 구분 · 모듈 · 세부기능 · 인원·건수 · 수량 · 단위, 인력, 결제 방안 포함 여부, 견적조건.
+// 금액은 보이지 않는다(2026-10-30 사용자 요청) — 단가 · 금액은 템플릿으로 시작한 뒤 3단계(구성)에서 가격정책으로 채운다.
 // [이 템플릿으로 시작] 을 누르면 onStart(tpl) — 상태 반영은 1단계(step2-type.js)가 한다.
 import { api as http } from '../../../api.js';
-import { h, won, clear, openModal } from '../../../ui.js';
-import { appliedPatch, toBlocksPayload, previewHeader, recalcBlocks } from './step3-config.js';
+import { h, clear, openModal } from '../../../ui.js';
+import { appliedPatch, bandLine, bandUnitOf } from './step3-config.js';
 
 // 템플릿 종류(서버가 내용으로 정한다) — 구조만: 블록 틀만 있고 모듈 · 인력은 비어 있다 / 데이터 포함: 기본 모듈 · 인력까지 채워져 있다
 export const KIND_LABEL = { STRUCT: '구조만', DATA: '데이터 포함' };
@@ -19,13 +20,13 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
   const search = h('input', { class: 'ss-input', placeholder: '템플릿 코드 · 이름 검색', style: 'flex:1;min-width:0', oninput: () => paintList() });
   const list = h('div', { style: 'flex:1;overflow:auto;border-top:1px solid #E7EAF0' });
   const info = h('div', { style: 'font-size:12px;color:var(--ss-ink-3);min-height:18px' }, '왼쪽에서 템플릿을 고르세요.');
-  const frame = h('iframe', { style: 'flex:1;width:100%;border:1px solid #E7EAF0;background:#fff' });
+  const view = h('div', { style: 'flex:1;overflow:auto;border:1px solid #E7EAF0;background:#fff;padding:10px 12px' });
   const okBtn = h('button', { class: 'btn btn-primary', disabled: true }, '이 템플릿으로 시작');
 
   const body = h('div', { style: 'display:grid;grid-template-columns:360px 1fr;gap:12px;height:70vh' },
     h('div', { style: 'display:flex;flex-direction:column;gap:8px;min-height:0' },
       h('div', { style: 'display:flex;gap:6px' }, search), list),
-    h('div', { style: 'display:flex;flex-direction:column;gap:6px;min-height:0' }, info, frame));
+    h('div', { style: 'display:flex;flex-direction:column;gap:6px;min-height:0' }, info, view));
 
   const m = openModal({
     title: title || '템플릿 불러오기',
@@ -66,26 +67,60 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
     info.textContent = `${t.name} — 그리는 중...`;
     try {
       const d = applyCache[t.code] || (applyCache[t.code] = await http.applyTemplate(t.code));
-      // 지금 작성 중인 기본정보에 템플릿 내용을 얹은 모습 (특별DC 는 새로 시작하므로 넣지 않는다)
-      const s = { ...state, ...appliedPatch(d), type: { quote_type: t.quote_type, deployment: t.deployment, template_code: t.code },
-        discount: { mode: 'TARGET', value: null }, monthly_discount: { mode: 'TARGET', value: null } };
-      recalcBlocks(s); // 행 금액(amount)을 채운다 — 서버는 보낸 금액을 그대로 합산한다
-      const r = await http.previewQuote({
-        blocks: toBlocksPayload(s),
-        header: { ...previewHeader(s), quote_no: state.quoteNo || '' },
-        round_unit: s.round_unit ?? 100000,
-      });
       if (my !== seq) return;
-      frame.srcdoc = r.html;
-      const c = r.calc || {};
-      const miss = (d.unregistered || []).length;
-      info.textContent = `${t.code} · ${KIND_LABEL[t.kind] || ''} · 기본값 기준 일시불 ${won(c.onetime_total)}원${c.monthly_total ? ` / 월 ${won(c.monthly_total)}원` : ''}`
-        + (miss ? ` · 가격정책 미등록 ${miss}건(단가 빈칸)` : '');
+      paintContent(d);
+      const blocks = appliedPatch(d).blocks;
+      const nItems = blocks.reduce((a, b) => a + (b.items || []).length, 0);
+      const nLabor = blocks.reduce((a, b) => a + (b.labor || []).length, 0);
+      info.textContent = `${t.code} · ${KIND_LABEL[t.kind] || ''} · 블록 ${blocks.length}개 · 모듈 ${nItems}개${nLabor ? ` · 인력 ${nLabor}명` : ''}`;
       picked = t;
       okBtn.disabled = false;
       paintList();
     } catch (err) {
       if (my === seq) info.textContent = err.message;
+    }
+  }
+
+  // 템플릿 내용 — 블록마다 표 하나(견적 작성 3단계와 같은 칸, 금액 칸 없음)
+  function paintContent(d) {
+    clear(view);
+    const s = appliedPatch(d);
+    const saas = d.template && d.template.deployment === 'SAAS';
+    const table = (cols, rows) => h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((a, [, w]) => a + w, 0)}px;min-width:100%` },
+      h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+      h('thead', {}, h('tr', {}, ...cols.map(([c]) => h('th', {}, c)))),
+      h('tbody', {}, ...(rows.length ? rows : [h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty', style: 'height:40px' }, '비어 있음 — 견적 작성에서 넣습니다'))])));
+    const cell = (v, align = 'left') => h('td', { style: `text-align:${align};white-space:pre-line` }, v == null ? '' : String(v));
+    const section = (title, ...kids) => view.appendChild(h('div', { style: 'margin-bottom:14px' },
+      h('div', { style: 'font-size:13px;font-weight:600;color:var(--ss-ink-1);margin-bottom:6px' }, title), ...kids));
+    s.blocks.forEach((b, i) => {
+      const items = b.items || [];
+      const labor = b.labor || [];
+      const kids = [];
+      if (b.block_code !== 'LABOR' || items.length) {
+        kids.push(table([['구분', 70], ['모듈', 170], ['세부기능', 300], ['인원·건수', 100], ['수량', 60], ['단위', 70]],
+          items.map((it) => h('tr', {},
+            cell(it.category, 'center'),
+            // 서비스 이용료 행(인원·건수 있음)은 가격정책 용어 — 어느 서비스인지는 1단계에서 고른 것으로 맞춰진다
+            cell(saas && it.band ? '서비스 이용료' : it.name),
+            cell(it.spec),
+            cell(bandLine(it) ? bandLine(it).slice(1, -4) : '', 'center'),
+            cell(it.qty, 'right'),
+            cell(bandUnitOf(it.band) || it.unit, 'center')))));
+      }
+      if (labor.length) {
+        kids.push(h('div', { style: 'margin-top:6px' }, table([['역할', 120], ['직무', 150], ['등급', 70], ['업무', 300], ['공수 (MM)', 80]],
+          labor.map((l) => h('tr', {}, cell(l.role_label), cell(l.role_name), cell(l.grade, 'center'), cell(l.task), cell(l.mm, 'right'))))));
+      }
+      section(`▣ ${i + 1}. ${b.name}${b.recurring ? ' (월정액)' : ''}`, ...kids);
+    });
+    if (d.template && d.template.has_pay_plan) {
+      section('▣ 결제 방안', h('div', { style: 'font-size:12.5px;color:var(--ss-ink-2)' }, '견적서에 결제 방안 표가 들어갑니다. 비율 · 문구는 3단계(구성)에서 고칩니다.'));
+    }
+    const conds = (d.conditions || []).filter(Boolean);
+    if (conds.length) {
+      section('▣ 견적조건', h('ol', { style: 'margin:0;padding-left:20px;font-size:12.5px;color:var(--ss-ink-2);line-height:1.7' },
+        ...conds.map((c) => h('li', {}, String(c)))));
     }
   }
 
