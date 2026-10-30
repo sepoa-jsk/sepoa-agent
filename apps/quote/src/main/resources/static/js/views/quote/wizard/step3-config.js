@@ -375,8 +375,9 @@ export async function renderStep3(root, state, wiz) {
       proposed.replaceChildren(money('proposed_price', PSTYLE).firstChild);
     }
     const kinds = Object.keys(BAND_KINDS).filter((k) => variants.some((v) => (v.key === 'COUNT' ? 'COUNT' : 'USER') === k));
+    // 직접 입력은 없다 — 인원 / 건수만(2026-10-30 사용자 요청). 예전에 저장한 견적(구간 없음)은 '선택' 으로 보이고, 고르면 구간 금액이 들어간다
     const bandSel = h('select', { class: 'ss-cellinput', style: 'text-align:center', title: '가격정책 구간으로 금액 채우기' },
-      h('option', { value: '' }, r.unit && !r.band ? r.unit : '직접'),
+      ...(r.band ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
       ...kinds.map((k) => h('option', { value: k, selected: r.band === k }, BAND_KINDS[k][0])));
     bandSel.addEventListener('change', () => {
       r.band = bandSel.value || null;

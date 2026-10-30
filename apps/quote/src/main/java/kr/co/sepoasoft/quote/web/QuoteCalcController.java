@@ -63,7 +63,7 @@ public class QuoteCalcController {
                         + " FROM sq_template_blocks tb JOIN sq_blocks b ON b.code = tb.block_code"
                         + " WHERE tb.template_id = ? ORDER BY tb.sort", tid);
         List<Map<String, Object>> titems = db.query(
-                "SELECT block_code, item_code, qty_default FROM sq_template_items WHERE template_id = ? ORDER BY block_code, sort", tid);
+                "SELECT block_code, item_code, qty_default, band_key FROM sq_template_items WHERE template_id = ? ORDER BY block_code, sort", tid);
         List<Map<String, Object>> tlabor = db.query(
                 "SELECT block_code, role_code, role_label, grade, task, mm_default FROM sq_template_labor WHERE template_id = ? ORDER BY sort", tid);
 
@@ -73,9 +73,18 @@ public class QuoteCalcController {
         Map<Object, Map<String, Object>> priceMap = new LinkedHashMap<>();
         if (!codes.isEmpty()) {
             for (Map<String, Object> p : db.query(
-                    "SELECT code, name, spec, category, base_price, unit, recurring FROM sq_price_items WHERE code IN ("
+                    "SELECT id, code, name, spec, category, base_price, unit, recurring, pricing_type FROM sq_price_items WHERE code IN ("
                             + Rows.placeholders(codes.size()) + ")", codes.toArray())) {
                 priceMap.put(p.get("code"), p);
+            }
+        }
+        // SaaS 구간형 서비스(pricing_type BAND)의 구간 — 품목 id → variants. 구간 단위 · 수량으로 구간 월 금액을 고른다
+        Map<Object, List<Map<String, Object>>> bandMap = new LinkedHashMap<>();
+        List<Object> bandIds = priceMap.values().stream().filter(p -> "BAND".equals(p.get("pricing_type"))).map(p -> p.get("id")).toList();
+        if (!bandIds.isEmpty()) {
+            for (Map<String, Object> v : db.query("SELECT item_id, `key`, min_qty, max_qty, price FROM sq_price_variants WHERE item_id IN ("
+                    + Rows.placeholders(bandIds.size()) + ") ORDER BY sort, id", bandIds.toArray())) {
+                bandMap.computeIfAbsent(v.get("item_id"), k -> new ArrayList<>()).add(v);
             }
         }
         // 활성 연도 인건비 기준단가(apply_price)
@@ -117,6 +126,7 @@ public class QuoteCalcController {
                 it.put("unit", or(p.get("unit"), null));
                 it.put("recurring", Rows.truthy(p.get("recurring")));
                 it.put("registered", priceMap.containsKey(t.get("item_code")));
+                applyBand(it, t.get("band_key"), bandMap.get(p.get("id")));
                 items.add(it);
             }
             List<Map<String, Object>> labor = new ArrayList<>();
@@ -251,5 +261,28 @@ public class QuoteCalcController {
 
     private static boolean eq(Object a, Object b) {
         return QuoteCalc.eq(a, b);
+    }
+
+    /**
+     * SaaS 구간형 서비스 행 — 구간 단위(USER 인원 / COUNT 건수)와 수량이 들어가는 구간의 '구간 월 금액' 을 기준단가로 넣는다.
+     * 금액은 구간 월 금액 그대로다(수량을 곱하지 않는다 — 화면 recalcBlocks 가 band 행을 그렇게 계산한다).
+     * 템플릿에 단위가 없으면 인원으로 본다. 구간이 없는 품목은 그대로 둔다(band 키도 넣지 않는다).
+     * 예전에 넣은 인원 구간은 key 가 비어 있다 — 가격정책 화면처럼 COUNT 가 아니면 인원이다.
+     */
+    private static void applyBand(Map<String, Object> it, Object bandKey, List<Map<String, Object>> variants) {
+        if (variants == null || variants.isEmpty()) return;
+        String band = "COUNT".equals(bandKey) ? "COUNT" : "USER";
+        double n = Js.toNumber(it.get("qty"));
+        it.put("band", band);
+        it.put("unit", "COUNT".equals(band) ? "건" : "명");
+        Object price = null;
+        for (Map<String, Object> v : variants) {
+            String k = "COUNT".equals(v.get("key")) ? "COUNT" : "USER";
+            if (!k.equals(band) || n < Js.toNumber(v.get("min_qty"))) continue;
+            if (v.get("max_qty") != null && n > Js.toNumber(v.get("max_qty"))) continue;
+            price = Js.json(Js.toNumber(v.get("price")));
+            break;
+        }
+        it.put("base_price", price);
     }
 }

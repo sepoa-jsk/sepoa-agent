@@ -93,8 +93,8 @@ public class TemplateController {
                         + " WHERE tb.template_id = ? ORDER BY tb.sort", tid);
         // 기본모듈은 price_items 소프트 참조 — 마스터에 없는 코드도 그대로 보여주고 registered=false 로 표시한다
         List<Map<String, Object>> items = db.query(
-                "SELECT ti.block_code, ti.item_code, ti.qty_default, ti.sort,"
-                        + " p.name AS item_name, p.base_price, p.recurring, p.unit,"
+                "SELECT ti.block_code, ti.item_code, ti.qty_default, ti.band_key, ti.sort,"
+                        + " p.name AS item_name, p.base_price, p.recurring, p.unit, p.pricing_type,"
                         + " (p.code IS NOT NULL) AS registered"
                         + " FROM sq_template_items ti"
                         + " LEFT JOIN sq_price_items p ON p.code = ti.item_code"
@@ -207,8 +207,11 @@ public class TemplateController {
         List<Object> items = QuoteCalc.asList(body.get("items"));
         for (int i = 0; i < items.size(); i++) {
             Map<String, Object> it = QuoteCalc.asMap(items.get(i));
-            db.update("INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, sort) VALUES (?, ?, ?, ?, ?)",
-                    tid, it.get("block_code"), it.get("item_code"), QuoteCalc.nn(it.get("qty_default"), 1), i);
+            // band_key — SaaS 구간형 서비스의 구간 단위 USER(인원) / COUNT(건수). 그 밖의 품목은 NULL (V8)
+            Object band = it.get("band_key");
+            db.update("INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, band_key, sort) VALUES (?, ?, ?, ?, ?, ?)",
+                    tid, it.get("block_code"), it.get("item_code"), QuoteCalc.nn(it.get("qty_default"), 1),
+                    "USER".equals(band) || "COUNT".equals(band) ? band : null, i);
         }
         List<Object> labor = QuoteCalc.asList(body.get("labor"));
         for (int i = 0; i < labor.size(); i++) {
