@@ -396,7 +396,7 @@ export async function renderTemplates(root) {
           h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((v, i) => h('td', { style: `white-space:pre-line;text-align:${i ? 'left' : 'center'}` }, v)))))))));
   }
 
-  // 견적조건 탭 — 고른 문구 세트(위 '견적조건 문구')의 문장 + SaaS 는 가격정책(SaaS) 현재 버전의 견적조건이 뒤에 붙는다(같은 문장은 한 번).
+  // 견적조건 탭 — 고른 문구 세트(위 '견적조건 문구')의 문장. SaaS 는 가격정책(SaaS) 현재 버전의 견적조건만 쓴다(있으면 문구 세트 대신 — 서버 apply-template 과 같은 규칙).
   // 견적 작성에서 템플릿을 고르면 이 순서 그대로 들어가고, 견적마다 고칠 수 있다
   const policyConds = {};
   async function condTab(body) {
@@ -411,14 +411,15 @@ export async function renderTemplates(root) {
           policyConds[f.solution] = ((pv.current && pv.current.content && pv.current.content.conds) || []).map((x) => String(x || '').trim()).filter(Boolean);
         } catch { policyConds[f.solution] = []; }
       }
-      extra = policyConds[f.solution].filter((t) => !lines.includes(t));
+      extra = [...new Set(policyConds[f.solution])];
     }
+    const usePolicy = extra.length > 0;
     const sel = h('select', { class: 'ss-select', style: 'width:240px', onchange: (e) => { f.condition_set = e.target.value; paint(); } }, // 위 기본정보의 견적조건 문구도 같이 바뀌게 전체를 다시 그린다
       ...conditionSets.map((c) => h('option', { value: c.code, selected: c.code === f.condition_set }, c.name)));
     body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
       h('span', { class: 'ss-detailbar__note' }, '견적 작성에서 이 템플릿을 고르면 아래 문장이 이 순서로 견적조건에 들어갑니다. 견적마다 고칠 수 있습니다.')));
     const tbody = h('tbody');
-    const all = [...lines.map((t) => [t, set ? set.name : '']), ...extra.map((t) => [t, '가격정책 견적조건'])];
+    const all = usePolicy ? extra.map((t) => [t, '가격정책 견적조건']) : lines.map((t) => [t, set ? set.name : '']);
     all.forEach(([t, src], i) => tbody.appendChild(h('tr', {},
       h('td', { style: 'text-align:center' }, String(i + 1)),
       h('td', { style: 'text-align:left;white-space:pre-line' }, t),
@@ -428,7 +429,7 @@ export async function renderTemplates(root) {
     body.appendChild(h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적조건'),
-        h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '문구 세트', sel)),
+        usePolicy ? h('span', { style: 'font-size:12px;color:var(--ss-ink-3);margin-left:12px' }, '가격정책(SaaS) 견적조건 탭의 문장을 씁니다') : h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '문구 세트', sel)),
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
         h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((a, [, w]) => a + w, 0)}px;min-width:100%` },
           h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),

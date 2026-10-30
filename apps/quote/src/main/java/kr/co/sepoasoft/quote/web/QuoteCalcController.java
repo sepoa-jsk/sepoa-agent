@@ -161,15 +161,18 @@ public class QuoteCalcController {
                 conditions.add(r.get("text"));
             }
         }
-        // SaaS 는 가격정책(SaaS) 현재 버전의 견적조건을 뒤에 덧붙인다 — 이미 같은 문장이 있으면 빼고(2026-10-30 사용자 결정)
+        // SaaS 는 가격정책(SaaS) 현재 버전의 견적조건만 쓴다 — 문구 세트(COND_SAAS 등) 대신(2026-10-30 사용자 결정).
+        // 가격정책에 견적조건이 없으면 문구 세트 그대로
         if ("SAAS".equals(tpl.get("deployment")) && Rows.truthy(tpl.get("condition_set"))) {
             Map<String, Object> pv = db.first("SELECT content FROM sq_price_policy_versions WHERE solution = ? AND deployment = 'SAAS'"
                     + " ORDER BY id DESC LIMIT 1", tpl.get("solution"));
             if (pv != null && db.safeJson(pv.get("content")) instanceof Map<?, ?> content && content.get("conds") instanceof List<?> pc) {
+                List<Object> policy = new ArrayList<>();
                 for (Object c : pc) {
                     String t = c == null ? "" : String.valueOf(c).trim();
-                    if (!t.isEmpty() && !conditions.contains(t)) conditions.add(t);
+                    if (!t.isEmpty() && !policy.contains(t)) policy.add(t);
                 }
+                if (!policy.isEmpty()) { conditions.clear(); conditions.addAll(policy); }
             }
         }
         Set<Object> unregistered = new LinkedHashSet<>();
