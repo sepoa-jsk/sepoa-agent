@@ -103,6 +103,9 @@ export async function renderPricing(root) {
   const current = () => TABS.find((t) => t.key === state.tab);
   const isDirty = () => (current().custom ? saasDirty() : deleted.length > 0 || rows.some((r) => r.isNew || changed(r)));
 
+  // 저장 안 한 변경이 있어도 막지 않는다 — 알리기만 하고 누른 곳으로 간다(변경은 버린다). 2026-10-30 사용자 요청
+  const warnUnsaved = () => { if (isDirty()) toast('저장하지 않은 변경은 반영되지 않았습니다.', 'err'); };
+
   // ── 1단계: 솔루션 레일 / 2단계: 탭(SaaS | On-premise | 전체 품목 | 직무별 단가) ──
   document.querySelector('.ss-app')?.classList.add('ss-app--railtitle');
   const railList = h('div');
@@ -122,7 +125,7 @@ export async function renderPricing(root) {
         class: 'ss-rail__code' + (sol.code === state.solution ? ' ss-rail__code--active' : ''),
         onclick: () => {
           if (sol.code === state.solution) return;
-          if (isDirty()) return toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
+          warnUnsaved();
           state.solution = sol.code;
           refresh();
         },
@@ -136,7 +139,7 @@ export async function renderPricing(root) {
       class: 'ss-tabs__tab' + (t.key === state.tab ? ' ss-tabs__tab--active' : ''),
       onclick: () => {
         if (t.key === state.tab) return;
-        if (isDirty()) return toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
+        warnUnsaved();
         state.tab = t.key;
         refresh();
       },
@@ -157,7 +160,7 @@ export async function renderPricing(root) {
     if (t.deploymentFilter) {
       fields.appendChild(h('div', { class: 'ss-field' },
         h('select', { class: 'ss-select', 'aria-label': '구축형태', onchange: (e) => {
-          if (isDirty()) { toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err'); e.target.value = state.deployment; return; }
+          warnUnsaved();
           state.deployment = e.target.value; load();
         } }, h('option', { value: '' }, '전체 구축형태'),
         ...DEPLOYMENTS.map(([v, l]) => h('option', { value: v, selected: v === state.deployment }, l)))));
