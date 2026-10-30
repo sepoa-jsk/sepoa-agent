@@ -42,7 +42,7 @@ export function renderStep5(root, state, wiz) {
   const calc = recalcBlocks(state);
 
   // ── 검증 배너 (규칙 엔진은 작업 16) ──
-  // 수신처가 비면(템플릿 불러오기로 1단계를 건너뛴 경우) 화면 위 기본정보 줄의 수신처 칸으로 보낸다
+  // 수신처가 비면(템플릿 불러오기로 2단계(기본정보)를 건너뛴 경우) 화면 위 기본정보 줄의 수신처 칸으로 보낸다
   const noCustomer = !state.basic.customer_name || !state.basic.customer_name.trim();
   const customerBtn = noCustomer ? h('button', { class: 'btn btn-sm', style: 'margin-top:6px', onclick: () => wiz.focusCustomer() }, '수신처 입력') : null;
   const banner = errs.length

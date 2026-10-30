@@ -1,4 +1,6 @@
 // 견적 작성 위저드 — 5단계. 상태는 여기서만 보관하고 각 step 은 순수 렌더러다.
+// 순서: ① 유형 선택 → ② 기본정보 → ③ 구성 → ④ 인건비 → ⑤ 검토·발행 (2026-10-30 사용자 요청 — 유형을 먼저 고른다).
+// 파일 이름(step1-basic · step2-type)은 예전 순서 그대로다.
 //
 // step 계약:  render(root, state, api) → void
 //   state 를 읽어 화면을 그리고, 값이 바뀌면 api.patch({...}) 로 변경분만 돌려준다.
@@ -29,8 +31,8 @@ const OPEN_STEP_KEY = 'sq.wizard.openStep'; // 상세 ↔ 수정 전환 때 이�
 export const STATUS_OPTS = [['DRAFT', '작성중'], ['SENT', '발송'], ['WON', '수주'], ['LOST', '실주']];
 
 const STEPS = [
-  { n: 1, label: '기본정보', render: renderStep1 },
-  { n: 2, label: '유형 선택', render: renderStep2 },
+  { n: 1, label: '유형 선택', render: renderStep2 },
+  { n: 2, label: '기본정보', render: renderStep1 },
   { n: 3, label: '구성', render: renderStep3 },
   { n: 4, label: '인건비', render: renderStep4 },
   { n: 5, label: '검토·발행', render: renderStep5 },
@@ -143,10 +145,10 @@ export async function renderWizard(root, opts = {}) {
       try { ({ template: tpl, conditions: tplConds } = await http.templateDetail(opts.quote.template_code)); } catch { /* 템플릿이 없어도 수정은 된다 */ }
     }
     state = fromQuote(opts.quote, tpl, tplConds);
-    // 상세 ↔ 수정 전환이면 보던 단계에서, 아니면 상세는 1단계 · 수정은 3단계(구성)
+    // 상세 ↔ 수정 전환이면 보던 단계에서, 아니면 상세는 2단계(기본정보) · 수정은 3단계(구성)
     const keep = Number(sessionStorage.getItem(OPEN_STEP_KEY));
     sessionStorage.removeItem(OPEN_STEP_KEY);
-    state.step = keep >= 1 && keep <= STEPS.length ? keep : readOnly ? 1 : 3;
+    state.step = keep >= 1 && keep <= STEPS.length ? keep : readOnly ? 2 : 3;
   } else {
     // 신규는 빈 화면 — 예전에 남은 브라우저 보관분도 지운다
     localStorage.removeItem(DRAFT_KEY);
@@ -210,7 +212,7 @@ export async function renderWizard(root, opts = {}) {
     if (!state.blocks.length) return toast('3단계(구성)에서 템플릿이 적용된 뒤부터 임시저장할 수 있습니다.', 'err');
     saving = true;
     try {
-      // 템플릿 불러오기로 1단계를 건너뛰면 수신처가 비어 있다 — 화면 위 기본정보 줄의 수신처 칸으로 안내한다
+      // 템플릿 불러오기로 2단계(기본정보)를 건너뛰면 수신처가 비어 있다 — 화면 위 기본정보 줄의 수신처 칸으로 안내한다
       if (!state.basic.customer_name.trim()) {
         toast('수신처(고객사명)를 입력하세요.', 'err');
         focusCustomer();
@@ -340,8 +342,8 @@ export async function renderWizard(root, opts = {}) {
     }));
   }
 
-  // 기본정보 줄 — 2단계부터 화면 위에 수신처 · 담당자 · 견적용도를 늘 보여 준다.
-  // 템플릿 불러오기로 1단계를 건너뛰어도 여기서 바로 입력한다. 나머지 기본정보(연락처 · 일자 등)는 1단계에서.
+  // 기본정보 줄 — 3단계부터 화면 위에 수신처 · 담당자 · 견적용도를 늘 보여 준다.
+  // 템플릿 불러오기로 2단계(기본정보)를 건너뛰어도 여기서 바로 입력한다. 나머지 기본정보(연락처 · 일자 등)는 2단계에서.
   let customers = null;
   function basicBar() {
     const b = state.basic;
@@ -392,7 +394,7 @@ export async function renderWizard(root, opts = {}) {
   function paint() {
     clear(root);
     root.appendChild(stepsBar());
-    if (state.step >= 2) root.appendChild(basicBar());
+    if (state.step >= 3) root.appendChild(basicBar());
     const body = h('div', {});
     root.appendChild(body);
     root.appendChild(h('div', { class: 'page-sub', id: 'wizard-saved', style: 'margin-top:10px;text-align:right' },
@@ -403,12 +405,12 @@ export async function renderWizard(root, opts = {}) {
     if (readOnly) {
       lock(body);
       const bar = root.querySelector('.card');
-      if (bar && state.step >= 2) lock(bar);
+      if (bar && state.step >= 3) lock(bar);
     }
   }
 
   // 읽기 전용 — 입력 · 버튼을 모두 잠근다(상태 상자 data-keep 은 뺀다). 단계가 늦게 그리는 부분도 따라 잠근다.
-  // 2단계의 유형 · 템플릿 카드는 버튼이 아니라서 누르지 못하게 막는다.
+  // 1단계의 유형 · 템플릿 카드는 버튼이 아니라서 누르지 못하게 막는다.
   function lock(el) {
     const apply = () => {
       el.querySelectorAll('input, select, textarea, button').forEach((c) => { if (!c.closest('[data-keep]') && !c.disabled) c.disabled = true; });
@@ -423,12 +425,12 @@ export async function renderWizard(root, opts = {}) {
 
 // 단계별 전진 조건. 통과 못 하면 메시지를 돌려준다.
 function validate(step, state) {
-  if (step === 1) {
+  if (step === 1) return validateStep2(state); // 유형 선택
+  if (step === 2) { // 기본정보
     if (!state.basic.customer_name.trim()) return '수신처(고객사명)를 입력하세요.';
     if (!state.basic.quote_date) return '견적일자를 입력하세요.';
     return null;
   }
-  if (step === 2) return validateStep2(state);
   return null;
 }
 

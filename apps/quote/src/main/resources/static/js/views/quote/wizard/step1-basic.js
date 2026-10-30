@@ -1,4 +1,4 @@
-// STEP① 기본정보 — 시안 #s4 구조.
+// STEP② 기본정보 (유형 선택 다음) — 시안 #s4 구조.
 // 자사 정보는 sq_settings 값을 읽기 전용으로 보여준다. 견적서마다 다르게 입력되는 것을 막는 게 목적이다.
 import { api as http } from '../../../api.js';
 import { pickCustomer } from '../pickers.js';

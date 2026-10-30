@@ -1,4 +1,4 @@
-// STEP② 유형 선택 — quote_type × deployment 조합을 카드로 제시하고 템플릿을 붙인다.
+// STEP① 유형 선택 — quote_type × deployment 조합을 카드로 제시하고 템플릿을 붙인다.
 // 조합은 임의로 만들지 않는다. sq_quote_templates 에 실제로 존재하는 것만 노출한다.
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
@@ -77,7 +77,7 @@ function tplCards(list, state, root, wiz) {
   });
 }
 
-// 직접 작성 — 템플릿 없이 솔루션 · 구축형태만 정하고, 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
+// 직접 작성 — 템플릿 없이 솔루션 · 구축형태만 정하고(→ 2단계 기본정보), 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
 function manualCard(state, root, wiz) {
   const sols = (store.master && store.master.solutions) || [];
   const on = !!state.type.manual;
@@ -95,7 +95,7 @@ function manualCard(state, root, wiz) {
       ...(changed ? { blocks: [], conds: [] } : {}),
       conds_on: changed || !(state.conds || []).length ? false : state.conds_on, // 직접 작성은 견적조건 없이 시작 — 필요하면 블록 추가로 넣는다
     });
-    wiz.go(3);
+    wiz.go(2);
   });
   return h('div', { class: 'card', style: 'margin-bottom:14px' + (on ? ';outline:2px solid var(--primary)' : '') },
     h('div', { class: 'card-h' }, h('h2', {}, '직접 작성'), h('span', { class: 'sub' }, '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다')),
