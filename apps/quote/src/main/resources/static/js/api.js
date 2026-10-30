@@ -63,6 +63,10 @@ export const api = {
   createPriceItem: (body) => req('POST', '/api/pricing/items', body),
   updatePriceItem: (id, body) => req('PUT', `/api/pricing/items/${id}`, body),
   deletePriceItem: (id) => req('DELETE', `/api/pricing/items/${id}`),
+  // 가격정책 버전 이력(V7) — 현재 버전 + 이력 / 한 버전 / 새 버전
+  pricePolicy: (solution, deployment = 'SAAS') => req('GET', `/api/pricing/policy${qs({ solution, deployment })}`),
+  pricePolicyVersion: (id) => req('GET', `/api/pricing/policy/${id}`),
+  savePricePolicy: (body) => req('POST', '/api/pricing/policy', body),
 
   // 견적
   calculate: (payload) => req('POST', '/api/quotes/calculate', payload),

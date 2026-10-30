@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
+import { h, toast, clear, confirmModal, resizableColumns, numInput, openModal, won } from '../ui.js';
 
 // 가격정책 — 2026-10-30 다시 구성(사용자 요청): 1단계 솔루션(왼쪽 레일) → 2단계 SaaS | On-premise(탭) → 3단계 입력.
 //   SaaS       : 서비스(S2C · S2P 등)마다 인원 구간 · 건수 구간 금액표(구간 월 금액) — 서비스 품목의 variants(key USER / COUNT)에 둔다.
@@ -350,30 +350,38 @@ export async function renderPricing(root) {
     load();
   }
 
-  // ── SaaS: 서비스(S2C · S2P · P2P · Sourcing …) → 서비스마다 인원 구간 · 건수 구간 (구간 월 금액) ─────
+  // ── SaaS: 버전 → 정책 기본정보 → 서비스(S2C · S2P …) → 서비스마다 인원 · 건수 구간 (구간 월 금액) ─────
   // 서비스 = 이 솔루션의 SaaS 구간형 품목(sq_price_items: deployment SAAS · pricing_type BAND · 월).
   // 구간은 그 품목의 variants 에 key USER(인원) / COUNT(건수)로 둔다. 끝을 비우면 '이상'(마지막 구간).
-  // 위 서비스 표에서 행을 누르면 아래에 그 서비스의 구간표가 나온다. [저장] 은 서비스 · 구간을 한 번에 저장한다.
+  // 정책 기본정보(서비스구분 · 기본 제공 기능 · 사용자당 가격 · 셋업비용 · 옵션 기능 …)는 버전 이력(V7 sq_price_policy_versions)에만 있다.
+  // [저장] 할 때마다 버전 번호 · 변경 내용을 받아 정책 전체(기본정보 · 서비스 · 구간)를 새 버전으로 남긴다 — 이력에서 지난 버전을 본다.
   // 셋업비 · 옵션 같은 고정 금액 SaaS 품목은 '전체 품목' 탭에서 고친다.
   const RANGE_KINDS = [['USER', '인원 구간', '인'], ['COUNT', '건수 구간', '건']];
-  let saas = null; // { services: [{ orig, form, isNew, checked, lists, base }], deleted: [], pick }
+  // 처음 만드는 정책의 기본정보 항목(실측: 전자구매 SaaS 가격정책_202603) — 값은 비어 있다
+  const INFO_ROWS = [['서비스구분'], ['기본 제공 기능'], ['특별 제공 기능'], ['가격정책'], ['사용자당 가격'], ['최소가격'], ['셋업비용'],
+    ['Poa-BiA 비용(인터페이스 모듈)'], ['독립인프라 비용(서버 or DBMS)'], ['유지보수비용'], ['약정기간'], ['내부시스템연계'],
+    ['옵션 기능', '1. 협력사평가'], ['옵션 기능', '2. 예산관리'], ['옵션 기능', '3. 품질모듈'], ['옵션 기능', '4. 재고관리모듈']];
+  let saas = null; // { services, deleted, pick, info: { rows }, infoBase, policy: { current, history } }
   const toNum = (v) => (v === '' || v == null ? null : Number(v));
   const svcForm = (it) => ({ code: it.code || '', name: it.name || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
   const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
   const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
-  const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged));
+  const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.values]));
+  const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged) || infoJson() !== saas.infoBase);
+  const shortName = (svc) => String(svc.form.name || svc.form.code || '새 서비스').replace(/\s*서비스\s*이용료$/, '');
+  const when = (v) => String(v || '').replace('T', ' ').slice(0, 16);
 
   async function paintSaas() {
     saas = null;
     pane.appendChild(h('div', { class: 'ss-edithead', style: 'margin-top:16px' }, h('div', { class: 'ss-edithead__fields' }),
       h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: saveSaas }, '저장'))));
-    pane.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
-      h('span', { class: 'ss-detailbar__note' }, '서비스를 고르면 아래에 그 서비스의 인원 · 건수 구간표가 나옵니다. 구간 금액은 그 구간일 때의 월 사용료입니다. 끝을 비우면 \'이상\'입니다.')));
-    const body = h('div', { style: 'margin-top:8px' });
+    const body = h('div', { style: 'margin-top:12px' });
     pane.appendChild(body);
     body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
+    let policy;
     try {
-      const r = await api.pricing(state.solution, 'SAAS');
+      const [r, p] = await Promise.all([api.pricing(state.solution, 'SAAS'), api.pricePolicy(state.solution, 'SAAS')]);
+      policy = p;
       const services = (r.items || []).filter((x) => x.pricing_type === 'BAND').map((it) => {
         const lists = { USER: [], COUNT: [] };
         for (const v of it.variants || []) {
@@ -383,7 +391,11 @@ export async function renderPricing(root) {
         svc.base = rangeOf(svc);
         return svc;
       });
-      saas = { services, deleted: [], pick: services[0] || null };
+      const saved = policy.current && policy.current.content && policy.current.content.info;
+      const rows = saved && Array.isArray(saved.rows) ? saved.rows.map((x) => ({ label: x.label || '', sub: x.sub || '', values: { ...(x.values || {}) }, checked: false }))
+        : INFO_ROWS.map(([label, sub]) => ({ label, sub: sub || '', values: {}, checked: false }));
+      saas = { services, deleted: [], pick: services[0] || null, info: { rows }, policy };
+      saas.infoBase = infoJson();
     } catch (err) {
       clear(body).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
       return;
@@ -394,24 +406,72 @@ export async function renderPricing(root) {
 
   function paintSaasBody() {
     const body = clear(saas.body);
+    body.appendChild(versionBar());
+    body.appendChild(infoCard());
     body.appendChild(serviceCard());
-    if (!saas.pick) {
-      body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '서비스를 고르거나 행추가로 만드세요.'));
-      return;
-    }
-    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px' });
+    if (!saas.pick) return;
+    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;align-items:flex-start' });
     for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(saas.pick, k, label, unit));
     body.appendChild(box);
   }
 
-  // 서비스 표 — 코드 · 서비스명 · 단위 · 1 User 단가 · 정렬. 이미 있는 서비스의 코드는 템플릿 · 견적이 참조하므로 잠근다
+  // 버전 줄 — 지금 버전 · 최종 수정 일시 · 수정한 사람 · 변경 내용 + [이력]
+  function versionBar() {
+    const cur = saas.policy.current;
+    return h('div', { class: 'ss-detailbar', style: 'margin-top:0;background:#F8FAFC;border:1px solid #E7EAF0;padding:8px 12px' },
+      h('span', { style: 'font-size:13px;font-weight:600;color:var(--ss-primary)' }, cur ? `현재 버전 ${cur.version}` : '저장된 버전 없음'),
+      cur ? h('span', { style: 'font-size:12px;color:var(--ss-ink-2);margin-left:12px' },
+        `최종 수정 ${when(cur.created_at)} · ${cur.created_by_name || '-'}${cur.note ? ' · ' + cur.note : ''}`)
+        : h('span', { class: 'ss-detailbar__note' }, '저장하면 v1.0 으로 기록됩니다.'),
+      h('div', { class: 'ss-detailbar__spacer' }),
+      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: openHistory }, `이력 (${saas.policy.history.length})`));
+  }
+
+  // 정책 기본정보 — 행: 항목 · 세부 / 열: 서비스. 칸은 테두리 없는 여러 줄 입력(표처럼 읽히고, 눌러서 고친다)
+  function infoCard() {
+    const cols = saas.services;
+    const area = (value, onInput, style = '') => {
+      const ta = h('textarea', { class: 'ss-cellinput', rows: Math.max(1, String(value || '').split('\n').length),
+        style: `height:auto;resize:none;border:0;background:transparent;line-height:1.5;padding:4px 6px;${style}`,
+        oninput: (e) => { onInput(e.target.value); e.target.rows = Math.max(1, e.target.value.split('\n').length); } });
+      ta.value = value || '';
+      return h('td', { class: 'ss-cell--input' }, ta);
+    };
+    const widths = [60, 190, 140, ...cols.map(() => 300)];
+    const tbody = h('tbody');
+    saas.info.rows.forEach((r, i) => {
+      const same = i > 0 && r.label && r.label === saas.info.rows[i - 1].label; // 같은 항목이 이어지면 이름을 흐리게
+      tbody.appendChild(h('tr', {},
+        h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
+        area(r.label, (v) => { r.label = v; }, `font-weight:600;background:#F8FAFC;${same ? 'color:#B6BDC8' : ''}`),
+        area(r.sub, (v) => { r.sub = v; }, 'background:#F8FAFC'),
+        ...cols.map((svc) => area(r.values[svc.form.code], (v) => { r.values[svc.form.code] = v; }, 'text-align:center'))));
+    });
+    return h('div', { style: 'margin-top:16px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ SaaS 정책 기본정보'),
+        h('span', { class: 'ss-detailbar__note' }, '칸을 눌러 고칩니다. 줄바꿈은 Enter.'),
+        h('div', { class: 'ss-detailbar__spacer' }),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { saas.info.rows.push({ label: '', sub: '', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          if (!saas.info.rows.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
+          saas.info.rows = saas.info.rows.filter((r) => !r.checked);
+          paintSaasBody();
+        } }, '행삭제')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%;overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((x, w) => x + w, 0)}px` },
+          h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, h('th', {}, '선택'), h('th', {}, '항목'), h('th', {}, '세부'),
+            ...cols.map((svc) => h('th', {}, shortName(svc))))),
+          tbody)));
+  }
+
+  // 서비스 표 — 코드 · 서비스. 이미 있는 서비스의 코드는 템플릿 · 견적이 참조하므로 잠근다. 행을 누르면 아래에 그 서비스의 구간표
   function serviceCard() {
     const tbody = h('tbody');
-    const cols = [['선택', 60], ['코드', 170], ['서비스', 240], ['단위', 110], ['1 User 단가 (원)', 150], ['정렬', 70], ['구간 수', 90]];
+    const cols = [['선택', 60], ['코드', 190], ['서비스', 260]];
     const txt = (svc, key, attrs = {}) => h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', 'aria-label': key, value: svc.form[key] ?? '', ...attrs,
       onclick: (e) => e.stopPropagation(), oninput: (e) => { svc.form[key] = e.target.value; } }));
-    const num = (svc, key, money) => h('td', { class: 'ss-cell--input' }, numInput(svc.form[key], (v) => { svc.form[key] = toNum(v); },
-      { class: 'ss-cellinput', 'aria-label': key, style: money ? 'text-align:right' : 'text-align:center', onclick: (e) => e.stopPropagation() }, !money));
     if (!saas.services.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' }, '서비스가 없습니다. 행추가로 넣으세요 (예: S2C, S2P).')));
     for (const svc of saas.services) {
       tbody.appendChild(h('tr', {
@@ -420,13 +480,12 @@ export async function renderPricing(root) {
       },
       h('td', {}, h('input', { type: 'checkbox', checked: svc.checked, 'aria-label': '선택', onclick: (e) => e.stopPropagation(), onchange: (e) => { svc.checked = e.target.checked; } })),
       svc.isNew ? txt(svc, 'code', { style: 'text-align:center' }) : h('td', { class: 'ss-cell--link', style: 'text-align:center', title: '템플릿이 참조하는 코드라 고칠 수 없습니다' }, svc.form.code),
-      txt(svc, 'name'), txt(svc, 'unit', { style: 'text-align:center' }), num(svc, 'base_price', true), num(svc, 'sort'),
-      h('td', { style: 'text-align:center;color:var(--ss-ink-3)' }, `${svc.lists.USER.length} / ${svc.lists.COUNT.length}`)));
+      txt(svc, 'name')));
     }
-    return h('div', {},
+    return h('div', { style: 'margin-top:16px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 서비스'),
-        h('span', { class: 'ss-detailbar__note' }, '구간 수 = 인원 / 건수'),
+        h('span', { class: 'ss-detailbar__note' }, '서비스를 누르면 아래에 그 서비스의 인원 · 건수 구간표가 나옵니다. 구간 금액은 그 구간일 때의 월 사용료입니다.'),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           const svc = { orig: null, form: { code: '', name: '', unit: 'User/월', base_price: null, sort: saas.services.length + 1 },
@@ -444,7 +503,7 @@ export async function renderPricing(root) {
           if (!saas.services.includes(saas.pick)) saas.pick = saas.services[0] || null;
           paintSaasBody();
         } }, '행삭제')),
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%' },
         h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px` },
           h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
           h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
@@ -470,9 +529,10 @@ export async function renderPricing(root) {
     };
     paint();
     const cols = [['선택', 60], [`시작 (${unit})`, 100], [`끝 (${unit})`, 100], ['구간', 130], ['월 금액 (원)', 160]];
-    return h('div', { style: 'flex:1 1 520px;min-width:0' },
+    const width = cols.reduce((x, [, w]) => x + w, 0);
+    return h('div', { style: `width:${width + 2}px;max-width:100%` },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${svc.form.name || svc.form.code || '새 서비스'} — ${label}`),
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${shortName(svc)} — ${label}`),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           // 다음 구간은 앞 구간 끝 + 1 에서 시작
@@ -487,8 +547,8 @@ export async function renderPricing(root) {
           list.push(...keep);
           paint();
         } }, '행삭제')),
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
-        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px` },
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${width}px` },
           h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
           h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
           tbody)));
@@ -497,7 +557,7 @@ export async function renderPricing(root) {
   // 구간 → variants. 잘못된 구간은 서비스 이름과 함께 알리고 null
   function variantsOf(svc) {
     const variants = [];
-    const name = svc.form.name || svc.form.code;
+    const name = shortName(svc);
     for (const [k, label, unit] of RANGE_KINDS) {
       const list = [...svc.lists[k]].sort((a, b) => (a.min ?? 0) - (b.min ?? 0));
       for (let i = 0; i < list.length; i++) {
@@ -511,6 +571,50 @@ export async function renderPricing(root) {
       }
     }
     return variants;
+  }
+
+  // 다음 버전 번호 — v1.0 → v1.1. 형식이 다르면 v1.0 부터
+  function nextVersion() {
+    const m = String(saas.policy.current?.version || '').match(/^v?(\d+)\.(\d+)$/i);
+    return m ? `v${m[1]}.${Number(m[2]) + 1}` : 'v1.0';
+  }
+
+  // 정책 전체 사본 — 버전 이력에 남긴다
+  const policyContent = () => ({
+    info: {
+      columns: saas.services.map((svc) => ({ code: svc.form.code, label: shortName(svc) })),
+      rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub,
+        values: Object.fromEntries(saas.services.map((svc) => [svc.form.code, r.values[svc.form.code] || ''])) })),
+    },
+    services: saas.services.map((svc) => ({ code: svc.form.code, name: svc.form.name, unit: svc.form.unit,
+      ranges: Object.fromEntries(RANGE_KINDS.map(([k]) => [k, [...svc.lists[k]].sort((a, b) => a.min - b.min).map((r) => [r.min, r.max, r.price])])) })),
+  });
+
+  // 버전 번호 · 변경 내용을 받는다 — 저장하면 resolve({ version, note }), 취소하면 null
+  function askVersion() {
+    return new Promise((resolve) => {
+      const ver = h('input', { class: 'ss-input', value: nextVersion(), style: 'width:120px' });
+      const note = h('input', { class: 'ss-input', placeholder: 'S2C 건수 구간 추가', style: 'flex:1' });
+      const m = openModal({
+        title: '가격정책 저장 — 새 버전',
+        body: h('div', { style: 'display:flex;flex-direction:column;gap:10px;min-width:460px' },
+          h('div', { style: 'font-size:12px;color:var(--ss-ink-3)' },
+            `지금 버전: ${saas.policy.current ? saas.policy.current.version : '없음'} — 저장하면 정책 전체가 새 버전으로 이력에 남습니다.`),
+          h('label', { style: 'display:flex;gap:8px;align-items:center;font-size:13px' }, h('span', { style: 'width:70px' }, '버전'), ver),
+          h('label', { style: 'display:flex;gap:8px;align-items:center;font-size:13px' }, h('span', { style: 'width:70px' }, '변경 내용'), note)),
+        footer: [
+          h('button', { class: 'btn', onclick: () => { m.close(); resolve(null); } }, '취소'),
+          h('button', { class: 'btn btn-primary', onclick: () => {
+            const v = ver.value.trim();
+            if (!v) return toast('버전을 넣으세요.', 'err');
+            if (saas.policy.history.some((x) => x.version === v)) return toast(`${v} 버전이 이미 있습니다.`, 'err');
+            m.close();
+            resolve({ version: v, note: note.value.trim() });
+          } }, '저장'),
+        ],
+      });
+      ver.focus();
+    });
   }
 
   async function saveSaas() {
@@ -533,8 +637,10 @@ export async function renderPricing(root) {
       plan.push([svc, variants]);
     }
     if (saas.deleted.length && !(await confirmModal({
-      title: '사용 중지', message: `행삭제한 서비스 ${saas.deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`, okLabel: '저장', danger: true,
+      title: '사용 중지', message: `행삭제한 서비스 ${saas.deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`, okLabel: '계속', danger: true,
     }))) return;
+    const ver = await askVersion();
+    if (!ver) return;
     let done = 0;
     try {
       for (const o of saas.deleted) { await api.deletePriceItem(o.id); done++; }
@@ -548,12 +654,70 @@ export async function renderPricing(root) {
         }
         done++;
       }
-      toast(`저장되었습니다. (${done}건)`, 'ok');
+      await api.savePricePolicy({ solution: state.solution, deployment: 'SAAS', version: ver.version, note: ver.note, content: policyContent() });
+      toast(`${ver.version} 으로 저장되었습니다.`, 'ok');
       store.master = null;
     } catch (err) {
       toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
     }
     refresh();
+  }
+
+  // 이력 — 버전 목록(최근 순). [보기] 를 누르면 그 버전의 기본정보 · 구간을 그대로 보여 준다(읽기 전용)
+  function openHistory() {
+    const list = saas.policy.history;
+    const view = h('div', { style: 'margin-top:12px' });
+    const rows = list.map((v) => h('tr', {},
+      h('td', { style: 'text-align:center;font-weight:600' }, v.version),
+      h('td', { style: 'text-align:center' }, when(v.created_at)),
+      h('td', { style: 'text-align:center' }, v.created_by_name || '-'),
+      h('td', {}, v.note || ''),
+      h('td', {}, h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => showVersion(v.id, view) }, '보기'))));
+    const m = openModal({
+      title: `가격정책 이력 — ${solName()} SaaS`,
+      body: h('div', { style: 'max-height:70vh;overflow:auto' },
+        list.length ? h('table', { class: 'ss-grid' },
+          h('thead', {}, h('tr', {}, ...['버전', '수정일시', '수정자', '변경 내용', ''].map((t) => h('th', {}, t)))),
+          h('tbody', {}, ...rows))
+          : h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '아직 저장된 버전이 없습니다.'),
+        view),
+      footer: [h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
+    });
+    m.back.querySelector('.modal').style.width = '1100px';
+  }
+
+  async function showVersion(id, view) {
+    clear(view).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:12px' }, '불러오는 중...'));
+    try {
+      const { version: v } = await api.pricePolicyVersion(id);
+      const c = v.content || {};
+      const cols = (c.info && c.info.columns) || [];
+      const lines = (t) => String(t || '').split('\n').flatMap((x, i) => (i ? [h('br'), x] : [x]));
+      clear(view).appendChild(h('div', { style: 'font-size:13px;font-weight:600;color:var(--ss-primary);margin-bottom:6px' },
+        `${v.version} · ${when(v.created_at)} · ${v.created_by_name || '-'}${v.note ? ' · ' + v.note : ''}`));
+      view.appendChild(h('table', { class: 'ss-grid' },
+        h('thead', {}, h('tr', {}, h('th', {}, '항목'), h('th', {}, '세부'), ...cols.map((x) => h('th', {}, x.label)))),
+        h('tbody', {}, ...((c.info && c.info.rows) || []).map((r) => h('tr', {},
+          h('td', { style: 'font-weight:600' }, r.label), h('td', {}, r.sub),
+          ...cols.map((x) => h('td', { style: 'text-align:center' }, ...lines(r.values && r.values[x.code]))))))));
+      for (const svc of c.services || []) {
+        const box = h('div', { style: 'display:flex;gap:16px;flex-wrap:wrap;margin-top:12px' });
+        for (const [k, label, unit] of RANGE_KINDS) {
+          const rs = (svc.ranges && svc.ranges[k]) || [];
+          box.appendChild(h('div', {},
+            h('div', { style: 'font-size:12px;font-weight:600;margin-bottom:4px' }, `${String(svc.name || svc.code).replace(/\s*서비스\s*이용료$/, '')} — ${label}`),
+            rs.length ? h('table', { class: 'ss-grid', style: 'width:auto' },
+              h('thead', {}, h('tr', {}, h('th', {}, '구간'), h('th', {}, '월 금액 (원)'))),
+              h('tbody', {}, ...rs.map(([a, b, p]) => h('tr', {},
+                h('td', { style: 'text-align:center' }, b == null ? `${a}${unit} 이상` : a === b ? `${a}${unit}` : `${a}~${b}${unit}`),
+                h('td', { style: 'text-align:right' }, won(p))))))
+              : h('div', { style: 'font-size:12px;color:var(--ss-ink-3)' }, '없음')));
+        }
+        view.appendChild(box);
+      }
+    } catch (err) {
+      clear(view).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:12px' }, err.message));
+    }
   }
 
   refresh();
