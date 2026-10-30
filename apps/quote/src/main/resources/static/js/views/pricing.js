@@ -39,9 +39,8 @@ const onpremApi = {
 };
 
 const TABS = [
-  // SaaS 는 기본정보와 가격을 페이지로 나눈다(2026-10-30 사용자 요청) — 버전 이력은 둘이 함께 쓴다
-  { key: 'saas_info', label: 'SaaS 기본정보', custom: true, part: 'info' },
-  { key: 'saas_price', label: 'SaaS 가격', custom: true, part: 'price' },
+  // SaaS 안에서 기본정보 | 가격 하위 탭으로 나눈다(2026-10-30 사용자 요청) — 버전 이력은 둘이 함께 쓴다
+  { key: 'saas', label: 'SaaS', custom: true },
   {
     key: 'onprem', label: 'On-premise', api: onpremApi, scoped: true,
     note: '구축형 견적의 모듈과 금액입니다. 견적 작성 · 템플릿이 이 금액을 기준단가로 씁니다. 이미 있는 모듈의 코드는 고칠 수 없습니다.',
@@ -363,6 +362,7 @@ export async function renderPricing(root) {
   const INFO_ROWS = [['서비스구분'], ['기본 제공 기능'], ['특별 제공 기능'], ['가격정책'], ['사용자당 가격'], ['최소가격'], ['셋업비용'],
     ['Poa-BiA 비용(인터페이스 모듈)'], ['독립인프라 비용(서버 or DBMS)'], ['유지보수비용'], ['약정기간'], ['내부시스템연계'],
     ['옵션 기능', '1. 협력사평가'], ['옵션 기능', '2. 예산관리'], ['옵션 기능', '3. 품질모듈'], ['옵션 기능', '4. 재고관리모듈']];
+  let saasPart = 'info'; // SaaS 하위 탭 — info | price
   let saas = null; // { services, deleted, pick, info: { rows }, infoBase, policy: { current, history } }
   const toNum = (v) => (v === '' || v == null ? null : Number(v));
   const svcForm = (it) => ({ code: it.code || '', name: it.name || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
@@ -408,9 +408,12 @@ export async function renderPricing(root) {
 
   function paintSaasBody() {
     const body = clear(saas.body);
+    // 하위 탭 — 기본정보(정책 표) | 가격(서비스 · 구간). 다시 불러오지 않고 그리기만 바꾼다(고친 내용은 그대로 남는다)
+    body.appendChild(h('div', { class: 'ss-tabs', style: 'margin-bottom:12px' }, ...[['info', '기본정보'], ['price', '가격']].map(([k, label]) =>
+      h('div', { class: 'ss-tabs__tab' + (saasPart === k ? ' ss-tabs__tab--active' : ''), onclick: () => { saasPart = k; paintSaasBody(); } }, label))));
     body.appendChild(versionBar());
-    // 기본정보 페이지는 정책 표만, 가격 페이지는 서비스 · 구간만. 저장은 어느 페이지든 정책 전체를 새 버전으로 남긴다
-    if (current().part === 'info') { body.appendChild(infoCard()); return; }
+    // 저장은 어느 하위 탭이든 정책 전체를 새 버전으로 남긴다
+    if (saasPart === 'info') { body.appendChild(infoCard()); return; }
     body.appendChild(serviceCard());
     if (!saas.pick) return;
     const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;align-items:flex-start' });
