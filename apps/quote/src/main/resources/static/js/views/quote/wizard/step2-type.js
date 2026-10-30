@@ -1,12 +1,10 @@
-// STEP① 유형 선택 — quote_type × deployment 조합을 카드로 제시하고 템플릿을 붙인다.
-// 조합은 임의로 만들지 않는다. sq_quote_templates 에 실제로 존재하는 것만 노출한다.
+// STEP① 유형 선택 — 솔루션 → 구축형태 → (SaaS) 서비스 → 템플릿 순서로 고른다.
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
 import { kindBadge, openTemplatePreview } from './template-picker.js';
 import { loadSaasCatalog, quoteService } from './step3-config.js';
 
-const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
 const DEP_LABEL = {
   ONPREM_LUMP: '온프레미스 일시불', ONPREM_INSTALL: '온프레미스 분납',
   SAAS: 'SaaS', PCLOUD: 'Private Cloud',
@@ -33,19 +31,20 @@ async function loadTemplates() {
   return tplCache;
 }
 
-function comboCards(combos, state, root, wiz) {
-  if (!combos.length) return [h('div', { class: 'empty' }, '등록된 템플릿이 없습니다.')];
-  return combos.map((c) => {
-    const on = state.type.quote_type === c.quote_type && state.type.deployment === c.deployment;
+// 구축형태 카드 — 이 솔루션의 템플릿 수를 함께 보인다. 템플릿이 없는 형태도 고를 수 있다(직접 작성)
+function deploymentCards(all, state, root, wiz) {
+  return Object.entries(DEP_LABEL).map(([dep, label]) => {
+    const n = all.filter((t) => t.deployment === dep).length;
+    const on = state.type.deployment === dep;
     const card = h('div', { class: 'factor' + (on ? ' on' : ''), style: 'display:block' },
       h('div', { class: 't' },
-        h('b', {}, DEP_LABEL[c.deployment] || c.deployment),
-        h('span', {}, DEP_DESC[c.deployment] || ''),
-        h('span', { class: 'src' }, `${TYPE_LABEL[c.quote_type] || c.quote_type} · 템플릿 ${c.count}종`)));
+        h('b', {}, label),
+        h('span', {}, DEP_DESC[dep] || ''),
+        h('span', { class: 'src' }, n ? `템플릿 ${n}종` : '템플릿 없음 — 직접 작성')));
     card.addEventListener('click', () => {
-      if (wiz.readOnly) return; // 상세(읽기 전용)
+      if (wiz.readOnly || on) return; // 상세(읽기 전용) · 이미 고른 것
       // 구축형태를 바꾸면 템플릿 선택이 무효가 되므로 블록도 함께 비운다.
-      wiz.patch({ type: { quote_type: c.quote_type, deployment: c.deployment, template_code: null, manual: false },
+      wiz.patch({ type: { quote_type: 'BUILD', deployment: dep, template_code: null, manual: false },
         blocks: [], applied: null, conds: [], pay_plan: null });
       renderStep2(root, wiz.get(), wiz);
     });
@@ -83,94 +82,68 @@ function tplCards(list, state, root, wiz) {
   });
 }
 
-// 직접 작성 — 템플릿 없이 솔루션 · 구축형태만 정하고(→ 2단계 기본정보), 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
-// 솔루션 · 구축형태 상자는 아래 템플릿 선택도 거른다 — 바꾸면 그 조합의 템플릿만 보인다
-function manualCard(state, root, wiz, sols, sol) {
+// 직접 작성 — 템플릿 없이 고른 솔루션 · 구축형태로 시작(→ 2단계 기본정보), 3단계에서 블록 · 품목 · 인력을 모두 직접 넣는다
+function startManual(state, wiz, sol) {
+  if (wiz.readOnly) return;
+  const dep = state.type.deployment;
   const on = !!state.type.manual;
-  const solSel = h('select', { class: 'select', style: 'width:160px' },
-    ...sols.map((s) => h('option', { value: s.code, selected: s.code === sol }, s.name || s.code)));
-  const depSel = h('select', { class: 'select', style: 'width:170px' },
-    ...Object.entries(DEP_LABEL).map(([v, l]) => h('option', { value: v, selected: v === state.type.deployment }, l)));
-  // 고른 템플릿이 새 솔루션 · 구축형태와 맞지 않으면 템플릿과 구성을 비운다
-  const reset = { template_code: null, manual: false };
-  const cleared = { blocks: [], applied: null, conds: [], pay_plan: null };
-  solSel.addEventListener('change', () => {
-    if (wiz.readOnly) return;
-    wiz.patch({ type: { solution: solSel.value, ...reset }, ...cleared });
-    renderStep2(root, wiz.get(), wiz);
+  const changed = !on || (state.applied && state.applied.solution) !== sol;
+  wiz.patch({
+    type: { quote_type: 'BUILD', deployment: dep, template_code: null, manual: true, solution: sol },
+    applied: { solution: sol, brand: '', has_pay_plan: false },
+    hasLaborPlan: false,
+    ...(changed ? { blocks: [], conds: [] } : {}),
+    conds_on: changed || !(state.conds || []).length ? false : state.conds_on, // 직접 작성은 견적조건 없이 시작 — 필요하면 블록 추가로 넣는다
   });
-  depSel.addEventListener('change', () => {
-    if (wiz.readOnly) return;
-    wiz.patch({ type: { quote_type: 'BUILD', deployment: depSel.value, ...reset }, ...cleared });
-    renderStep2(root, wiz.get(), wiz);
-  });
-  const start = h('button', { class: 'btn btn-primary' }, on ? '직접 작성 중 — 다시 적용' : '직접 작성으로 시작');
-  start.addEventListener('click', () => {
-    const changed = !on || state.type.deployment !== depSel.value || (state.applied && state.applied.solution) !== solSel.value;
-    wiz.patch({
-      type: { quote_type: 'BUILD', deployment: depSel.value, template_code: null, manual: true, solution: solSel.value },
-      applied: { solution: solSel.value, brand: '', has_pay_plan: false },
-      hasLaborPlan: false,
-      ...(changed ? { blocks: [], conds: [] } : {}),
-      conds_on: changed || !(state.conds || []).length ? false : state.conds_on, // 직접 작성은 견적조건 없이 시작 — 필요하면 블록 추가로 넣는다
-    });
-    wiz.go(2);
-  });
-  return h('div', { class: 'card', style: 'margin-bottom:14px' + (on ? ';outline:2px solid var(--primary)' : '') },
-    h('div', { class: 'card-h' }, h('h2', {}, '직접 작성'), h('span', { class: 'sub' }, '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다')),
-    h('div', { class: 'card-b', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
-      h('span', { style: 'font-size:12.5px' }, '솔루션'), solSel, h('span', { style: 'font-size:12.5px' }, '구축형태'), depSel, start,
-      h('button', { class: 'btn', onclick: () => wiz.pickQuote() }, '견적서 불러오기')));
+  wiz.go(2);
 }
 
+// 순서(2026-10-30 사용자 요청): 1. 솔루션 → 2. 구축형태(온프레미스 · SaaS …) → 3. SaaS 서비스(SaaS 일 때) → 템플릿.
+// 앞 단계를 고르면 다음 단계가 그 값으로 걸러진다. 템플릿 대신 [직접 작성으로 시작] · [견적서 불러오기] 도 템플릿 칸에 있다.
 export async function renderStep2(root, state, wiz) {
   const loaded = await loadTemplates();
   const sols = ((await store.getMaster()) || {}).solutions || [];
-  root.replaceChildren();
-  // 고른 솔루션 — 저장값 → 적용된 템플릿 → 첫 솔루션. 템플릿 · 유형 카드는 이 솔루션 것만
+  // 고른 솔루션 — 저장값 → 적용된 템플릿 → 첫 솔루션. 템플릿 · 구축형태 카드는 이 솔루션 것만
   const sol = state.type.solution || (state.applied && state.applied.solution) || (sols[0] && sols[0].code) || null;
   const all = sol ? loaded.filter((t) => t.solution === sol) : loaded;
-  const solName = (sols.find((s) => s.code === sol) || {}).name || sol || '';
+  const solName = (sols.find((x) => x.code === sol) || {}).name || sol || '';
+  const dep = state.type.deployment;
+  const svcCard = dep === 'SAAS' ? await serviceCard(state, root, wiz, sol) : null;
+  root.replaceChildren();
+  let no = 0;
+  const card = (title, sub, body, extra = []) => h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('div', { class: 'card-h' }, h('h2', {}, `${++no}. ${title}`), h('span', { class: 'sub' }, sub), h('span', { class: 'sp' }), ...extra), body);
 
-  // 실제 존재하는 조합만 (템플릿 없는 조합은 선택 불가)
-  const combos = [];
-  for (const tpl of all) {
-    const key = `${tpl.quote_type}|${tpl.deployment}`;
-    let c = combos.find((x) => x.key === key);
-    if (!c) {
-      c = { key, quote_type: tpl.quote_type, deployment: tpl.deployment, count: 0 };
-      combos.push(c);
-    }
-    c.count++;
-  }
+  // 1. 솔루션 — 바꾸면 템플릿과 구성을 비운다
+  root.appendChild(card('솔루션', '견적할 솔루션을 고르세요',
+    h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      ...sols.map((x) => h('button', { class: 'btn' + (x.code === sol ? ' btn-primary' : ''), style: 'min-width:120px',
+        onclick: () => {
+          if (wiz.readOnly || x.code === sol) return;
+          wiz.patch({ type: { solution: x.code, template_code: null, manual: false, service: null }, blocks: [], applied: null, conds: [], pay_plan: null });
+          renderStep2(root, wiz.get(), wiz);
+        } }, x.name || x.code)))));
 
-  const typeCard = h('div', { class: 'card', style: 'margin-bottom:14px' },
-    h('div', { class: 'card-h' },
-      h('h2', {}, '견적 유형'),
-      h('span', { class: 'sub' }, `${solName ? solName + ' — ' : ''}템플릿이 등록된 조합만 선택할 수 있습니다`),
-      h('span', { class: 'sp' }),
-      h('span', { class: 'badge badge-gray' }, '유지보수·추가개발은 Phase 6')),
-    h('div', {
-      class: 'card-b',
-      style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px',
-    }, ...comboCards(combos, state, root, wiz)));
-  root.appendChild(typeCard);
-  root.appendChild(manualCard(state, root, wiz, sols, sol));
-  if (state.type.deployment === 'SAAS') {
-    const svcCard = await serviceCard(state, root, wiz, sol);
-    if (svcCard) root.appendChild(svcCard);
-  }
+  // 2. 구축형태
+  root.appendChild(card('구축형태', `${solName} — 템플릿이 없는 형태는 직접 작성으로 시작합니다`,
+    h('div', { class: 'card-b', style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px' },
+      ...deploymentCards(all, state, root, wiz)),
+    [h('span', { class: 'badge badge-gray' }, '유지보수·추가개발은 Phase 6')]));
 
-  if (state.type.deployment) {
-    const list = all.filter((x) => x.quote_type === state.type.quote_type && x.deployment === state.type.deployment);
-    root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },
-      h('div', { class: 'card-h' },
-        h('h2', {}, '템플릿 선택'),
-        h('span', { class: 'sub' }, `${solName ? solName + ' · ' : ''}${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종 — 누르면 그 템플릿으로 다음 단계, [미리보기] 는 견적서 모양만`)),
-      h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
-        ...(list.length ? tplCards(list, state, root, wiz)
-          : [h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')]))));
-  }
+  // 3. SaaS 서비스 (SaaS 일 때)
+  if (svcCard) { svcCard.querySelector('h2').textContent = `${++no}. SaaS 서비스`; root.appendChild(svcCard); }
+
+  // 템플릿 — 고른 솔루션 · 구축형태 것만. 직접 작성 · 견적서 불러오기도 여기서
+  const list = dep ? all.filter((x) => x.deployment === dep) : [];
+  root.appendChild(card('템플릿 선택',
+    dep ? `${solName} · ${DEP_LABEL[dep] || dep} · ${list.length}종 — 누르면 그 템플릿으로 다음 단계, [미리보기] 는 견적서 모양만` : '구축형태를 먼저 고르세요',
+    h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
+      ...(!dep ? [h('div', { class: 'empty' }, '위에서 구축형태를 고르면 템플릿이 나옵니다.')]
+        : list.length ? tplCards(list, state, root, wiz)
+          : [h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')])),
+    [h('button', { class: 'btn' + (state.type.manual ? ' btn-primary' : ''), disabled: !dep, title: '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다',
+      onclick: () => startManual(wiz.get(), wiz, sol) }, state.type.manual ? '직접 작성 중 — 다시 적용' : '직접 작성으로 시작'),
+    h('button', { class: 'btn', onclick: () => wiz.pickQuote() }, '견적서 불러오기')]));
 
   root.appendChild(h('div', { class: 'card' },
     h('div', { class: 'card-h' },
