@@ -236,7 +236,7 @@ export async function renderStep3(root, state, wiz) {
   // 두 가지로 쓴다 — ① 템플릿을 불러와 고치기 ② 직접 작성(블록 · 품목 · 인력을 모두 손으로). 어느 쪽이든 모든 칸을 고칠 수 있다
   if (!state.type.template_code && !state.type.manual) {
     root.appendChild(h('div', { class: 'banner wrn' },
-      h('div', {}, h('b', {}, '1단계(유형 선택)에서 템플릿을 고르거나 [직접 작성] 을 선택하세요.'), ' 1단계의 [템플릿 불러오기] · [견적서 불러오기] 로 불러와도 됩니다.')));
+      h('div', {}, h('b', {}, '1단계(유형 선택)에서 템플릿을 고르거나 [직접 작성] 을 선택하세요.'), ' 1단계의 [견적서 불러오기] 로 기존 견적을 불러와도 됩니다.')));
     return;
   }
   if (!state.blocks.length && state.type.template_code) {

@@ -3,7 +3,7 @@
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
-import { kindBadge } from './template-picker.js';
+import { kindBadge, openTemplatePreview } from './template-picker.js';
 
 const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
 const DEP_LABEL = {
@@ -52,27 +52,32 @@ function comboCards(combos, state, root, wiz) {
   });
 }
 
+// 템플릿 카드 — 누르면 그 템플릿으로 2단계(기본정보)로 간다. [미리보기] 는 견적서 모양만 보여 주고 넘어가지 않는다
 function tplCards(list, state, root, wiz) {
   return list.map((tpl) => {
     const on = state.type.template_code === tpl.code;
-    const card = h('div', { class: 'factor' + (on ? ' on' : '') },
+    const start = () => {
+      if (wiz.readOnly) return; // 상세(읽기 전용)
+      // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
+      // STEP③ 은 `!state.blocks.length` 일 때만 apply-template 을 부르므로,
+      // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.
+      const cur = wiz.get();
+      const changed = cur.type.template_code && cur.type.template_code !== tpl.code;
+      wiz.patch({ type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code, manual: false, solution: tpl.solution },
+        ...(changed || cur.type.manual ? { blocks: [], applied: null, conds: [], pay_plan: null } : {}) });
+      wiz.go(2);
+    };
+    const preview = h('button', { class: 'btn', 'data-keep': '', style: 'margin-left:8px',
+      onclick: (e) => { e.stopPropagation(); openTemplatePreview({ state: wiz.get(), tpl, onStart: start }); } }, '미리보기');
+    const card = h('div', { class: 'factor' + (on ? ' on' : ''), title: '눌러서 이 템플릿으로 시작' },
       h('div', { class: 't' },
         h('b', {}, tpl.name),
         h('span', {}, (tpl.block_codes || []).join(' + ') || '블록 미정'),
         h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
       kindBadge(tpl.kind),
-      tpl.has_labor_plan ? h('span', { class: 'badge badge-gray' }, '인력투입계획') : null);
-    card.addEventListener('click', () => {
-      if (wiz.readOnly) return; // 상세(읽기 전용)
-      // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
-      // STEP③ 은 `!state.blocks.length` 일 때만 apply-template 을 부르므로,
-      // 비우지 않으면 옛 템플릿의 블록이 그대로 남는다.
-      // (구 화면 quote-block.js 의 "템플릿 다시 적용" 버튼에 해당한다)
-      const changed = state.type.template_code && state.type.template_code !== tpl.code;
-      wiz.patch({ type: { template_code: tpl.code, manual: false },
-        ...(changed ? { blocks: [], applied: null, conds: [], pay_plan: null } : {}) });
-      renderStep2(root, wiz.get(), wiz);
-    });
+      tpl.has_labor_plan ? h('span', { class: 'badge badge-gray' }, '인력투입계획') : null,
+      preview);
+    card.addEventListener('click', start);
     return card;
   });
 }
@@ -114,7 +119,6 @@ function manualCard(state, root, wiz, sols, sol) {
     h('div', { class: 'card-h' }, h('h2', {}, '직접 작성'), h('span', { class: 'sub' }, '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다')),
     h('div', { class: 'card-b', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
       h('span', { style: 'font-size:12.5px' }, '솔루션'), solSel, h('span', { style: 'font-size:12.5px' }, '구축형태'), depSel, start,
-      h('button', { class: 'btn', onclick: () => wiz.pickTemplate() }, '템플릿 불러오기'),
       h('button', { class: 'btn', onclick: () => wiz.pickQuote() }, '견적서 불러오기')));
 }
 
@@ -157,7 +161,7 @@ export async function renderStep2(root, state, wiz) {
     root.appendChild(h('div', { class: 'card', style: 'margin-bottom:14px' },
       h('div', { class: 'card-h' },
         h('h2', {}, '템플릿 선택'),
-        h('span', { class: 'sub' }, `${solName ? solName + ' · ' : ''}${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종`)),
+        h('span', { class: 'sub' }, `${solName ? solName + ' · ' : ''}${DEP_LABEL[state.type.deployment] || state.type.deployment} · ${list.length}종 — 누르면 그 템플릿으로 다음 단계, [미리보기] 는 견적서 모양만`)),
       h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
         ...(list.length ? tplCards(list, state, root, wiz)
           : [h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')]))));

@@ -20,8 +20,7 @@ import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
-import { renderStep3, appliedPatch, openPreview } from './step3-config.js';
-import { openTemplatePicker } from './template-picker.js';
+import { renderStep3, openPreview } from './step3-config.js';
 import { openQuotePicker } from './quote-picker.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
@@ -237,32 +236,7 @@ export async function renderWizard(root, opts = {}) {
     if (el) el.textContent = savedText();
   }
 
-  // 템플릿 불러오기 — 기본정보는 두고 유형 · 구성 · 인력 · 견적조건을 템플릿 내용으로 바꾼 뒤 3단계(구성)로 간다.
-  // 특별DC 는 금액이 달라지므로 비운다. 이미 구성이 있으면 바꾸기 전에 묻는다.
-  function pickTemplate() {
-    openTemplatePicker({ state, onPick: async ({ tpl, d }) => {
-      if (state.blocks.length) {
-        const ok = await confirmModal({ title: '템플릿 불러오기',
-          message: `지금 작성한 구성 · 인력 · 견적조건 · 특별DC 를 '${tpl.name}' 내용으로 바꿉니다. 기본정보(수신처 등)는 그대로 둡니다.`,
-          okLabel: '바꾸기' });
-        if (!ok) return;
-      }
-      state = deepMerge(state, {
-        type: { quote_type: tpl.quote_type, deployment: tpl.deployment, template_code: tpl.code, solution: tpl.solution },
-        ...appliedPatch(d),
-        discount: { mode: 'TARGET', value: null }, monthly_discount: { mode: 'TARGET', value: null },
-        pay_plan: null, // 새 템플릿의 결제 방안 설정을 따른다
-      });
-      state.step = 3;
-      persist(); paint();
-      toast(`'${tpl.name}' 템플릿을 불러왔습니다.`, 'ok');
-      if (d.unregistered && d.unregistered.length) {
-        toast(`가격정책 미등록 모듈 ${d.unregistered.length}건 — 기준단가가 비어 있습니다: ${d.unregistered.join(', ')}`, 'err');
-      }
-    } });
-  }
-
-  // 기존 견적서 불러오기 — 템플릿 불러오기와 따로. 이미 작성한 견적의 유형 · 구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져온다.
+  // 기존 견적서 불러오기 — 템플릿 고르기와 따로. 이미 작성한 견적의 유형 · 구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져온다.
   // 기본정보(수신처 · 담당자 · 견적용도 등)와 지금 견적의 번호 · 상태는 그대로 둔다 — 복사와 달리 새 견적을 만들지 않는다.
   function pickQuote() {
     openQuotePicker({ currentId: state.quoteId, onPick: async ({ quote }) => {
@@ -296,8 +270,8 @@ export async function renderWizard(root, opts = {}) {
     document.querySelectorAll('select[data-status]').forEach((x) => { x.value = r.status; });
   }
   api.mail = () => mailQuote(mailTarget(), onMailSent);
-  // 템플릿 · 견적서 불러오기 버튼은 1단계 직접 작성 줄에 있다(2026-10-30 사용자 요청 — 위 액션에서 옮김)
-  api.pickTemplate = pickTemplate;
+  // 견적서 불러오기 버튼은 1단계 직접 작성 줄에 있다(2026-10-30 사용자 요청 — 위 액션에서 옮김).
+  // 템플릿은 1단계 화면 목록에서 고른다 — 따로 여는 [템플릿 불러오기] 창은 없앴다.
   api.pickQuote = pickQuote;
 
   // 상세 ↔ 수정 — 보던 단계를 넘겨 준다
