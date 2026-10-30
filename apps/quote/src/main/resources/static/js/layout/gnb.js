@@ -33,6 +33,7 @@ function paint() {
   if (!a) return;
   a.innerHTML = '';
   for (const act of state.actions || []) {
+    if (act.node) { a.appendChild(act.node); continue; } // 화면이 직접 만든 버튼 묶음(예: 검토·발행의 발행 · 내려받기)
     const b = document.createElement('button');
     b.className = 'ss-btn ' + (act.primary ? 'ss-btn--save' : 'ss-btn--default');
     b.textContent = act.label;

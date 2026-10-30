@@ -296,6 +296,10 @@ export async function renderWizard(root, opts = {}) {
   // 상세 ↔ 수정 — 보던 단계를 넘겨 준다
   const switchTo = (hash) => { sessionStorage.setItem(OPEN_STEP_KEY, String(state.step)); location.hash = hash; };
 
+  // 단계 화면이 맨 위 액션 줄에 얹는 버튼 묶음 — 5단계 발행 · PDF · Excel · 메일(2026-10-31 사용자 요청)
+  let topExtra = null;
+  api.setTopActions = (node) => { topExtra = node; paintTitle(); };
+
   function paintTitle() {
     const head = readOnly ? '견적 상세' : editMode ? '견적 수정' : '견적 작성';
     const path = `견적관리 / ${head}${state.quoteNo ? ' ' + state.quoteNo : ''} / ${state.step}. ${STEPS[state.step - 1].label}`;
@@ -320,6 +324,7 @@ export async function renderWizard(root, opts = {}) {
       path,
       actions: [
         ...(editMode ? [{ label: '취소', onClick: () => { live.delete(liveKey); switchTo(`#/quotes/${state.quoteId}`); } }] : []),
+        ...(topExtra ? [{ node: topExtra }] : []),
         { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },
@@ -393,6 +398,7 @@ export async function renderWizard(root, opts = {}) {
     root.appendChild(body);
     root.appendChild(h('div', { class: 'page-sub', id: 'wizard-saved', style: 'margin-top:10px;text-align:right' },
       savedText()));
+    topExtra = null; // 단계를 옮기면 그 단계 화면이 다시 얹는다
     paintTitle(); // GNB 액션 — 작업 7 의 setPage 인터페이스
 
     STEPS[state.step - 1].render(body, state, api);
