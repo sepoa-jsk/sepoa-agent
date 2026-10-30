@@ -119,6 +119,11 @@ function mapLabor(b) {
   });
 }
 
+// 견적조건 블록을 넣었는가 — conds_on(true/false)이 정해져 있으면 그것, 아니면 문장이 있으면 넣은 것
+export function condsOn(state) {
+  return state.conds_on == null ? (state.conds || []).length > 0 : !!state.conds_on;
+}
+
 export function previewHeader(state) {
   const b = state.basic;
   return {
@@ -135,8 +140,11 @@ export function previewHeader(state) {
       b.phone ? '[연락처] ' + b.phone : '',
       b.email ? '[이메일] ' + b.email : '',
     ].filter(Boolean).join('\n'),
-    conditions: (state.conds || []).filter((c) => c.text && c.text.trim())
-      .map((c) => ({ text: c.text, auto: false, edited: true })),
+    // 견적조건 — 넣으면 문장 목록, 뺐으면 빈 목록(견적서에 견적조건 칸이 없다).
+    // 정해지지 않은 옛 견적(conds_on 없음 · 문장 없음)은 보내지 않는다 — 서버가 템플릿 문구를 쓴다
+    conditions: condsOn(state) ? (state.conds || []).filter((c) => c.text && c.text.trim())
+      .map((c) => ({ text: c.text, auto: false, edited: true }))
+      : state.conds_on === false ? [] : undefined,
     // 견적별 결제 방안(V6) — 없으면 보내지 않는다(템플릿 설정 · 기본 문구)
     pay_plan: state.pay_plan || undefined,
   };
@@ -178,6 +186,7 @@ export function appliedPatch(d) {
     round_unit: d.round_unit ?? 100000,
     hasLaborPlan: !!d.template.has_labor_plan,
     conds: (d.conditions || []).map((t) => ({ text: t })),
+    conds_on: (d.conditions || []).length > 0, // 템플릿에 견적조건 세트가 없으면 뺀 채로 시작
   };
 }
 
@@ -489,15 +498,17 @@ export async function renderStep3(root, state, wiz) {
       const have = new Set(blocks.map((x) => x.block_code));
       const opts = defs.filter((d) => d.code !== 'SUMMARY' && !have.has(d.code)).map((d) => [d.code, `${d.name}${d.recurring ? ' (월)' : ''}`]);
       if (!payOn()) opts.push(['__PAY', '결제 방안']); // 뺀 결제 방안을 다시 넣는다
+      if (!condsOn(wiz.get())) opts.push(['__COND', '견적조건']); // 뺀 견적조건을 다시 넣는다
       sel.replaceChildren(...(opts.length ? opts.map(([v, l]) => h('option', { value: v }, l))
         : [h('option', { value: '' }, '더할 블록이 없습니다')]));
       btn.disabled = !opts.length;
     });
     btn.addEventListener('click', async () => {
-      if (sel.value === '__PAY') {
-        setPay({ enabled: true });
+      if (sel.value === '__PAY' || sel.value === '__COND') {
+        if (sel.value === '__PAY') setPay({ enabled: true });
+        else wiz.patch({ conds_on: true });
         repaintLeft();
-        document.getElementById('blk-PAY')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById(sel.value === '__PAY' ? 'blk-PAY' : 'blk-CONDS')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
       const d = (await blockDefs()).find((x) => x.code === sel.value);
@@ -513,7 +524,7 @@ export async function renderStep3(root, state, wiz) {
     }, label);
     const chips = blocks.map((x, i) => chip(`${i + 1}. ${x.name}`, 'blk-' + x.block_code));
     if (payOn()) chips.push(chip(`${blocks.length + 1}. 결제 방안`, 'blk-PAY'));
-    chips.push(chip(`${blocks.length + (payOn() ? 2 : 1)}. 견적조건`, 'blk-CONDS'));
+    if (condsOn(wiz.get())) chips.push(chip(`${blocks.length + (payOn() ? 2 : 1)}. 견적조건`, 'blk-CONDS'));
     return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap;gap:8px' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적 구성'),
@@ -530,11 +541,11 @@ export async function renderStep3(root, state, wiz) {
     // 견적서 순서대로 번호 — 블록들 다음 결제 방안(넣는 경우), 그다음 견적조건
     const n = wiz.get().blocks.length;
     const payNo = payOn() ? n + 1 : null;
-    const condNo = n + (payOn() ? 2 : 1);
+    const condNo = condsOn(wiz.get()) ? n + (payOn() ? 2 : 1) : null;
     // 옵션(서버이중화 · 계열사 추가 등 규칙 마스터 연동) 안내 칸은 뺐다 — 기능이 생기면 그때 넣는다
     // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
     if (payNo) left.appendChild(payPlanCard(payNo)); else els.payPlan = null;
-    left.appendChild(condCard(condNo));
+    if (condNo) left.appendChild(condCard(condNo));
     left.appendChild(summaryCard(c));
     wiz.patch({});
     preview.schedule(wiz);
@@ -567,7 +578,9 @@ export async function renderStep3(root, state, wiz) {
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 견적조건`),
         h('span', { class: 'ss-detailbar__note' }, '견적서 하단에 그대로 인쇄됩니다'),
-        h('div', { class: 'ss-detailbar__spacer' }), add),
+        h('div', { class: 'ss-detailbar__spacer' }), add,
+        // 빼도 문장은 남겨 둔다 — 블록 추가에서 다시 넣으면 그대로 돌아온다
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { wiz.patch({ conds_on: false }); repaintLeft(); } }, '블록 빼기')),
       h('div', { style: 'margin-top:8px' }, list));
   }
 

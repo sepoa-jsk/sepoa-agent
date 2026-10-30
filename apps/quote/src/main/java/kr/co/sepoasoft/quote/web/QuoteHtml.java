@@ -143,14 +143,10 @@ public class QuoteHtml {
         String solName = str(masters.get("solutionName"));
         String depLabel = DEP_LABEL.getOrDefault(str(quote.get("deployment")), "");
 
-        // 견적조건: 저장값 → 템플릿의 condition_set(마스터) → 일반 문구
-        List<String> conds = new ArrayList<>();
-        for (Object c : list(quote.get("conditions"))) {
-            Object t = c instanceof Map<?, ?> cm ? cm.get("text") : c;
-            if (Rows.truthy(t)) conds.add(String.valueOf(t));
-        }
-        if (conds.isEmpty()) for (Object c : list(masters.get("conditionLines"))) conds.add(String.valueOf(c));
-        if (conds.isEmpty()) {
+        // 견적조건: 저장값 → 템플릿의 condition_set(마스터) → 일반 문구.
+        // 저장값이 빈 목록이면 견적조건 블록을 뺀 견적이다 — 견적조건 칸을 싣지 않는다(conditionsOff).
+        List<String> conds = conditionLines(quote, masters);
+        if (conds.isEmpty() && !conditionsOff(quote)) {
             conds.add("프로젝트 투입공수 및 일정은 세부 업무요건에 따라 변경될 수 있습니다.");
             conds.add("개발단가는 한국SW산업협회 노임 단가 기준 100%를 적용하였습니다.");
             conds.add("솔루션 유지보수는 시스템 오픈 후 12개월간 무상유지보수 이후 진행되며, 유상유지보수는 솔루션 공급가의 15%로 제안합니다.");
@@ -248,8 +244,8 @@ public class QuoteHtml {
                 + "\n  <div class=\"note\">하기와 같이 견적하오니 참조 바랍니다.</div>"
                 + "\n\n  " + body
                 + payPlan
-                + "\n  <div class=\"sec\">▣ 견적조건</div>"
-                + "\n  <table class=\"conds\">" + condHtml + "</table>"
+                + (conds.isEmpty() ? "" : "\n  <div class=\"sec\">▣ 견적조건</div>"
+                        + "\n  <table class=\"conds\">" + condHtml + "</table>")
                 + "\n</div></div>"
                 + "\n\n" + appendix(quote, masters, depLabel)
                 + "\n\n</body></html>";
@@ -338,6 +334,22 @@ public class QuoteHtml {
                 + "<tr><th>구분</th><th>" + col2 + "</th><th>" + col3 + "</th><th>" + col4 + "</th><th>기준단가</th>"
                 + "<th>" + (recurring ? "제안단가(월)" : "제안단가") + "</th><th>" + (recurring ? "제안금액(월)" : "제안금액") + "</th></tr>"
                 + body + "</table>";
+    }
+
+    /** 견적조건을 뺀 견적인가 — 저장된 conditions 가 빈 목록(null 은 '정하지 않음' → 템플릿 문구 · 일반 문구) */
+    static boolean conditionsOff(Map<String, Object> quote) {
+        return quote.get("conditions") instanceof List<?> l && l.stream().noneMatch(c -> Rows.truthy(c instanceof Map<?, ?> m ? m.get("text") : c));
+    }
+
+    /** 견적서에 찍을 견적조건 문장 — 저장값, 저장값이 없으면(null) 템플릿 세트 문장. 뺀 견적이면 빈 목록 */
+    static List<String> conditionLines(Map<String, Object> quote, Map<String, Object> masters) {
+        List<String> conds = new ArrayList<>();
+        for (Object c : list(quote.get("conditions"))) {
+            Object t = c instanceof Map<?, ?> cm ? cm.get("text") : c;
+            if (Rows.truthy(t)) conds.add(String.valueOf(t));
+        }
+        if (conds.isEmpty() && !conditionsOff(quote)) for (Object c : list(masters.get("conditionLines"))) conds.add(String.valueOf(c));
+        return conds;
     }
 
     /** 결제 방안을 넣는가 — 견적별 설정(pay_plan.enabled)이 있으면 그것, 없으면 템플릿(has_pay_plan) */

@@ -67,12 +67,16 @@ public class TemplateController {
         if (active != null) { conds.add("active = ?"); params.add(Js.truthy(Js.number(active)) ? 1 : 0); }
         String where = conds.isEmpty() ? "" : "WHERE " + String.join(" AND ", conds);
         List<Map<String, Object>> rows = db.query(
-                "SELECT t.*, (SELECT GROUP_CONCAT(tb.block_code ORDER BY tb.sort) FROM sq_template_blocks tb WHERE tb.template_id = t.id) AS block_codes"
+                "SELECT t.*, (SELECT GROUP_CONCAT(tb.block_code ORDER BY tb.sort) FROM sq_template_blocks tb WHERE tb.template_id = t.id) AS block_codes,"
+                        + " (SELECT COUNT(*) FROM sq_template_items ti WHERE ti.template_id = t.id)"
+                        + " + (SELECT COUNT(*) FROM sq_template_labor tl WHERE tl.template_id = t.id) AS data_rows"
                         + " FROM sq_quote_templates t " + where + " ORDER BY t.quote_type, t.solution, t.sort, t.id",
                 params.toArray());
         for (Map<String, Object> t : rows) {
             Object codes = t.get("block_codes");
             t.put("block_codes", Rows.truthy(codes) ? Arrays.asList(String.valueOf(codes).split(",", -1)) : List.of());
+            // 템플릿 종류 — 기본 모듈 · 인력이 하나도 없으면 '구조만'(블록 틀만), 있으면 '데이터 포함'. 따로 저장하지 않고 내용으로 정한다
+            t.put("kind", Js.toNumber(t.remove("data_rows")) > 0 ? "DATA" : "STRUCT");
         }
         return Map.of("templates", rows);
     }

@@ -202,13 +202,9 @@ public class QuoteExcel {
             r += 1;
         }
 
-        // 견적조건
-        List<String> conds = new ArrayList<>();
-        for (Object c : list(q.get("conditions"))) {
-            Object v = c instanceof Map<?, ?> m ? m.get("text") : c;
-            if (QuoteCalc.truthy(v)) conds.add(String.valueOf(v));
-        }
-        if (conds.isEmpty()) for (Object c : list(masters.get("conditionLines"))) conds.add(String.valueOf(c));
+        // 견적조건 — 견적서 HTML 과 같은 규칙(뺀 견적은 싣지 않는다)
+        List<String> conds = QuoteHtml.conditionLines(q, masters);
+        if (conds.isEmpty()) return;
         text(ws, r, 1, "▣ 견적조건", style("sec"));
         r += 1;
         for (String c : conds) {

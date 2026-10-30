@@ -61,7 +61,7 @@ export async function renderTemplates(root) {
         onclick: () => open(t.code),
       },
       h('span', { class: 'ss-rail__code-key' }, t.code),
-      h('span', { class: 'ss-rail__code-name' }, t.name + (t.active ? '' : ' (중지)'))));
+      h('span', { class: 'ss-rail__code-name' }, t.name + (t.kind === 'STRUCT' ? ' [구조만]' : '') + (t.active ? '' : ' (중지)'))));
     }
   }
 
@@ -176,12 +176,27 @@ export async function renderTemplates(root) {
     const field = (label, ctrl, cls = '', req = false) => h('div', { class: 'ss-field ' + cls },
       h('label', {}, label, req ? h('span', { class: 'req' }, ' *') : null), ctrl);
 
+    // 블록 — 견적서에 찍히는 순서대로: 표 블록들 → 결제 방안 → 견적조건. 결제 방안 · 견적조건도 블록처럼 넣고 뺀다
+    //   결제 방안 = has_pay_plan, 견적조건 = condition_set(빼면 null — 견적 작성에서 견적조건 없이 시작한다)
+    const boxLabel = (checked, onchange, text) => h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:13px' },
+      h('input', { type: 'checkbox', checked, onchange: (e) => onchange(e.target.checked) }), text);
+    const condSel = h('select', { class: 'ss-select', disabled: !f.condition_set, onchange: (e) => { f.condition_set = e.target.value; } },
+      ...conditionSets.map((c) => h('option', { value: c.code, selected: c.code === f.condition_set }, c.name)));
     const blockBoxes = h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 16px;min-height:var(--ss-ctrl-h);align-items:center' },
-      ...blocksDef.map((b) => h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:13px' },
-        h('input', { type: 'checkbox', checked: cur.blocks.has(b.code), onchange: (e) => {
-          if (e.target.checked) cur.blocks.add(b.code); else cur.blocks.delete(b.code);
-          paintTabs(); // 고를 수 있는 블록이 바뀐다
-        } }), b.name)));
+      ...blocksDef.filter((b) => b.code !== 'SUMMARY').map((b) => boxLabel(cur.blocks.has(b.code), (on) => {
+        if (on) cur.blocks.add(b.code); else cur.blocks.delete(b.code);
+        paintTabs(); // 고를 수 있는 블록이 바뀐다
+      }, b.name)),
+      boxLabel(!!f.has_pay_plan, (on) => { f.has_pay_plan = on ? 1 : 0; }, '결제 방안'),
+      boxLabel(!!f.condition_set, (on) => {
+        f.condition_set = on ? (condSel.value || defaultCondSet(f.deployment)) : null;
+        condSel.disabled = !on;
+        if (on) condSel.value = f.condition_set;
+      }, '견적조건'));
+    // 종류 — 기본 모듈 · 인력이 없으면 구조만(블록 틀만), 있으면 데이터 포함. 저장 값이 아니라 내용으로 정해진다
+    const kindText = () => (cur.items.length || cur.labor.length ? '데이터 포함 — 기본 모듈 · 인력까지 채워져 있습니다' : '구조만 — 블록 틀만 있고 모듈 · 인력은 견적 작성에서 넣습니다');
+    kindEl = h('div', { style: 'display:flex;align-items:center;min-height:var(--ss-ctrl-h);font-size:13px;color:var(--ss-ink-2)' }, kindText());
+    kindEl.refresh = () => { kindEl.textContent = kindText(); };
 
     pane.appendChild(h('div', { class: 'ss-form ss-form--cols4', style: 'max-width:none;margin:16px 0 0' },
       h('div', { class: 'ss-fields' },
@@ -194,11 +209,11 @@ export async function renderTemplates(root) {
         }), '', true),
         field('구축형태', sel('deployment', DEPLOYMENTS), '', true),
         field('브랜드', inp('brand', { placeholder: '견적서 표기명' })),
-        field('견적조건', sel('condition_set', [['', '없음'], ...conditionSets.map((c) => [c.code, c.name])])),
+        field('견적조건 문구', condSel),
         field('정렬', numInput(f.sort, (v) => { f.sort = v; }, { class: 'ss-input', style: 'text-align:center' }, true)),
         field('인력투입계획', chk('has_labor_plan', '월별 투입계획 표 사용')),
-        field('결제 방안', chk('has_pay_plan', '클라우드서비스 결제 방안 표 사용')),
-        field('블록 (견적서에 들어갈 표)', blockBoxes, 'ss-field--w2'))));
+        field('종류', kindEl, 'ss-field--w2'),
+        field('블록 (견적서에 들어갈 순서)', blockBoxes, 'ss-field--full'))));
 
     // 탭 상자 — 기본 모듈 | 인력
     tabBox = h('div', { class: 'ss-tabbox', style: 'flex:1 0 320px' }); // 창이 작아도 그리드가 눌리지 않게 — 본문이 대신 스크롤된다
@@ -207,8 +222,12 @@ export async function renderTemplates(root) {
   }
 
   let tabBox;
+  let kindEl;
+  const defaultCondSet = (dep) => ({ ONPREM_LUMP: 'COND_ONPREM', ONPREM_INSTALL: 'COND_INSTALL', SAAS: 'COND_SAAS', PCLOUD: 'COND_PCLOUD' }[dep])
+    || conditionSets[0]?.code || null;
   function paintTabs() {
     if (!tabBox) return;
+    kindEl?.refresh();
     clear(tabBox);
     const tabs = [['items', `기본 모듈 (${cur.items.length})`], ['labor', `인력 (${cur.labor.length})`]];
     tabBox.appendChild(h('div', { class: 'ss-tabs' }, ...tabs.map(([k, label]) => h('div', {
@@ -368,6 +387,7 @@ export async function renderTemplates(root) {
       const r = await api.previewQuote({
         blocks: previewBlocks(),
         header: { blank: true, template_code: f.code || null, condition_set: f.condition_set || null, pay_plan: f.has_pay_plan ? 1 : 0,
+          ...(f.condition_set ? {} : { conditions: [] }),
           solution: f.solution, brand: f.brand || null, deployment: f.deployment, quote_type: f.quote_type || 'BUILD' },
         round_unit: 100000,
       });
@@ -390,7 +410,7 @@ export async function renderTemplates(root) {
       deployment: f.deployment, brand: trim(f.brand), condition_set: f.condition_set || null,
       include_maintenance: f.include_maintenance ? 1 : 0, include_component: f.include_component ? 1 : 0,
       has_labor_plan: f.has_labor_plan ? 1 : 0, has_pay_plan: f.has_pay_plan ? 1 : 0, active: f.active ? 1 : 0, sort: Number(f.sort) || 0,
-      blocks: blocksDef.filter((b) => cur.blocks.has(b.code)).map((b) => b.code),
+      blocks: blocksDef.filter((b) => cur.blocks.has(b.code) || b.code === 'SUMMARY').map((b) => b.code),
       items: cur.items.map((r) => ({ block_code: r.block_code, item_code: r.item_code, qty_default: r.qty_default ?? 1 })),
       labor: cur.labor.map((r) => ({ block_code: r.block_code, role_code: r.role_code, role_label: trim(r.role_label),
         grade: r.grade || null, task: trim(r.task), mm_default: r.mm_default ?? 0 })),
@@ -402,7 +422,7 @@ export async function renderTemplates(root) {
     if (!cur.isNew && JSON.stringify(p) === baseline) return toast('변경된 내용이 없습니다.', 'ok');
     if (!p.code || !p.name || !p.solution || !p.deployment) return toast('필수 항목을 확인하세요: 코드 · 템플릿명 · 솔루션 · 구축형태', 'err');
     if (templates.some((t) => t.code === p.code && t.id !== cur.id)) return toast(`이미 있는 코드입니다: ${p.code}`, 'err');
-    if (!p.blocks.length) return toast('블록을 하나 이상 고르세요.', 'err');
+    if (!p.blocks.some((b) => b !== 'SUMMARY')) return toast('블록을 하나 이상 고르세요.', 'err');
     const badItem = p.items.findIndex((r) => !r.block_code || !r.item_code || !p.blocks.includes(r.block_code));
     if (badItem >= 0) { tab = 'items'; paintTabs(); return toast(`기본 모듈 ${badItem + 1}번째 행: 블록과 품목을 확인하세요 (켜진 블록만 쓸 수 있습니다).`, 'err'); }
     const badLabor = p.labor.findIndex((r) => !r.block_code || !r.role_code || !p.blocks.includes(r.block_code));

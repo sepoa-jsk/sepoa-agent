@@ -8,6 +8,9 @@ import { h, won, clear, openModal } from '../../../ui.js';
 import { appliedPatch, toBlocksPayload, previewHeader, recalcBlocks } from './step3-config.js';
 
 const DEP_LABEL = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', SAAS: 'SaaS', PCLOUD: 'Private Cloud' };
+// 템플릿 종류(서버가 내용으로 정한다) — 구조만: 블록 틀만 있고 모듈 · 인력은 비어 있다 / 데이터 포함: 기본 모듈 · 인력까지 채워져 있다
+export const KIND_LABEL = { STRUCT: '구조만', DATA: '데이터 포함' };
+export const kindBadge = (kind) => h('span', { class: 'badge ' + (kind === 'STRUCT' ? 'badge-yellow' : 'badge-blue'), style: 'font-size:11px' }, KIND_LABEL[kind] || '');
 
 export async function openTemplatePicker({ state, onPick }) {
   const solutions = (await store.getMaster()).solutions || [];
@@ -18,6 +21,8 @@ export async function openTemplatePicker({ state, onPick }) {
   const search = h('input', { class: 'ss-input', placeholder: '코드 · 이름 검색', style: 'flex:1;min-width:0', oninput: () => paintList() });
   const solSel = h('select', { class: 'ss-select', style: 'width:120px', onchange: () => paintList() },
     h('option', { value: '' }, '전체 솔루션'), ...solutions.map((s) => h('option', { value: s.code }, s.name || s.code)));
+  const kindSel = h('select', { class: 'ss-select', style: 'width:110px', onchange: () => paintList() },
+    h('option', { value: '' }, '전체 종류'), ...Object.entries(KIND_LABEL).map(([k, v]) => h('option', { value: k }, v)));
   const list = h('div', { style: 'flex:1;overflow:auto;border-top:1px solid #E7EAF0' });
   const info = h('div', { style: 'font-size:12px;color:var(--ss-ink-3);min-height:18px' }, '왼쪽에서 템플릿을 고르세요.');
   const frame = h('iframe', { style: 'flex:1;width:100%;border:1px solid #E7EAF0;background:#fff' });
@@ -25,7 +30,7 @@ export async function openTemplatePicker({ state, onPick }) {
 
   const body = h('div', { style: 'display:grid;grid-template-columns:330px 1fr;gap:12px;height:70vh' },
     h('div', { style: 'display:flex;flex-direction:column;gap:8px;min-height:0' },
-      h('div', { style: 'display:flex;gap:6px' }, search, solSel), list),
+      h('div', { style: 'display:flex;gap:6px' }, search, solSel, kindSel), list),
     h('div', { style: 'display:flex;flex-direction:column;gap:6px;min-height:0' }, info, frame));
 
   const m = openModal({
@@ -42,7 +47,7 @@ export async function openTemplatePicker({ state, onPick }) {
     const q = search.value.trim().toLowerCase();
     const sol = solSel.value;
     clear(list);
-    const rows = templates.filter((t) => (!sol || t.solution === sol)
+    const rows = templates.filter((t) => (!sol || t.solution === sol) && (!kindSel.value || t.kind === kindSel.value)
       && (!q || t.code.toLowerCase().includes(q) || String(t.name).toLowerCase().includes(q)));
     if (!rows.length) { list.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '템플릿이 없습니다.')); return; }
     for (const t of rows) {
@@ -54,6 +59,7 @@ export async function openTemplatePicker({ state, onPick }) {
       },
       h('div', { style: 'display:flex;gap:8px;align-items:baseline' },
         h('span', { style: 'color:var(--ss-emphasis);font-size:12px;font-weight:500' }, t.code),
+        kindBadge(t.kind),
         cur ? h('span', { style: 'font-size:11px;color:var(--ss-ink-3)' }, '지금 사용 중') : null),
       h('div', { style: 'font-size:13px;color:var(--ss-ink-2);margin-top:2px' }, t.name),
       h('div', { style: 'font-size:11px;color:var(--ss-ink-3);margin-top:2px' },

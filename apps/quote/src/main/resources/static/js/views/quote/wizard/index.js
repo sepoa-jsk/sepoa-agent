@@ -58,6 +58,7 @@ function blankState() {
     discount: { mode: 'TARGET', value: null },          // null = DC 미적용
     monthly_discount: { mode: 'TARGET', value: null },  // 월 사용료 특별DC (하겐다즈 SaaS 300,000→100,000)
     conds: [], riskFactors: [],
+    conds_on: null, // 견적조건 블록을 넣었는가 — null 이면 문장이 있는지로 정한다(step3 condsOn)
     savedAt: null,
     quoteId: null, quoteNo: null, // 서버에 저장된 견적이면 채워진다 (임시저장 또는 수정)
     status: 'DRAFT',
@@ -106,6 +107,8 @@ function fromQuote(q, tpl) {
   st.discount = dcOf(q.discount_type, q.discount_value);
   st.monthly_discount = dcOf(q.monthly_discount_type, q.monthly_discount_value);
   st.conds = (q.conditions || []).map((c) => ({ text: typeof c === 'string' ? c : c.text || '' }));
+  // 저장된 빈 목록 = 견적조건을 뺀 견적. 저장값이 없으면(null, 옛 견적) 정하지 않는다
+  st.conds_on = Array.isArray(q.conditions) ? st.conds.length > 0 : null;
   st.quoteId = q.id; st.quoteNo = q.quote_no;
   st.status = q.status || 'DRAFT';
   st.pay_plan = q.pay_plan && typeof q.pay_plan === 'object' ? q.pay_plan : null;

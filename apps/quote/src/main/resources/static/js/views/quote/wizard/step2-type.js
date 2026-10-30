@@ -3,6 +3,7 @@
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
 import { h } from '../../../ui.js';
+import { kindBadge } from './template-picker.js';
 
 const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
 const DEP_LABEL = {
@@ -59,7 +60,8 @@ function tplCards(list, state, root, wiz) {
         h('b', {}, tpl.name),
         h('span', {}, (tpl.block_codes || []).join(' + ') || '블록 미정'),
         h('span', { class: 'src' }, `${tpl.code}${tpl.brand ? ' · ' + tpl.brand : ''}`)),
-      tpl.has_labor_plan ? h('span', { class: 'badge badge-yellow' }, '인력투입계획') : null);
+      kindBadge(tpl.kind),
+      tpl.has_labor_plan ? h('span', { class: 'badge badge-gray' }, '인력투입계획') : null);
     card.addEventListener('click', () => {
       if (wiz.readOnly) return; // 상세(읽기 전용)
       // 템플릿을 바꾸면 STEP③ 이 다시 적용하도록 블록을 비운다.
@@ -91,6 +93,7 @@ function manualCard(state, root, wiz) {
       applied: { solution: solSel.value, brand: '', has_pay_plan: false },
       hasLaborPlan: false,
       ...(changed ? { blocks: [], conds: [] } : {}),
+      conds_on: changed || !(state.conds || []).length ? false : state.conds_on, // 직접 작성은 견적조건 없이 시작 — 필요하면 블록 추가로 넣는다
     });
     wiz.go(3);
   });
