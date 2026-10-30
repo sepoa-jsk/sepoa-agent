@@ -296,6 +296,9 @@ export async function renderWizard(root, opts = {}) {
     document.querySelectorAll('select[data-status]').forEach((x) => { x.value = r.status; });
   }
   api.mail = () => mailQuote(mailTarget(), onMailSent);
+  // 템플릿 · 견적서 불러오기 버튼은 1단계 직접 작성 줄에 있다(2026-10-30 사용자 요청 — 위 액션에서 옮김)
+  api.pickTemplate = pickTemplate;
+  api.pickQuote = pickQuote;
 
   // 상세 ↔ 수정 — 보던 단계를 넘겨 준다
   const switchTo = (hash) => { sessionStorage.setItem(OPEN_STEP_KEY, String(state.step)); location.hash = hash; };
@@ -324,8 +327,6 @@ export async function renderWizard(root, opts = {}) {
       path,
       actions: [
         ...(editMode ? [{ label: '취소', onClick: () => switchTo(`#/quotes/${state.quoteId}`) }] : []),
-        { label: '템플릿 불러오기', onClick: pickTemplate },
-        { label: '견적서 불러오기', onClick: pickQuote },
         { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },

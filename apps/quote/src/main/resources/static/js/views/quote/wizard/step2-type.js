@@ -113,7 +113,9 @@ function manualCard(state, root, wiz, sols, sol) {
   return h('div', { class: 'card', style: 'margin-bottom:14px' + (on ? ';outline:2px solid var(--primary)' : '') },
     h('div', { class: 'card-h' }, h('h2', {}, '직접 작성'), h('span', { class: 'sub' }, '템플릿 없이 블록 · 품목 · 인력을 모두 직접 입력합니다')),
     h('div', { class: 'card-b', style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
-      h('span', { style: 'font-size:12.5px' }, '솔루션'), solSel, h('span', { style: 'font-size:12.5px' }, '구축형태'), depSel, start));
+      h('span', { style: 'font-size:12.5px' }, '솔루션'), solSel, h('span', { style: 'font-size:12.5px' }, '구축형태'), depSel, start,
+      h('button', { class: 'btn', onclick: () => wiz.pickTemplate() }, '템플릿 불러오기'),
+      h('button', { class: 'btn', onclick: () => wiz.pickQuote() }, '견적서 불러오기')));
 }
 
 export async function renderStep2(root, state, wiz) {
