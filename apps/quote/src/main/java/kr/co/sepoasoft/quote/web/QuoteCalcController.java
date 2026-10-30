@@ -161,6 +161,17 @@ public class QuoteCalcController {
                 conditions.add(r.get("text"));
             }
         }
+        // SaaS 는 가격정책(SaaS) 현재 버전의 견적조건을 뒤에 덧붙인다 — 이미 같은 문장이 있으면 빼고(2026-10-30 사용자 결정)
+        if ("SAAS".equals(tpl.get("deployment")) && Rows.truthy(tpl.get("condition_set"))) {
+            Map<String, Object> pv = db.first("SELECT content FROM sq_price_policy_versions WHERE solution = ? AND deployment = 'SAAS'"
+                    + " ORDER BY id DESC LIMIT 1", tpl.get("solution"));
+            if (pv != null && db.safeJson(pv.get("content")) instanceof Map<?, ?> content && content.get("conds") instanceof List<?> pc) {
+                for (Object c : pc) {
+                    String t = c == null ? "" : String.valueOf(c).trim();
+                    if (!t.isEmpty() && !conditions.contains(t)) conditions.add(t);
+                }
+            }
+        }
         Set<Object> unregistered = new LinkedHashSet<>();
         for (Map<String, Object> t : titems) if (!priceMap.containsKey(t.get("item_code"))) unregistered.add(t.get("item_code"));
 
