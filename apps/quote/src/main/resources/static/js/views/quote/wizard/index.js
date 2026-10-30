@@ -20,6 +20,7 @@ import { renderStep1 } from './step1-basic.js';
 import { renderStep2, validateStep2, resetTemplateCache } from './step2-type.js';
 import { renderStep3, appliedPatch, openPreview } from './step3-config.js';
 import { openTemplatePicker } from './template-picker.js';
+import { openQuotePicker } from './quote-picker.js';
 import { renderStep4 } from './step4-labor.js';
 import { renderStep5, quotePayload } from './step5-review.js';
 
@@ -74,7 +75,7 @@ function dcOf(type, value) {
   // 저장 시 할인 없음은 type null 로 남는다. TARGET 0 은 무상제공이라 값 0 을 살린다.
   return type ? { mode: type, value: n0(value) ?? 0 } : { mode: 'TARGET', value: null };
 }
-function fromQuote(q, tpl) {
+function fromQuote(q, tpl, tplConds) {
   const st = blankState();
   const memo = {};
   for (const line of String(q.memo || '').split('\n')) {
@@ -109,6 +110,11 @@ function fromQuote(q, tpl) {
   st.conds = (q.conditions || []).map((c) => ({ text: typeof c === 'string' ? c : c.text || '' }));
   // 저장된 빈 목록 = 견적조건을 뺀 견적. 저장값이 없으면(null, 옛 견적) 정하지 않는다
   st.conds_on = Array.isArray(q.conditions) ? st.conds.length > 0 : null;
+  // 옛 견적(저장값 null)은 견적서가 템플릿 문구를 찍는다 — 화면에도 그 문구를 보여 준다
+  if (st.conds_on === null && (tplConds || []).length) {
+    st.conds = tplConds.map((t) => ({ text: t }));
+    st.conds_on = true;
+  }
   st.quoteId = q.id; st.quoteNo = q.quote_no;
   st.status = q.status || 'DRAFT';
   st.pay_plan = q.pay_plan && typeof q.pay_plan === 'object' ? q.pay_plan : null;
@@ -132,10 +138,11 @@ export async function renderWizard(root, opts = {}) {
   let state;
   if (editMode) {
     let tpl = null;
+    let tplConds = null;
     if (opts.quote.template_code) {
-      try { ({ template: tpl } = await http.templateDetail(opts.quote.template_code)); } catch { /* 템플릿이 없어도 수정은 된다 */ }
+      try { ({ template: tpl, conditions: tplConds } = await http.templateDetail(opts.quote.template_code)); } catch { /* 템플릿이 없어도 수정은 된다 */ }
     }
-    state = fromQuote(opts.quote, tpl);
+    state = fromQuote(opts.quote, tpl, tplConds);
     // 상세 ↔ 수정 전환이면 보던 단계에서, 아니면 상세는 1단계 · 수정은 3단계(구성)
     const keep = Number(sessionStorage.getItem(OPEN_STEP_KEY));
     sessionStorage.removeItem(OPEN_STEP_KEY);
@@ -253,6 +260,31 @@ export async function renderWizard(root, opts = {}) {
     } });
   }
 
+  // 기존 견적서 불러오기 — 템플릿 불러오기와 따로. 이미 작성한 견적의 유형 · 구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져온다.
+  // 기본정보(수신처 · 담당자 · 견적용도 등)와 지금 견적의 번호 · 상태는 그대로 둔다 — 복사와 달리 새 견적을 만들지 않는다.
+  function pickQuote() {
+    openQuotePicker({ currentId: state.quoteId, onPick: async ({ quote }) => {
+      if (state.blocks.length) {
+        const ok = await confirmModal({ title: '견적서 불러오기',
+          message: `지금 작성한 구성 · 인력 · 견적조건 · 특별DC 를 ${quote.quote_no} 견적 내용으로 바꿉니다. 기본정보(수신처 등)는 그대로 둡니다.`,
+          okLabel: '바꾸기' });
+        if (!ok) return;
+      }
+      let tpl = null;
+      let tplConds = null;
+      if (quote.template_code) {
+        try { ({ template: tpl, conditions: tplConds } = await http.templateDetail(quote.template_code)); } catch { /* 템플릿이 없어도 가져온다 */ }
+      }
+      const src = fromQuote(quote, tpl, tplConds);
+      for (const k of ['type', 'blocks', 'applied', 'hasLaborPlan', 'round_unit', 'discount', 'monthly_discount', 'conds', 'conds_on', 'pay_plan']) {
+        state[k] = src[k];
+      }
+      state.step = 3;
+      persist(); paint();
+      toast(`${quote.quote_no} 견적 내용을 불러왔습니다.`, 'ok');
+    } });
+  }
+
   // 메일 발송 — 받는 사람 기본값은 견적의 이메일. 실제로 보내면 상태가 발송으로 바뀐다
   const mailTarget = () => ({ id: state.quoteId, quote_no: state.quoteNo, customer_name: state.basic.customer_name,
     email: state.basic.email, purpose: state.basic.purpose });
@@ -291,6 +323,7 @@ export async function renderWizard(root, opts = {}) {
       actions: [
         ...(editMode ? [{ label: '취소', onClick: () => switchTo(`#/quotes/${state.quoteId}`) }] : []),
         { label: '템플릿 불러오기', onClick: pickTemplate },
+        { label: '견적서 불러오기', onClick: pickQuote },
         { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
         { label: '이전', onClick: () => api.prev() },
