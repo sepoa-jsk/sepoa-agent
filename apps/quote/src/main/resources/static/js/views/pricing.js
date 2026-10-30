@@ -351,22 +351,26 @@ export async function renderPricing(root) {
     load();
   }
 
-  // ── SaaS: 버전 줄 → 서비스 탭 → 서비스 개요 → [기본(구간) | 부가 | 옵션] → 고른 항목 상세 ─────
+  // ── SaaS: 버전 → 정책 기본정보 → 서비스(S2C · S2P …) → 서비스마다 인원 · 건수 구간 (구간 월 금액) ─────
   // 서비스 = 이 솔루션의 SaaS 구간형 품목(sq_price_items: deployment SAAS · pricing_type BAND · 월).
   // 구간은 그 품목의 variants 에 key USER(인원) / COUNT(건수)로 둔다. 끝을 비우면 '이상'(마지막 구간).
-  // [저장] 할 때마다 버전 번호 · 변경 내용을 받아 정책 전체(개요 · 서비스 · 구간 · 가격 항목 · 견적조건)를 새 버전으로 남긴다.
+  // 정책 기본정보(서비스구분 · 기본 제공 기능 · 사용자당 가격 · 셋업비용 · 옵션 기능 …)는 버전 이력(V7 sq_price_policy_versions)에만 있다.
+  // [저장] 할 때마다 버전 번호 · 변경 내용을 받아 정책 전체(기본정보 · 서비스 · 구간)를 새 버전으로 남긴다 — 이력에서 지난 버전을 본다.
+  // 셋업비 · 옵션 같은 고정 금액 SaaS 품목은 '전체 품목' 탭에서 고친다.
   const RANGE_KINDS = [['USER', '인원 구간', '인'], ['COUNT', '건수 구간', '건']];
-  // SaaS 화면(2026-10-30 다시 기획 — 아래로 늘어나지 않는 고정 틀):
-  //   서비스 탭(S2C · S2P …) → 서비스 개요 → [기본: 인원 · 건수 구간 | 부가 | 옵션] 세 칸 → 고른 항목의 상세(아래 한 칸).
-  //   가격 항목 = 서비스(구간형)가 아닌 SaaS 품목(sq_price_items) 하나. 서비스별 사용 · 금액 · 금액 글(별도협의)은
-  //   그 품목의 variants(key 'SVC:서비스코드', price, label)에 둔다 — 가격정책 화면 · 템플릿 · 견적이 같은 품목을 쓴다.
-  //   서비스 개요(서비스구분 · 기본 제공 기능 …)는 정책 버전 내용(content.overview)에 둔다. 저장하면 정책 전체가 새 버전.
-  let saas = null; // { services, deleted, pick, items, itemsDeleted, itemPick, overview, conds, policy, rangeKind }
+  // 처음 만드는 정책의 기본정보 항목(실측: 전자구매 SaaS 가격정책_202603) — 값은 비어 있다
+  const INFO_ROWS = [['서비스구분'], ['기본 제공 기능'], ['특별 제공 기능'], ['가격정책'], ['사용자당 가격', '', 'money'], ['최소가격', '', 'money'],
+    ['셋업비용', '', 'money'], ['Poa-BiA 비용(인터페이스 모듈)', '', 'money'], ['독립인프라 비용(서버 or DBMS)', '', 'money'], ['유지보수비용'], ['약정기간'],
+    ['내부시스템연계'], ['옵션 기능', '1. 협력사평가', 'money'], ['옵션 기능', '2. 예산관리', 'money'], ['옵션 기능', '3. 품질모듈', 'money'],
+    ['옵션 기능', '4. 재고관리모듈', 'money']];
+  let saasPart = 'info'; // SaaS 하위 탭 — info | price | conds
+  let saas = null; // { services, deleted, pick, info: { rows }, infoBase, policy: { current, history } }
   const toNum = (v) => (v === '' || v == null ? null : Number(v));
   const svcForm = (it) => ({ code: it.code || '', name: it.name || '', spec: it.spec || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
   const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
   const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
-  // 예전 기본정보(정책 버전 content.info — 이력 보기 · 옮기기에 쓴다).
+  const infoJson = () => JSON.stringify(saas.info.rows.map((r) => [r.label, r.sub, r.desc, r.type, r.values]));
+  // 행마다 상세 설명(desc) — 세부 항목이 무엇인지 쓰는 여러 줄 글. 서비스별 값이 아니라 그 행 하나에 하나(2026-10-30 사용자 요청)
   // 기본정보 항목은 분류 — 기본 / 부가 / 옵션 중 하나, 설명은 세부에 쓴다(2026-10-30 사용자 요청). 표는 이 순서로 묶어 보인다.
   // 예전 행(항목에 '서비스구분' · '셋업비용' 같은 이름)은 읽을 때 바꾼다: 그 이름은 세부로, 항목은 이름으로 정한 분류
   //   '옵션 기능' + '1. 협력사평가' → 옵션 + '1. 협력사평가' / 셋업 · Poa-BiA · 인프라 · 연계 · 유지보수 → 부가 / 나머지 → 기본
@@ -380,57 +384,17 @@ export async function renderPricing(root) {
     return { ...x, label: /셋업|Poa-BiA|인프라|연계|유지보수/i.test(label) ? '부가' : '기본', sub: [label, sub].filter(Boolean).join(' ') };
   };
   const sortInfo = (rows) => rows.map((r, i) => [r, i]).sort((a, b) => groupOrder(a[0].label) - groupOrder(b[0].label) || a[1] - b[1]).map(([r]) => r);
-  // 기본정보 행 형식 — 정하지 않은 옛 행은 값이 모두 숫자면 금액
+  // 기본정보 행 형식 — text(글자) | money(금액: 숫자만, 커서가 나가면 콤마). 정하지 않은 옛 행은 값이 모두 숫자면 금액
+  const INFO_TYPES = [['text', '글자'], ['money', '금액']];
   const inferType = (values) => {
     const vs = Object.values(values || {}).map((v) => String(v ?? '').trim()).filter(Boolean);
     return vs.length && vs.every((v) => /^-?[\d,]+(\.\d+)?$/.test(v)) ? 'money' : 'text';
   };
+  const moneyValues = (values) => Object.fromEntries(Object.entries(values || {}).map(([k, v]) => [k, cleanNum(v)]));
   // 견적조건 — 한 줄에 한 문장. 견적서 아래 '-. ' 로 시작하는 문장들(정책 버전 내용 content.conds 에 둔다)
   const condsJson = () => JSON.stringify(saas.conds.map((r) => r.text.trim()).filter(Boolean));
-  const itemJson = (it) => JSON.stringify([it.form, it.svc]);
-  const itemChanged = (it) => it.isNew || it.migrate || itemJson(it) !== it.base;
-  const overviewJson = () => JSON.stringify(saas.overview);
-  const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged) || condsJson() !== saas.condsBase
-    || saas.itemsDeleted.length > 0 || saas.items.some(itemChanged) || overviewJson() !== saas.overviewBase);
-  const ITEM_GROUPS = ['부가', '옵션']; // 기본 = 서비스 이용료(구간) — 서비스 탭이 맡는다
-  const SVC_PREFIX = 'SVC:';
-  const svcCodes = () => saas.services.map((x) => x.form.code).filter(Boolean);
-  const amountText = (v) => (v ? (v.text || (v.price != null ? won(v.price) : '')) : '');
-  // 품목 → 가격 항목. variants 에 SVC: 가 없으면(옮기기 전) 예전 기본정보 행(같은 세부 이름)의 서비스별 값으로 채운다
-  function itemOf(it, codes, infoRows) {
-    const byCode = {};
-    for (const v of it.variants || []) if (String(v.key || '').startsWith(SVC_PREFIX)) byCode[v.key.slice(SVC_PREFIX.length)] = v;
-    const migrated = Object.keys(byCode).length > 0;
-    const row = infoRows.find((r) => r.label !== '기본' && r.sub === it.name);
-    const svc = {};
-    for (const c of codes) {
-      if (migrated) {
-        const v = byCode[c];
-        svc[c] = v ? { use: true, price: toNum(v.price), text: v.label || '' } : { use: false, price: null, text: '' };
-      } else if (row) svc[c] = cellToSvc(row.values && row.values[c]);
-      else svc[c] = { use: true, price: toNum(it.base_price), text: '' };
-    }
-    const t = `${it.category || ''} ${it.name || ''}`;
-    const group = row && ITEM_GROUPS.includes(row.label) ? row.label : /옵션/.test(t) ? '옵션' : '부가';
-    const out = { orig: it, isNew: false, migrate: !migrated, form: { code: it.code, group, name: it.name || '', spec: it.spec || '', unit: it.unit || '', recurring: it.recurring ? 1 : 0 }, svc };
-    out.base = itemJson(out);
-    return out;
-  }
-  // 예전 기본정보 칸 값 → 서비스별 값. 숫자면 금액, 글이면 금액 글(별도협의 · 없음), 비었으면 이 서비스에 쓰지 않음
-  function cellToSvc(raw) {
-    const t = String(raw ?? '').trim();
-    if (!t) return { use: false, price: null, text: '' };
-    return /^-?[\d,]+$/.test(t) ? { use: true, price: Number(t.replace(/,/g, '')), text: '' } : { use: true, price: null, text: t };
-  }
-  // 새 항목 코드 — 이 솔루션 SaaS 품목 코드 앞부분 + ADD + 번호(겹치지 않게)
-  function newItemCode() {
-    const all = [...saas.items.map((x) => x.form.code), ...saas.services.map((x) => x.form.code)].filter(Boolean);
-    const prefix = (all.find((c) => /_SAAS_/.test(c)) || `${state.solution}_SAAS_X`).replace(/_[^_]+$/, '');
-    let n = 1;
-    while (all.includes(`${prefix}_ADD${n}`)) n++;
-    return `${prefix}_ADD${n}`;
-  }
-  const OVERVIEW_FIELDS = ['서비스구분', '기본 제공 기능', '특별 제공 기능', '가격정책', '사용자당 가격', '최소가격', '약정기간'];
+  const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged) || infoJson() !== saas.infoBase
+    || condsJson() !== saas.condsBase);
   const shortName = (svc) => String(svc.form.name || svc.form.code || '새 서비스').replace(/\s*서비스\s*이용료$/, '');
   const when = (v) => String(v || '').replace('T', ' ').slice(0, 16);
 
@@ -454,36 +418,14 @@ export async function renderPricing(root) {
         svc.base = rangeOf(svc);
         return svc;
       });
-      const content = (policy.current && policy.current.content) || {};
-      const infoRows = content.info && Array.isArray(content.info.rows) ? content.info.rows.map(normInfo) : [];
-      const codes = services.map((x) => x.form.code);
-      const items = (r.items || []).filter((x) => x.pricing_type !== 'BAND').map((it) => itemOf(it, codes, infoRows));
-      // 예전 기본정보에만 있고 품목이 없는 부가 · 옵션 행(예: 유지보수비용)은 새 항목으로 — 저장하면 품목이 생긴다
-      for (const row of infoRows) {
-        if (!ITEM_GROUPS.includes(row.label) || !row.sub || items.some((x) => x.form.name === row.sub)) continue;
-        items.push({ orig: null, isNew: true, form: { code: '', group: row.label, name: row.sub, spec: row.desc || '', unit: '', recurring: 1 },
-          svc: Object.fromEntries(codes.map((c) => [c, cellToSvc(row.values && row.values[c])])) });
-      }
-      // 순서 — 정책에 적힌 순서(템플릿 순서로 맞춰 둔 것), 없으면 품목 정렬 순서
-      const at = (it) => { const i = infoRows.findIndex((x) => x.label === it.form.group && x.sub === it.form.name); return i < 0 ? 1e6 : i; };
-      items.sort((x, y) => at(x) - at(y));
-      // 서비스 개요 — 저장된 것, 없으면 예전 기본정보의 기본 행(서비스 이용료 행 제외)
-      let overview = content.overview;
-      if (!overview || !Array.isArray(overview.fields)) {
-        const baseRows = infoRows.filter((x) => x.label === '기본' && x.sub && !/서비스 이용료$/.test(x.sub));
-        const fields = baseRows.length ? baseRows.map((x) => x.sub) : OVERVIEW_FIELDS;
-        const values = {};
-        for (const c of codes) {
-          values[c] = {};
-          for (const x of baseRows) {
-            const v = String((x.values && x.values[c]) ?? '').trim();
-            values[c][x.sub] = (x.type || inferType(x.values)) === 'money' && /^\d+$/.test(v) ? comma(v) : v;
-          }
-        }
-        overview = { fields, values };
-      }
-      saas = { services, deleted: [], pick: services[0] || null, items, itemsDeleted: [], itemPick: null, overview, policy, rangeKind: 'USER' };
-      saas.overviewBase = overviewJson();
+      const saved = policy.current && policy.current.content && policy.current.content.info;
+      const rows = saved && Array.isArray(saved.rows) ? saved.rows.map((x) => {
+        const type = x.type || inferType(x.values);
+        const n = normInfo(x);
+        return { label: n.label, sub: n.sub, desc: x.desc || '', type, values: type === 'money' ? moneyValues(x.values) : { ...(x.values || {}) }, checked: false };
+      }) : INFO_ROWS.map(([label, sub, type]) => ({ ...normInfo({ label, sub }), desc: '', type: type || 'text', values: {}, checked: false }));
+      saas = { services, deleted: [], pick: services[0] || null, info: { rows: sortInfo(rows) }, policy };
+      saas.infoBase = infoJson();
       const savedConds = policy.current && policy.current.content && policy.current.content.conds;
       saas.conds = (Array.isArray(savedConds) ? savedConds : []).map((text) => ({ text: String(text || ''), checked: false }));
       saas.condsBase = condsJson();
@@ -497,24 +439,21 @@ export async function renderPricing(root) {
 
   function paintSaasBody() {
     const body = clear(saas.body);
+    // 하위 탭 — 기본정보(정책 표) | 가격(서비스 · 구간) | 견적조건(문장). 다시 불러오지 않고 그리기만 바꾼다(고친 내용은 그대로 남는다)
+    body.appendChild(h('div', { class: 'ss-tabs', style: 'margin-bottom:12px' }, ...[['info', '기본정보'], ['price', '가격'], ['conds', '견적조건']].map(([k, label]) =>
+      h('div', { class: 'ss-tabs__tab' + (saasPart === k ? ' ss-tabs__tab--active' : ''), onclick: () => { saasPart = k; paintSaasBody(); } }, label))));
     body.appendChild(versionBar());
-    body.appendChild(svcTabs());
-    if (!saas.pick) { body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '서비스가 없습니다. [서비스 관리] 에서 넣으세요.')); return; }
-    body.appendChild(overviewCard(saas.pick));
-    // 세 칸 — 높이가 고정이고 칸 안에서만 스크롤한다(화면이 아래로 늘어나지 않게)
-    saas.cols = h('div', { style: 'display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px' },
-      baseCard(saas.pick), groupCard('부가'), groupCard('옵션'));
-    body.appendChild(saas.cols);
-    body.appendChild(itemPanel());
-  }
-  // 부가 · 옵션 칸만 다시 그린다(상세 칸에서 고칠 때 — 입력 중인 칸이 사라지지 않게)
-  function repaintGroups() {
-    if (!saas.cols) return;
-    saas.cols.children[1].replaceWith(groupCard('부가'));
-    saas.cols.children[2].replaceWith(groupCard('옵션'));
+    // 저장은 어느 하위 탭이든 정책 전체를 새 버전으로 남긴다
+    if (saasPart === 'info') { body.appendChild(infoCard()); return; }
+    if (saasPart === 'conds') { body.appendChild(condsCard()); return; }
+    body.appendChild(serviceCard());
+    if (!saas.pick) return;
+    const box = h('div', { style: 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start' }); // 인원 · 건수 50%씩
+    for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(saas.pick, k, label, unit));
+    body.appendChild(box);
   }
 
-  // 버전 줄 — 지금 버전 · 최종 수정 · 변경 내용 + [견적조건] [이력]
+  // 버전 줄 — 지금 버전 · 최종 수정 일시 · 수정한 사람 · 변경 내용 + [이력]
   function versionBar() {
     const cur = saas.policy.current;
     return h('div', { class: 'ss-detailbar', style: 'margin-top:0;background:#F8FAFC;border:1px solid #E7EAF0;padding:8px 12px' },
@@ -523,172 +462,75 @@ export async function renderPricing(root) {
         `최종 수정 ${when(cur.created_at)} · ${cur.created_by_name || '-'}${cur.note ? ' · ' + cur.note : ''}`)
         : h('span', { class: 'ss-detailbar__note' }, '저장하면 v1.0 으로 기록됩니다.'),
       h('div', { class: 'ss-detailbar__spacer' }),
-      h('button', { class: 'ss-btn ss-btn--gridrow', onclick: openConds }, `견적조건 (${saas.conds.filter((x) => x.text.trim()).length})`),
       h('button', { class: 'ss-btn ss-btn--gridrow', onclick: openHistory }, `이력 (${saas.policy.history.length})`));
   }
 
-  // 서비스 탭 — 하나를 고르면 아래가 모두 그 서비스 내용. [서비스 관리] 는 서비스 추가 · 이름 · 삭제
-  function svcTabs() {
-    return h('div', { style: 'display:flex;align-items:flex-end;gap:8px;margin-top:12px' },
-      h('div', { class: 'ss-tabs', style: 'margin-top:0;flex:1' }, ...saas.services.map((svc) =>
-        h('div', { class: 'ss-tabs__tab' + (svc === saas.pick ? ' ss-tabs__tab--active' : ''), style: 'cursor:pointer',
-          onclick: () => { saas.pick = svc; paintSaasBody(); } }, shortName(svc)))),
-      h('button', { class: 'ss-btn ss-btn--gridrow', style: 'margin-bottom:4px', onclick: openServices }, '서비스 관리'));
-  }
-
-  function openServices() {
-    const box = h('div', {});
-    const repaint = () => { clear(box).appendChild(serviceCard(repaint)); paintSaasBody(); };
-    box.appendChild(serviceCard(repaint));
-    const m = openModal({ title: `서비스 관리 — ${solName()} SaaS`, body: box,
-      footer: [h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')] });
-    m.back.querySelector('.modal').style.width = '1000px';
-  }
-  function openConds() {
-    const box = h('div', {});
-    const repaint = () => { clear(box).appendChild(condsCard(repaint)); };
-    box.appendChild(condsCard(repaint));
-    const m = openModal({ title: `견적조건 — ${solName()} SaaS`, body: h('div', { style: 'max-height:65vh;overflow:auto' }, box),
-      footer: [h('button', { class: 'btn btn-primary', onclick: () => { m.close(); paintSaasBody(); } }, '닫기')] });
-    m.back.querySelector('.modal').style.width = '900px';
-  }
-
-  // 서비스 개요 — 두 줄 칸(라벨 · 값) 격자. 긴 글은 칸 안에서 3줄까지 보이고 스크롤
-  function overviewCard(svc) {
-    const code = svc.form.code;
-    const vals = (saas.overview.values[code] = saas.overview.values[code] || {});
-    const area = (value, onInput, attrs = {}) => {
-      const ta = h('textarea', { class: 'ss-cellinput', rows: Math.min(3, Math.max(1, String(value || '').split('\n').length)), ...attrs,
-        style: 'height:auto;resize:none;line-height:1.5;padding:4px 6px;text-align:left;overflow:auto',
-        oninput: (e) => { onInput(e.target.value); e.target.rows = Math.min(3, Math.max(1, e.target.value.split('\n').length)); } });
+  // 정책 기본정보 — 행: 항목 · 세부 / 열: 서비스. 칸은 테두리 없는 여러 줄 입력(표처럼 읽히고, 눌러서 고친다)
+  function infoCard() {
+    const cols = saas.services;
+    const area = (value, onInput, style = '') => {
+      const ta = h('textarea', { class: 'ss-cellinput', rows: Math.max(1, String(value || '').split('\n').length),
+        style: `height:auto;resize:none;border:0;background:transparent;line-height:1.5;padding:4px 6px;${style}`,
+        oninput: (e) => { onInput(e.target.value); e.target.rows = Math.max(1, e.target.value.split('\n').length); } });
       ta.value = value || '';
-      return ta;
+      return h('td', { class: 'ss-cell--input' }, ta);
     };
-    const cell = (label, input) => h('div', { style: 'display:grid;grid-template-columns:110px minmax(0,1fr);border-bottom:1px solid #E7EAF0' },
-      h('div', { style: 'background:#F8FAFC;font-size:12px;font-weight:600;padding:6px 8px;color:var(--ss-ink-2)' }, label),
-      h('div', { style: 'padding:2px 4px' }, input));
-    const cells = [
-      cell('서비스명', area(svc.form.name, (v) => { svc.form.name = v; })),
-      cell('단위', area(svc.form.unit, (v) => { svc.form.unit = v; })),
-      ...saas.overview.fields.map((f) => cell(f, area(vals[f], (v) => { vals[f] = v; }))),
-      cell('상세 내용', area(svc.form.spec, (v) => { svc.form.spec = v; }, { placeholder: '견적서 세부기능에 들어갈 서비스 설명' })),
-    ];
-    return h('div', { style: 'margin-top:12px' },
-      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${shortName(svc)} 서비스 개요`),
-        h('span', { class: 'ss-detailbar__note' }, '항목 이름은 모든 서비스에 같습니다.'),
-        h('div', { class: 'ss-detailbar__spacer' }),
-        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
-          const name = (prompt('추가할 개요 항목 이름') || '').trim();
-          if (!name) return;
-          if (saas.overview.fields.includes(name)) return toast('이미 있는 항목입니다.', 'err');
-          saas.overview.fields.push(name); paintSaasBody();
-        } }, '항목 추가'),
-        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
-          const name = (prompt(`뺄 개요 항목 이름\n(${saas.overview.fields.join(', ')})`) || '').trim();
-          if (!name) return;
-          if (!saas.overview.fields.includes(name)) return toast('그런 항목이 없습니다.', 'err');
-          saas.overview.fields = saas.overview.fields.filter((x) => x !== name);
-          for (const c of Object.keys(saas.overview.values)) delete saas.overview.values[c][name];
-          paintSaasBody();
-        } }, '항목 빼기')),
-      h('div', { style: 'margin-top:8px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:16px;border-top:1px solid #E7EAF0' }, ...cells));
-  }
-
-  const COL_H = 'height:330px;overflow:auto;border:1px solid #E7EAF0;border-top:0';
-  const colHead = (title, ...btns) => h('div', { class: 'ss-detailbar', style: 'margin-top:0;border:1px solid #E7EAF0;background:#F8FAFC;padding:6px 10px' },
-    h('span', { style: 'font-size:13px;font-weight:600;color:var(--ss-ink-1)' }, title), h('div', { class: 'ss-detailbar__spacer' }), ...btns);
-
-  // 기본 — 서비스 이용료: 인원 구간 | 건수 구간 (구간 월 금액)
-  function baseCard(svc) {
-    const kinds = RANGE_KINDS;
-    const k = kinds.find(([x]) => x === saas.rangeKind) || kinds[0];
-    return h('div', { style: 'min-width:0' },
-      colHead('▣ 기본 — 서비스 이용료',
-        ...kinds.map(([x, label]) => h('button', { class: 'ss-btn ss-btn--gridrow' + (x === k[0] ? ' ss-btn--save' : ''),
-          onclick: () => { saas.rangeKind = x; paintSaasBody(); } }, label))),
-      h('div', { style: COL_H + ';padding:8px' }, rangeCard(svc, k[0], k[1], k[2])));
-  }
-
-  // 부가 · 옵션 — 한 줄에 [사용] 세부 · 금액. 누르면 아래 상세 칸
-  function groupCard(group) {
-    const code = saas.pick.form.code;
-    const list = saas.items.filter((x) => x.form.group === group);
+    // 금액 칸 — 숫자만, 입력 중 콤마 없음, 커서가 나가면 콤마(다른 그리드와 같은 numInput). 금액은 오른쪽 정렬
+    const money = (r, code) => h('td', { class: 'ss-cell--input' },
+      numInput(r.values[code] ?? '', (v) => { r.values[code] = v; }, { class: 'ss-cellinput', 'aria-label': '금액', style: 'text-align:right;padding:4px 10px' }));
+    const typeSel = (r) => h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': '형식',
+      onchange: (e) => {
+        r.type = e.target.value;
+        if (r.type === 'money') {
+          const bad = Object.values(r.values).filter((v) => String(v ?? '').trim() && !/^-?[\d,]+(\.\d+)?$/.test(String(v).trim()));
+          if (bad.length) toast(`숫자가 아닌 글자는 빠집니다: ${bad.join(', ')}`, 'err');
+          r.values = moneyValues(r.values);
+        }
+        paintSaasBody();
+      } }, ...INFO_TYPES.map(([v, l]) => h('option', { value: v, selected: v === r.type }, l))));
+    // 항목 = 분류(기본 / 부가 / 옵션) — 고르면 그 묶음으로 옮긴다. 같은 분류가 이어지면 흐리게
+    const groupSel = (r, same) => h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': '항목',
+      style: `text-align:center;font-weight:600;background:#F8FAFC;${same ? 'color:#B6BDC8' : ''}`,
+      onchange: (e) => { r.label = e.target.value; saas.info.rows = sortInfo(saas.info.rows); paintSaasBody(); } },
+      ...INFO_GROUPS.map((g) => h('option', { value: g, selected: g === r.label }, g))));
+    const widths = [60, 90, 220, 320, 80, ...cols.map(() => 300)];
     const tbody = h('tbody');
-    for (const it of list) {
-      const v = it.svc[code] = it.svc[code] || { use: false, price: null, text: '' };
-      const tr = h('tr', { class: it === saas.itemPick ? 'is-selected' : '', style: `cursor:pointer;${v.use ? '' : 'color:#B6BDC8'}`,
-        title: '눌러서 상세 보기', onclick: () => { saas.itemPick = it; paintSaasBody(); } },
-        h('td', {}, h('input', { type: 'checkbox', checked: v.use, title: `${shortName(saas.pick)} 에 씀`,
-          onclick: (e) => e.stopPropagation(), onchange: (e) => { v.use = e.target.checked; repaintGroups(); } })),
-        h('td', { style: 'text-align:left' }, it.form.name || '(이름 없음)'),
-        h('td', { style: 'text-align:right' }, v.use ? amountText(v) : '미사용'));
-      tbody.appendChild(tr);
-    }
-    if (!list.length) tbody.appendChild(h('tr', {}, h('td', { colspan: 3, class: 'ss-cell--empty' }, '항목이 없습니다. [추가] 로 넣으세요.')));
-    return h('div', { style: 'min-width:0' },
-      colHead(`▣ ${group}`, h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
-        const it = { orig: null, isNew: true, form: { code: '', group, name: '', spec: '', unit: '월', recurring: 1 },
-          svc: Object.fromEntries(svcCodes().map((c) => [c, { use: c === code, price: null, text: '' }])) };
-        saas.items.push(it); saas.itemPick = it; paintSaasBody();
-      } }, '추가')),
-      h('div', { style: COL_H },
-        h('table', { class: 'ss-grid', style: 'width:100%;border:0' },
-          h('colgroup', {}, h('col', { style: 'width:44px' }), h('col', {}), h('col', { style: 'width:120px' })),
-          h('thead', {}, h('tr', {}, h('th', {}, '사용'), h('th', {}, '세부'), h('th', {}, '금액'))), tbody)));
-  }
-
-  // 고른 항목의 상세 — 구분 · 세부 · 단위 · 이 서비스 금액(또는 금액 글) · 상세 설명. 다른 서비스 금액은 참고로 한 줄
-  function itemPanel() {
-    const it = saas.itemPick && saas.items.includes(saas.itemPick) ? saas.itemPick : null;
-    const wrap = h('div', { style: 'margin-top:12px;border:1px solid #E7EAF0;min-height:150px' });
-    if (!it) {
-      wrap.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, '부가 · 옵션에서 항목을 누르면 여기에 상세가 나옵니다.'));
-      return wrap;
-    }
-    const code = saas.pick.form.code;
-    const v = it.svc[code] = it.svc[code] || { use: false, price: null, text: '' };
-    const field = (label, el, span) => h('label', { style: `display:grid;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:6px;font-size:12px;${span ? 'grid-column:1 / -1' : ''}` },
-      h('span', { style: 'font-weight:600;color:var(--ss-ink-2)' }, label), el);
-    const input = (val, on, attrs = {}) => h('input', { class: 'ss-input', value: val ?? '', ...attrs, oninput: (e) => on(e.target.value), onchange: repaintGroups });
-    const groupSel = h('select', { class: 'ss-input', onchange: (e) => { it.form.group = e.target.value; repaintGroups(); } },
-      ...ITEM_GROUPS.map((g) => h('option', { value: g, selected: g === it.form.group }, g)));
-    const price = numInput(v.price ?? '', (x) => { v.price = toNum(x); }, { class: 'ss-input', style: 'text-align:right', 'aria-label': '금액' });
-    price.addEventListener('change', repaintGroups);
-    const desc = h('textarea', { class: 'ss-input', rows: 4, style: 'height:auto;resize:vertical;line-height:1.5', placeholder: '견적서 세부기능에 들어갈 설명',
-      oninput: (e) => { it.form.spec = e.target.value; } });
-    desc.value = it.form.spec || '';
-    const others = saas.services.filter((x) => x !== saas.pick).map((x) => `${shortName(x)} ${it.svc[x.form.code]?.use ? amountText(it.svc[x.form.code]) || '-' : '미사용'}`).join(' · ');
-    wrap.append(
-      h('div', { class: 'ss-detailbar', style: 'margin-top:0;background:#F8FAFC;padding:6px 10px' },
-        h('span', { style: 'font-size:13px;font-weight:600' }, `▣ ${it.form.name || '새 항목'} — ${shortName(saas.pick)}`),
-        h('span', { class: 'ss-detailbar__note' }, others ? `다른 서비스: ${others}` : ''),
+    saas.info.rows.forEach((r, i) => {
+      const prev = saas.info.rows[i - 1];
+      tbody.appendChild(h('tr', {},
+        h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
+        groupSel(r, prev && prev.label === r.label),
+        area(r.sub, (v) => { r.sub = v; }, 'font-weight:600;background:#F8FAFC'),
+        area(r.desc, (v) => { r.desc = v; }, 'text-align:left;color:var(--ss-ink-2)'),
+        typeSel(r),
+        ...cols.map((svc) => (r.type === 'money' ? money(r, svc.form.code)
+          : area(r.values[svc.form.code], (v) => { r.values[svc.form.code] = v; }, 'text-align:center')))));
+    });
+    return h('div', { style: 'margin-top:16px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ SaaS 정책 기본정보'),
+        h('span', { class: 'ss-detailbar__note' }, '칸을 눌러 고칩니다. 형식이 금액인 행은 숫자만 받습니다. 글자 칸의 줄바꿈은 Enter.'),
         h('div', { class: 'ss-detailbar__spacer' }),
-        h('button', { class: 'ss-btn ss-btn--gridrow', title: '이 금액 · 금액 글을 다른 서비스에도 넣고 모두 사용으로', onclick: () => {
-          for (const c of svcCodes()) it.svc[c] = { ...v, use: true };
-          toast('모든 서비스에 같은 금액을 넣었습니다.', 'ok'); paintSaasBody();
-        } }, '모든 서비스에 같게'),
-        h('button', { class: 'ss-btn ss-btn--delete', onclick: () => {
-          if (!it.isNew) saas.itemsDeleted.push(it.orig);
-          saas.items = saas.items.filter((x) => x !== it); saas.itemPick = null; paintSaasBody();
-        } }, '항목 삭제')),
-      h('div', { style: 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:8px 16px;padding:10px' },
-        field('구분', groupSel),
-        field('세부', input(it.form.name, (x) => { it.form.name = x; })),
-        field('단위', input(it.form.unit, (x) => { it.form.unit = x; }, { placeholder: '월 · 식 · MM' })),
-        field('사용', h('span', {}, h('input', { type: 'checkbox', checked: v.use, onchange: (e) => { v.use = e.target.checked; repaintGroups(); } }),
-          ` ${shortName(saas.pick)} 에 씀`)),
-        field('금액 (원)', price),
-        field('금액 글', input(v.text, (x) => { v.text = x.trim(); }, { placeholder: '별도협의 · 없음 (있으면 금액 대신 보임)' })),
-        field('상세 설명', desc, true)));
-    return wrap;
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { const last = saas.info.rows[saas.info.rows.length - 1];
+          saas.info.rows.push({ label: last ? last.label : '기본', sub: '', desc: '', type: 'text', values: {}, checked: false }); paintSaasBody(); } }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          if (!saas.info.rows.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
+          saas.info.rows = saas.info.rows.filter((r) => !r.checked);
+          paintSaasBody();
+        } }, '행삭제')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;width:fit-content;max-width:100%;overflow:auto' },
+        sized(h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((x, w) => x + w, 0)}px` },
+          h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '상세 설명'), h('th', {}, '형식'),
+            ...cols.map((svc) => h('th', {}, shortName(svc))))),
+          tbody), 'info4')));
   }
 
   // 칸 경계를 끌어 너비 조절 — 조절한 너비는 이 브라우저에 기억(두 번 누르면 처음 너비). 선택 칸은 고정
   const sized = (table, key) => { resizableColumns(table, `quote2:pricing-saas:${key}`); return table; };
 
   // 서비스 표 — 코드 · 서비스. 이미 있는 서비스의 코드는 템플릿 · 견적이 참조하므로 잠근다. 행을 누르면 아래에 그 서비스의 구간표
-  function serviceCard(repaint = paintSaasBody) {
+  function serviceCard() {
     const tbody = h('tbody');
     const cols = [['선택', 60], ['코드', 160], ['서비스', 220], ['상세 내용', 560]];
     const pct = cols.slice(1).reduce((x, [, w]) => x + w, 0);
@@ -708,7 +550,7 @@ export async function renderPricing(root) {
     for (const svc of saas.services) {
       tbody.appendChild(h('tr', {
         class: (svc === saas.pick ? 'is-selected' : '') + (svc.isNew ? ' is-new' : ''), style: 'cursor:pointer',
-        title: '눌러서 이 서비스 고르기', onclick: () => { saas.pick = svc; repaint(); },
+        title: '눌러서 이 서비스의 구간표 보기', onclick: () => { saas.pick = svc; paintSaasBody(); },
       },
       h('td', {}, h('input', { type: 'checkbox', checked: svc.checked, 'aria-label': '선택', onclick: (e) => e.stopPropagation(), onchange: (e) => { svc.checked = e.target.checked; } })),
       svc.isNew ? txt(svc, 'code', { style: 'text-align:center' }) : h('td', { class: 'ss-cell--link', style: 'text-align:center', title: '템플릿이 참조하는 코드라 고칠 수 없습니다' }, svc.form.code),
@@ -717,7 +559,7 @@ export async function renderPricing(root) {
     return h('div', { style: 'margin-top:16px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1);white-space:nowrap' }, '▣ 서비스'),
-        h('span', { class: 'ss-detailbar__note' }, '코드는 템플릿 · 견적이 참조합니다. 서비스 개요 · 구간은 화면의 서비스 탭에서 고칩니다.'),
+        h('span', { class: 'ss-detailbar__note' }, '누르면 아래에 구간표(구간 월 사용료)가 나옵니다.'),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           const svc = { orig: null, form: { code: '', name: '', unit: 'User/월', base_price: null, sort: saas.services.length + 1 },
@@ -725,7 +567,7 @@ export async function renderPricing(root) {
           svc.base = rangeOf(svc);
           saas.services.push(svc);
           saas.pick = svc;
-          repaint();
+          paintSaasBody();
         } }, '행추가'),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           const picked = saas.services.filter((x) => x.checked);
@@ -733,7 +575,7 @@ export async function renderPricing(root) {
           picked.forEach((x) => { if (!x.isNew) saas.deleted.push(x.orig); });
           saas.services = saas.services.filter((x) => !x.checked);
           if (!saas.services.includes(saas.pick)) saas.pick = saas.services[0] || null;
-          repaint();
+          paintSaasBody();
         } }, '행삭제')),
       // 화면 폭에 맞춘다 — 선택 칸만 고정, 나머지는 비율
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
@@ -814,7 +656,7 @@ export async function renderPricing(root) {
   }
 
   // 견적조건 — 선택 · 번호 · 내용(여러 줄). 행추가 · 행삭제 · 위로 · 아래로
-  function condsCard(repaint = paintSaasBody) {
+  function condsCard() {
     const tbody = h('tbody');
     const move = (d) => {
       const list = saas.conds;
@@ -823,7 +665,7 @@ export async function renderPricing(root) {
       const idx = picked.map((r) => list.indexOf(r));
       if (d < 0 ? idx[0] === 0 : idx[idx.length - 1] === list.length - 1) return;
       for (const i of d < 0 ? idx : [...idx].reverse()) [list[i], list[i + d]] = [list[i + d], list[i]];
-      repaint();
+      paintSaasBody();
     };
     saas.conds.forEach((r, i) => {
       const ta = h('textarea', { class: 'ss-cellinput', rows: Math.max(1, r.text.split('\n').length),
@@ -843,11 +685,11 @@ export async function renderPricing(root) {
         h('span', { class: 'ss-detailbar__note' }, '한 줄에 한 조건. 견적서에는 \'-. \' 로 시작하는 문장으로 나옵니다.'),
         h('div', { class: 'ss-detailbar__spacer' }),
         gbtn('▲ 위로', () => move(-1)), gbtn('▼ 아래로', () => move(1)),
-        gbtn('행추가', () => { saas.conds.push({ text: '', checked: false }); repaint(); }),
+        gbtn('행추가', () => { saas.conds.push({ text: '', checked: false }); paintSaasBody(); }),
         gbtn('행삭제', () => {
           if (!saas.conds.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
           saas.conds = saas.conds.filter((r) => !r.checked);
-          repaint();
+          paintSaasBody();
         })),
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
         sized(h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
@@ -857,19 +699,11 @@ export async function renderPricing(root) {
   }
 
   // 정책 전체 사본 — 버전 이력에 남긴다
-  //   info 는 예전 형식(항목 · 세부 · 상세 설명 · 서비스별 값) — 견적 작성 3단계의 구분 → 모듈 목록이 읽는다.
-  //   기본 = 서비스(이름 · 상세 내용), 부가 · 옵션 = 가격 항목
   const policyContent = () => ({
-    overview: saas.overview,
-    items: saas.items.map((it) => ({ code: it.form.code, group: it.form.group, name: it.form.name, spec: it.form.spec, unit: it.form.unit, svc: it.svc })),
     info: {
       columns: saas.services.map((svc) => ({ code: svc.form.code, label: shortName(svc) })),
-      rows: [
-        ...saas.services.map((svc) => ({ label: '기본', sub: svc.form.name, desc: (svc.form.spec || '').trim(), type: 'text',
-          values: Object.fromEntries(saas.services.map((x) => [x.form.code, x === svc ? '사용' : ''])) })),
-        ...ITEM_GROUPS.flatMap((g) => saas.items.filter((it) => it.form.group === g).map((it) => ({ label: g, sub: it.form.name, desc: (it.form.spec || '').trim(), type: 'text',
-          values: Object.fromEntries(saas.services.map((x) => { const v = it.svc[x.form.code]; return [x.form.code, v && v.use ? (v.text || (v.price != null ? String(v.price) : '')) : '']; })) }))),
-      ],
+      rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub, desc: (r.desc || '').trim(), type: r.type,
+        values: Object.fromEntries(saas.services.map((svc) => [svc.form.code, r.values[svc.form.code] || ''])) })),
     },
     conds: saas.conds.map((r) => r.text.trim()).filter(Boolean),
     services: saas.services.map((svc) => ({ code: svc.form.code, name: svc.form.name, spec: svc.form.spec || '', unit: svc.form.unit,
@@ -916,41 +750,20 @@ export async function renderPricing(root) {
     }
     const dup = codes.find((v, i) => v && codes.indexOf(v) !== i);
     if (dup) return toast(`코드가 겹칩니다: ${dup}`, 'err');
-    const itemTodo = saas.items.filter(itemChanged);
-    const noName = itemTodo.find((it) => !String(it.form.name || '').trim());
-    if (noName) { saas.itemPick = noName; paintSaasBody(); return toast('항목의 세부(이름)를 넣으세요.', 'err'); }
     const plan = [];
     for (const svc of todo) {
       const variants = variantsOf(svc);
       if (!variants) { saas.pick = svc; paintSaasBody(); return; }
       plan.push([svc, variants]);
     }
-    const stopN = saas.deleted.length + saas.itemsDeleted.length;
-    if (stopN && !(await confirmModal({
-      title: '사용 중지', message: `삭제한 서비스 · 항목 ${stopN}건은 사용 중지됩니다. 저장하시겠습니까?`, okLabel: '계속', danger: true,
+    if (saas.deleted.length && !(await confirmModal({
+      title: '사용 중지', message: `행삭제한 서비스 ${saas.deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`, okLabel: '계속', danger: true,
     }))) return;
     const ver = await askVersion();
     if (!ver) return;
     let done = 0;
     try {
-      for (const o of [...saas.deleted, ...saas.itemsDeleted]) { await api.deletePriceItem(o.id); done++; }
-      // 가격 항목 — 서비스별 사용 · 금액 · 금액 글을 variants(SVC:코드)로. 기준단가는 첫 서비스의 금액(견적 작성 기본값).
-      // 금액이 모두 글(별도협의)이면 기준단가는 그대로 둔다 — 템플릿 견적(내부시스템 연계 2MM × 단가 등)이 쓰고 있다
-      for (const it of itemTodo) {
-        const variants = svcCodes().filter((c) => it.svc[c] && it.svc[c].use)
-          .map((c, i) => ({ key: SVC_PREFIX + c, label: it.svc[c].text || null, price: it.svc[c].price, sort: i }));
-        const first = variants.find((x) => x.price != null);
-        const f = { category: it.form.group, name: it.form.name.trim(), spec: String(it.form.spec || '').trim() || null,
-          unit: String(it.form.unit || '').trim() || null, base_price: first ? first.price : it.orig ? Number(it.orig.base_price) || 0 : 0, variants };
-        if (it.isNew) {
-          if (!it.form.code) it.form.code = newItemCode();
-          await api.createPriceItem({ ...f, solution: state.solution, deployment: 'SAAS', code: it.form.code, pricing_type: 'FIXED',
-            recurring: it.form.recurring ? 1 : 0, qty_default: 1 });
-        } else {
-          await api.updatePriceItem(it.orig.id, f);
-        }
-        done++;
-      }
+      for (const o of saas.deleted) { await api.deletePriceItem(o.id); done++; }
       for (const [svc, variants] of plan) {
         const f = { name: svc.form.name.trim(), spec: String(svc.form.spec || '').trim() || null, unit: svc.form.unit?.trim() || null, base_price: svc.form.base_price ?? 0, sort: svc.form.sort ?? 0, variants };
         if (svc.isNew) {
@@ -1002,17 +815,6 @@ export async function renderPricing(root) {
       const lines = (t) => String(t || '').split('\n').flatMap((x, i) => (i ? [h('br'), x] : [x]));
       clear(view).appendChild(h('div', { style: 'font-size:13px;font-weight:600;color:var(--ss-primary);margin-bottom:6px' },
         `${v.version} · ${when(v.created_at)} · ${v.created_by_name || '-'}${v.note ? ' · ' + v.note : ''}`));
-      if (c.overview && Array.isArray(c.items)) { // 새 형식(서비스 개요 · 가격 항목)
-        view.appendChild(h('table', { class: 'ss-grid' },
-          h('thead', {}, h('tr', {}, h('th', {}, '서비스 개요'), ...cols.map((x) => h('th', {}, x.label)))),
-          h('tbody', {}, ...c.overview.fields.map((f) => h('tr', {}, h('td', { style: 'font-weight:600' }, f),
-            ...cols.map((x) => h('td', { style: 'text-align:center' }, ...lines(((c.overview.values || {})[x.code] || {})[f]))))))));
-        view.appendChild(h('table', { class: 'ss-grid', style: 'margin-top:12px' },
-          h('thead', {}, h('tr', {}, h('th', {}, '구분'), h('th', {}, '세부'), h('th', {}, '상세 설명'), ...cols.map((x) => h('th', {}, x.label)))),
-          h('tbody', {}, ...c.items.map((it) => h('tr', {}, h('td', { style: 'text-align:center' }, it.group), h('td', { style: 'font-weight:600' }, it.name),
-            h('td', {}, ...lines(it.spec)),
-            ...cols.map((x) => { const s1 = (it.svc || {})[x.code]; return h('td', { style: 'text-align:right' }, s1 && s1.use ? amountText(s1) : '-'); }))))));
-      } else {
       view.appendChild(h('table', { class: 'ss-grid' },
         h('thead', {}, h('tr', {}, h('th', {}, '항목'), h('th', {}, '세부'), h('th', {}, '상세 설명'), ...cols.map((x) => h('th', {}, x.label)))),
         h('tbody', {}, ...sortInfo(((c.info && c.info.rows) || []).map(normInfo)).map((r) => h('tr', {},
@@ -1021,7 +823,6 @@ export async function renderPricing(root) {
           ...cols.map((x) => ((r.type || inferType(r.values)) === 'money'
             ? h('td', { style: 'text-align:right' }, comma(cleanNum(r.values && r.values[x.code])))
             : h('td', { style: 'text-align:center' }, ...lines(r.values && r.values[x.code])))))))));
-      }
       if ((c.conds || []).length) {
         view.appendChild(h('div', { style: 'margin-top:12px;font-size:12px;line-height:1.6;color:var(--ss-ink-2)' },
           h('b', {}, '견적조건'), ...c.conds.flatMap((t) => [h('br'), `-. ${t}`])));
