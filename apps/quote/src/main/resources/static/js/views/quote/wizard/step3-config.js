@@ -216,6 +216,26 @@ export function policyGroup(it) {
 }
 const withPolicyGroup = (it) => ({ ...it, category: policyGroup(it) });
 
+// 가격정책 SaaS 기본정보(현재 버전)의 행 — { 항목(기본/부가/옵션): [{ sub: 세부, desc: 상세 설명 }] }.
+// SaaS 견적 행에서 구분을 고르면 그 구분의 세부가 모듈 목록이 되고, 세부를 고르면 상세 설명이 세부기능에 들어간다
+const policyCache = {};
+async function loadPolicyItems(solution) {
+  if (!solution) return {};
+  if (!policyCache[solution]) {
+    try {
+      const p = await http.pricePolicy(solution, 'SAAS');
+      const rows = (p.current && p.current.content && p.current.content.info && p.current.content.info.rows) || [];
+      const out = {};
+      for (const r of rows) {
+        if (!POLICY_GROUPS.includes(r.label) || !String(r.sub || '').trim()) continue; // 예전 형식(분류 전) 행은 쓰지 않는다
+        (out[r.label] = out[r.label] || []).push({ sub: String(r.sub).trim(), desc: String(r.desc || '').trim() });
+      }
+      policyCache[solution] = out;
+    } catch { return {}; } // 못 받으면 모듈은 손으로 넣는다
+  }
+  return policyCache[solution];
+}
+
 export function appliedPatch(d) {
   const saas = d.template && d.template.deployment === 'SAAS';
   const blocks = d.blocks.filter((b) => b.block_code !== 'SUMMARY').map((b) => ({
@@ -290,7 +310,9 @@ export async function renderStep3(root, state, wiz) {
   }
 
   const st0 = wiz.get();
-  const bands = await loadBands(st0.type.solution || (st0.applied && st0.applied.solution));
+  const solution0 = st0.type.solution || (st0.applied && st0.applied.solution);
+  const bands = await loadBands(solution0);
+  const policyItems = st0.type.deployment === 'SAAS' ? await loadPolicyItems(solution0) : {};
 
   // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
   const left = h('div', { style: 'min-width:0' });
@@ -356,10 +378,28 @@ export async function renderStep3(root, state, wiz) {
     // SaaS 견적의 구분은 가격정책 항목(기본 / 부가 / 옵션)에서 고른다. 예전 값(서비스이용료 등)은 그대로 한 줄 더 보인다
     const category = () => (wiz.get().type.deployment !== 'SAAS' ? txt('category')
       : td(h('select', { class: 'ss-cellinput', 'aria-label': '구분', style: 'text-align:center',
-        onchange: (e) => { r.category = e.target.value; touched(); } },
+        onchange: (e) => { r.category = e.target.value; moduleTd.replaceWith(moduleTd = moduleCell()); touched(); } },
         ...(r.category ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
         ...(r.category && !POLICY_GROUPS.includes(r.category) ? [h('option', { value: r.category, selected: true }, r.category)] : []),
         ...POLICY_GROUPS.map((g) => h('option', { value: g, selected: r.category === g }, g)))));
+    // SaaS 견적의 모듈 = 고른 구분의 가격정책 세부. 고르면 세부기능에 그 세부의 상세 설명을 넣는다(설명이 비었으면 세부기능은 그대로).
+    // 목록에 없는 지금 값(템플릿 품목 이름 등)도 한 줄로 남겨 둔다
+    const moduleCell = () => {
+      const list = (wiz.get().type.deployment === 'SAAS' && policyItems[r.category]) || null;
+      if (!list) return txt('name');
+      const subs = list.map((x) => x.sub);
+      return td(h('select', { class: 'ss-cellinput', 'aria-label': '모듈', style: 'text-align:left',
+        onchange: (e) => {
+          const x = list.find((y) => y.sub === e.target.value);
+          r.name = e.target.value;
+          if (x && x.desc) { r.spec = x.desc; spec.value = x.desc; spec.rows = lines(x.desc); }
+          touched();
+        } },
+        ...(r.name ? [] : [h('option', { value: '', selected: true, disabled: true }, '세부 선택')]),
+        ...(r.name && !subs.includes(r.name) ? [h('option', { value: r.name, selected: true }, r.name)] : []),
+        ...subs.map((v) => h('option', { value: v, selected: r.name === v }, v))));
+    };
+    let moduleTd = isLabor ? null : moduleCell();
     if (isLabor) {
       const roleBtn = h('button', { class: 'ss-cellinput', style: 'text-align:left;cursor:pointer', title: '노임단가에서 직무 선택' },
         r.role_code ? `${r.role_name || r.role_code} ▾` : '직무 선택 ▾');
@@ -378,7 +418,7 @@ export async function renderStep3(root, state, wiz) {
     }
     const variants = bands[r.item_code];
     if (!variants) {
-      return h('tr', {}, sel, category(), txt('name'), td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
+      return h('tr', {}, sel, category(), moduleTd, td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
         money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
     }
     // 구간형 서비스 — 인원·건수 칸에서 [인원 / 건수] 를 고르고 숫자를 넣으면 구간 월 금액을 단가로 채운다. 수량 · 단위는 그대로
@@ -416,7 +456,7 @@ export async function renderStep3(root, state, wiz) {
     const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, r.band ? BAND_KINDS[r.band][1] : '');
     applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
     const bandCell = h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' }, bandSel, bandIn, bandUnit));
-    return h('tr', {}, sel, category(), txt('name'), td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
+    return h('tr', {}, sel, category(), moduleTd, td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
       base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
 
