@@ -170,6 +170,7 @@ export async function renderTemplates(root) {
         h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
     // 기본정보 — 4열 폼
+    const saas = f.deployment === 'SAAS';
     const sel = (key, opts, onchange) => h('select', { class: 'ss-select', onchange: (e) => { f[key] = e.target.value || null; onchange?.(); } },
       ...opts.map(([v, t]) => h('option', { value: v, selected: v === (f[key] ?? '') }, t)));
     const inp = (key, attrs = {}) => h('input', { class: 'ss-input', value: f[key] ?? '', ...attrs, oninput: (e) => { f[key] = e.target.value; } });
@@ -210,14 +211,15 @@ export async function renderTemplates(root) {
           await loadPrices(f.solution);
           paintTabs(); // 모듈 선택지가 솔루션별이다
         }), '', true),
-        field('구축형태', sel('deployment', DEPLOYMENTS, () => paintTabs()), '', true), // SaaS 는 기본 모듈 표 모양이 다르다
+        field('구축형태', sel('deployment', DEPLOYMENTS, () => paint()), '', true), // SaaS 는 칸 · 탭 모양이 다르다 — 전체를 다시 그린다
         field('브랜드', inp('brand', { placeholder: '견적서 표기명' })),
-        field('견적조건 문구', condSel),
+        // SaaS 는 견적조건 문구(→ 견적조건 탭에서 고른다) · 인력투입계획 · 종류 칸을 두지 않는다(2026-10-30 사용자 요청)
+        saas ? null : field('견적조건 문구', condSel),
         field('정렬', numInput(f.sort, (v) => { f.sort = v; }, { class: 'ss-input', style: 'text-align:center' }, true)),
-        field('인력투입계획', h('label', { style: 'display:flex;align-items:center;gap:6px;height:var(--ss-ctrl-h);font-size:13px' },
+        saas ? null : field('인력투입계획', h('label', { style: 'display:flex;align-items:center;gap:6px;height:var(--ss-ctrl-h);font-size:13px' },
           h('input', { type: 'checkbox', checked: !!f.has_labor_plan, onchange: (e) => { f.has_labor_plan = e.target.checked ? 1 : 0; paintTabs(); } }),
           '월별 투입계획 표 사용')), // SaaS 는 켜면 인력 탭이 생긴다
-        field('종류', kindEl, 'ss-field--w2'),
+        saas ? null : field('종류', kindEl, 'ss-field--w2'),
         field('블록 (견적서에 들어갈 순서)', blockBoxes, 'ss-field--full'))));
 
     // 탭 상자 — 기본 모듈 | 인력
@@ -483,8 +485,15 @@ export async function renderTemplates(root) {
       };
       // 모듈 — 고른 구분의 SaaS 품목. 목록에 없는 지금 값(미등록 코드 등)도 한 줄로 남긴다
       const inGroup = prices.filter((x) => !r.group || policyGroup(x) === r.group);
-      const opts = inGroup.map((x) => [x.code, x.name]);
-      if (r.item_code && !inGroup.some((x) => x.code === r.item_code)) opts.unshift([r.item_code, p ? p.name : `${r.item_code} (가격정책 미등록)`]);
+      // 서비스 이용료(S2C · S2P …)는 가격정책 용어대로 '서비스 이용료' 한 줄 — 어느 서비스인지는 견적 작성 1단계에서 고른다.
+      // 이미 서비스 품목이 들어 있으면 그 코드, 새 행은 첫 서비스 품목 코드로 둔다
+      const svcCode = variants ? r.item_code : (inGroup.find((x) => bandVariants(x)) || {}).code;
+      const opts = [];
+      for (const x of inGroup) {
+        if (!bandVariants(x)) opts.push([x.code, x.name]);
+        else if (x.code === svcCode) opts.push([x.code, SVC_TERM]);
+      }
+      if (r.item_code && !opts.some(([c]) => c === r.item_code)) opts.unshift([r.item_code, p ? (variants ? SVC_TERM : p.name) : `${r.item_code} (가격정책 미등록)`]);
       const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, BAND_KINDS[r.band_key || 'USER'][1]);
       const bandTd = variants
         ? h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' },
@@ -529,6 +538,8 @@ export async function renderTemplates(root) {
     return h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' }, head,
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' }, table));
   }
+
+  const SVC_TERM = '서비스 이용료'; // 가격정책 기본정보의 세부 이름
 
   // 구간형 서비스(pricing_type BAND)의 구간 — 없으면 null. 예전 인원 구간은 key 가 비어 있다(COUNT 가 아니면 인원)
   const bandKey = (v) => (v.key === 'COUNT' ? 'COUNT' : 'USER');
