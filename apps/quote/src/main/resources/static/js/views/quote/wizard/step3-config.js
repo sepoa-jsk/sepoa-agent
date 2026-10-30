@@ -30,7 +30,11 @@ export function recalcBlocks(state) {
     // 같은 블록의 셋업 품목에 들어 있다(3.7MM × 12,000,000 = 44,400,000).
     // 여기서 합산하면 화면 미리보기만 서버 PDF 보다 커진다.
     const isLabor = b.block_code === 'LABOR';
-    for (const it of b.items || []) { it.amount = Math.round(num(it.proposed_price) * num(it.qty)); sub += it.amount; }
+    // 구간 행(band — SaaS 인원 · 건수)은 구간 월 금액이 곧 금액이다: 수량은 보여 주기만 하고 곱하지 않는다
+    for (const it of b.items || []) {
+      it.amount = Math.round(num(it.proposed_price) * (it.band ? (num(it.qty) ? 1 : 0) : num(it.qty)));
+      sub += it.amount;
+    }
     for (const l of b.labor || []) {
       if (isLabor) {
         l.amount = Math.round(num(l.proposed_price) * num(l.mm));
@@ -96,7 +100,32 @@ function mapItems(b) {
     item_code: it.item_code || null, category: it.category || null, name: it.name,
     spec: it.spec || null, qty: num(it.qty), unit: it.unit || null,
     base_price: it.base_price, proposed_price: num(it.proposed_price), amount: it.amount,
+    note: it.band ? 'BAND:' + it.band : null,
   }));
+}
+
+// ── SaaS 구간 금액 ─────────────────────────────────────────
+// 가격정책 SaaS 의 구간형 서비스(S2C · S2P …)는 인원 구간(USER) · 건수 구간(COUNT)마다 '구간 월 금액' 이 있다.
+// 견적 행에서 인원 / 건수를 고르고 수량을 넣으면 맞는 구간의 월 금액을 기준단가 · 제안단가로 채운다.
+// 금액은 구간 월 금액 그대로다(수량을 곱하지 않는다 — 2026-10-30 사용자 결정 "수량엔 인원, 금액은 그대로").
+export const BAND_KINDS = { USER: ['인원', '명'], COUNT: ['건수', '건'] };
+const bandCache = {}; // 솔루션 → { 품목코드: variants }
+async function loadBands(solution) {
+  if (!solution) return {};
+  if (!bandCache[solution]) {
+    try {
+      const { items } = await http.pricing(solution, 'SAAS');
+      bandCache[solution] = Object.fromEntries((items || [])
+        .filter((x) => x.pricing_type === 'BAND' && (x.variants || []).length).map((x) => [x.code, x.variants]));
+    } catch { return {}; } // 못 받으면 구간 없이 — 손으로 넣는다
+  }
+  return bandCache[solution];
+}
+// n 이 들어가는 구간 — 끝(max_qty)이 비어 있으면 '이상'
+export function bandOf(variants, key, n) {
+  // 예전에 넣은 인원 구간은 key 가 비어 있다 — 가격정책 화면처럼 COUNT 가 아니면 인원으로 본다
+  const kindOf = (v) => (v.key === 'COUNT' ? 'COUNT' : 'USER');
+  return (variants || []).find((v) => kindOf(v) === key && n >= num(v.min_qty) && (v.max_qty == null || n <= num(v.max_qty))) || null;
 }
 
 // 비-LABOR 블록(SETUP 등)의 labor 행은 **인력투입계획 부록용 공수 배분**이다.
@@ -247,6 +276,9 @@ export async function renderStep3(root, state, wiz) {
     root.replaceChildren();
   }
 
+  const st0 = wiz.get();
+  const bands = await loadBands(st0.type.solution || (st0.applied && st0.applied.solution));
+
   // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
   const left = h('div', { style: 'min-width:0' });
   root.appendChild(left);
@@ -320,8 +352,40 @@ export async function renderStep3(root, state, wiz) {
       return h('tr', {}, sel, txt('role_label', '예) PM, 개발#1'), td(roleBtn), txt('grade', '', 'center'), td(spec),
         numIn('mm'), money('base_price'), proposed, amtCell);
     }
-    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), numIn('qty'), txt('unit', '', 'center'),
-      money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
+    const variants = bands[r.item_code];
+    if (!variants) {
+      return h('tr', {}, sel, txt('category'), txt('name'), td(spec), numIn('qty'), txt('unit', '', 'center'),
+        money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
+    }
+    // 구간형 서비스 — [인원 / 건수] 를 고르고 수량을 넣으면 구간 월 금액을 단가로 채운다
+    const base = money('base_price');
+    const PSTYLE = 'background:var(--primary-weak);color:var(--primary);font-weight:600';
+    const qtyIn = numInput(r.qty, (v) => { r.qty = v === '' ? null : v; applyBand(); upd(); },
+      { class: 'ss-cellinput', style: 'text-align:right' });
+    function applyBand(fill = true) {
+      if (!r.band) { qtyIn.title = ''; qtyIn.style.color = ''; return; }
+      const v = bandOf(variants, r.band, num(r.qty));
+      qtyIn.title = v ? `${v.label} 구간 — 월 ${won(v.price)}원` : '가격정책에 맞는 구간이 없습니다';
+      qtyIn.style.color = v ? '' : 'var(--ss-red, #FF5252)';
+      if (!fill) return;
+      r.base_price = v ? num(v.price) : null;
+      r.proposed_price = v ? num(v.price) : 0;
+      // 단가 칸을 새 값으로 다시 만든다(numInput 은 값을 안에 쥐고 있다)
+      base.replaceChildren(money('base_price').firstChild);
+      proposed.replaceChildren(money('proposed_price', PSTYLE).firstChild);
+    }
+    const kinds = Object.keys(BAND_KINDS).filter((k) => variants.some((v) => (v.key === 'COUNT' ? 'COUNT' : 'USER') === k));
+    const bandSel = h('select', { class: 'ss-cellinput', style: 'text-align:center', title: '가격정책 구간으로 금액 채우기' },
+      h('option', { value: '' }, r.unit && !r.band ? r.unit : '직접'),
+      ...kinds.map((k) => h('option', { value: k, selected: r.band === k }, BAND_KINDS[k][0])));
+    bandSel.addEventListener('change', () => {
+      r.band = bandSel.value || null;
+      if (r.band) r.unit = BAND_KINDS[r.band][1];
+      applyBand(); upd();
+    });
+    applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
+    return h('tr', {}, sel, txt('category'), txt('name'), td(spec), td(qtyIn), td(bandSel),
+      base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
 
   function lines(v) { return Math.min(8, Math.max(1, String(v || '').split('\n').length)); }

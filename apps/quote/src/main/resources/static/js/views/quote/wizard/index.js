@@ -96,6 +96,7 @@ function fromQuote(q, tpl, tplConds) {
       item_code: it.item_code, category: it.category, name: it.name, spec: it.spec, unit: it.unit,
       qty: Number(it.qty), base_price: n0(it.base_price), proposed_price: Number(it.proposed_price) || 0,
       amount: Number(it.amount) || 0,
+      band: (/^BAND:(USER|COUNT)$/.exec(it.note || '') || [])[1] || null, // SaaS 구간 행(step3-config.js)
     })),
     labor: (b.labor || []).map((l) => ({
       role_code: l.role_code, role_name: l.role_name, role_label: l.role_label, grade: l.grade, task: l.task,
