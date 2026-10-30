@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, resizableColumns, numInput, won, openModal, previewControls } from '../ui.js';
-import { BAND_KINDS, bandOf, bandLine, POLICY_GROUPS, policyGroup, payPlanDefault } from './quote/wizard/step3-config.js';
+import { BAND_KINDS, bandOf, bandLine, bandUnitOf, POLICY_GROUPS, policyGroup, payPlanDefault } from './quote/wizard/step3-config.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
@@ -569,7 +569,7 @@ export async function renderTemplates(root) {
           const price = v ? Number(v.price) : null;
           return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code,
             spec: [p?.spec, bandLine(band)].filter(Boolean).join('\n'),
-            unit: p?.unit || null, qty: num(r.qty_default, 1), base_price: price, proposed_price: price || 0 };
+            unit: bandUnitOf(band.band), qty: num(r.qty_default, 1), base_price: price, proposed_price: price || 0 };
         }
         const base = p && p.base_price != null ? Number(p.base_price) : null;
         return { item_code: r.item_code, category: p?.category || null, name: p?.name || r.item_code, spec: p?.spec || null,

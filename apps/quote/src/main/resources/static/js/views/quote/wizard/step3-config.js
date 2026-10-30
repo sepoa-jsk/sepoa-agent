@@ -110,6 +110,8 @@ export const BAND_KINDS = { USER: ['인원', '명'], COUNT: ['건수', '건'] };
 export const bandLine = (it) => (it.band && BAND_KINDS[it.band]
   ? `(${BAND_KINDS[it.band][0]} ${num(it.band_qty)}${BAND_KINDS[it.band][1]} 기준)` : null);
 export const BAND_LINE_RE = /\n?\((인원|건수) [\d.]+(명|건) 기준\)$/;
+// 서비스 이용료 행의 단위 — 인원이면 '명', 건수면 '건'(2026-10-30 사용자 요청 — 예전 가격정책 단위 'User/월'). 구간이 없으면 null
+export const bandUnitOf = (band) => (band && BAND_KINDS[band] ? BAND_KINDS[band][1] : null);
 // SaaS 품목 목록 — 솔루션마다 한 번 받는다. 서비스(S2C · S2P …) = 구간형(BAND) 품목
 const catalogCache = {};
 export async function loadSaasCatalog(solution) {
@@ -162,6 +164,7 @@ function syncService(state, code, catalog) {
       if (to.pricing_type === 'BAND') {
         it.band = it.band || 'USER';
         if (it.band_qty == null) it.band_qty = 1;
+        it.unit = bandUnitOf(it.band);
         const v = bandOf(to.variants, it.band, num(it.band_qty));
         price = v ? num(v.price) : null;
       }
@@ -307,7 +310,8 @@ export function appliedPatch(d) {
   const saas = d.template && d.template.deployment === 'SAAS';
   const blocks = d.blocks.filter((b) => b.block_code !== 'SUMMARY').map((b) => ({
     ...b,
-    items: (b.items || []).map((it) => ({ ...(saas ? withPolicyGroup(it) : it), proposed_price: it.base_price || 0 })),
+    items: (b.items || []).map((it) => ({ ...(saas ? withPolicyGroup(it) : it), proposed_price: it.base_price || 0,
+      ...(bandUnitOf(it.band) ? { unit: bandUnitOf(it.band) } : {}) })),
     labor: (b.labor || []).map((l) => ({ ...l, proposed_price: l.base_price || 0, month_alloc: l.month_alloc || {} })),
   }));
   return {
@@ -391,6 +395,15 @@ export async function renderStep3(root, state, wiz) {
   if (svcTerm) {
     let n = 0;
     for (const b of st0.blocks || []) for (const it of b.items || []) if (bands[it.item_code] && it.name !== svcTerm) { it.name = svcTerm; n++; }
+    if (n) wiz.patch({});
+  }
+  // 서비스 이용료 행의 단위도 인원 · 건수에 맞춘다(명 / 건) — 예전 견적 · 템플릿의 'User/월' 도 열면 바뀐다(저장해야 견적서에 반영)
+  {
+    let n = 0;
+    for (const b of st0.blocks || []) for (const it of b.items || []) {
+      const u = bands[it.item_code] && bandUnitOf(it.band);
+      if (u && it.unit !== u) { it.unit = u; n++; }
+    }
     if (n) wiz.patch({});
   }
 
@@ -528,6 +541,7 @@ export async function renderStep3(root, state, wiz) {
       r.band = bandSel.value || null;
       if (r.band && r.band_qty == null) r.band_qty = 1;
       bandUnit.textContent = r.band ? BAND_KINDS[r.band][1] : '';
+      if (r.band) { r.unit = bandUnitOf(r.band); const u = txt('unit', '', 'center'); unitTd.replaceWith(u); unitTd = u; } // 단위도 명 / 건
       // 숫자 칸을 새 값으로 다시 만든다(numInput 은 값을 안에 쥐고 있다) — 처음 고르면 1
       const fresh = numInput(r.band_qty, onBandQty, { class: bandIn.className, style: bandIn.style.cssText, 'aria-label': '인원·건수' });
       bandIn.replaceWith(fresh); bandIn = fresh;
@@ -536,7 +550,8 @@ export async function renderStep3(root, state, wiz) {
     const bandUnit = h('span', { style: 'font-size:12px;color:var(--ss-ink-3);width:14px' }, r.band ? BAND_KINDS[r.band][1] : '');
     applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
     const bandCell = h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' }, bandSel, bandIn, bandUnit));
-    return h('tr', {}, sel, category(), moduleTd, td(spec), bandCell, numIn('qty'), txt('unit', '', 'center'),
+    let unitTd = txt('unit', '', 'center');
+    return h('tr', {}, sel, category(), moduleTd, td(spec), bandCell, numIn('qty'), unitTd,
       base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
   }
 
