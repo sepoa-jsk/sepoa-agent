@@ -73,6 +73,43 @@ export function openModal({ title, body, footer }) {
   return { close: () => back.remove(), back };
 }
 
+// 견적서 미리보기 창 조절 — [−] 배율 [+] 로 글자 · 표를 키우고 줄이고(50~200%, 배율을 누르면 100%),
+// [창 크게] 로 창을 화면 가득 넓힌다. 배율은 이 브라우저에 기억한다. 창 아래 줄(footer)에 넣는다.
+const ZOOM_KEY = 'quote2:preview-zoom';
+export function previewControls(frame, box) {
+  let zoom = 1;
+  try { zoom = Number(localStorage.getItem(ZOOM_KEY)) || 1; } catch { /* 기억 못 해도 된다 */ }
+  const pct = h('button', { class: 'btn', title: '눌러서 100%', style: 'min-width:58px' });
+  const apply = () => {
+    pct.textContent = Math.round(zoom * 100) + '%';
+    const doc = frame.contentDocument;
+    if (doc && doc.documentElement) doc.documentElement.style.zoom = String(zoom);
+  };
+  const set = (z) => {
+    zoom = Math.min(2, Math.max(0.5, Math.round(z * 10) / 10));
+    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch { /* 무시 */ }
+    apply();
+  };
+  frame.addEventListener('load', apply); // 내용을 다시 그리면(srcdoc) 배율을 다시 건다
+  pct.onclick = () => set(1);
+  // 창 크기 — 높이를 쥔 것이 iframe 자신(height)이거나 감싼 상자(flex)다
+  const tall = frame.style.height ? frame : frame.parentElement;
+  const orig = { width: box.style.width, height: tall.style.height };
+  let wide = false;
+  const wideBtn = h('button', { class: 'btn' }, '창 크게');
+  wideBtn.onclick = () => {
+    wide = !wide;
+    box.style.width = wide ? '96vw' : orig.width;
+    box.style.maxWidth = wide ? '96vw' : '';
+    tall.style.height = wide ? 'calc(100vh - 190px)' : orig.height; // 머리 · 아래 줄이 화면 안에 남게
+    wideBtn.textContent = wide ? '창 작게' : '창 크게';
+  };
+  apply();
+  return h('span', { style: 'display:inline-flex;gap:4px;align-items:center;margin-right:auto' },
+    h('button', { class: 'btn', title: '축소', onclick: () => set(zoom - 0.1) }, '−'), pct,
+    h('button', { class: 'btn', title: '확대', onclick: () => set(zoom + 0.1) }, '+'), wideBtn);
+}
+
 export function loading(text = '불러오는 중...') {
   return h('div', { class: 'empty' }, h('span', { class: 'spinner' }), h('div', { style: 'margin-top:10px' }, text));
 }

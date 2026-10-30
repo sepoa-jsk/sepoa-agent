@@ -3,7 +3,7 @@
 // 계산 로직은 바꾸지 않는다: 서버 calcQuoteBlocks 와 같은 순서를 그대로 옮겨 왔다.
 //   블록소계 합 → 특별DC → 절사(십만) → VAT. 일시불/월(recurring) 분리.
 import { api as http } from '../../../api.js';
-import { h, won, toast, openModal, confirmModal, numInput } from '../../../ui.js';
+import { h, won, toast, openModal, confirmModal, numInput, previewControls } from '../../../ui.js';
 import { pickItems, pickRole, itemRow } from '../pickers.js';
 
 // 블록 정의(sq_blocks) — 블록 추가 목록. 한 번 받아 둔다
@@ -205,7 +205,7 @@ export async function openPreview(wiz) {
   if (!s.blocks || !s.blocks.length) return toast('템플릿을 불러오거나 3단계(구성)에서 견적 구성을 만든 뒤 미리볼 수 있습니다.', 'err');
   recalcBlocks(s); // 행 금액(amount)을 채운다 — 서버는 보낸 금액을 그대로 합산한다
   const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
-  const info = h('span', { style: 'margin-right:auto;font-size:12px;color:var(--text-3)' }, '그리는 중...');
+  const info = h('span', { style: 'font-size:12px;color:var(--text-3);margin-right:8px' }, '그리는 중...');
   const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
   const m = openModal({
     title: `견적서 미리보기${s.quoteNo ? ' — ' + s.quoteNo : ''}`,
@@ -215,6 +215,7 @@ export async function openPreview(wiz) {
   const box = m.back.querySelector('.modal');
   box.style.width = '880px';
   box.querySelector('.modal-body').style.padding = '12px';
+  box.querySelector('.modal-foot').prepend(previewControls(frame, box));
   try {
     const r = await http.previewQuote({
       blocks: toBlocksPayload(s), header: { ...previewHeader(s), quote_no: s.quoteNo || undefined },

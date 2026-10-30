@@ -4,7 +4,7 @@
 //   삭제      : 확인 후 지우고 목록으로 간다
 //   내려받기  : PDF(표지 포함) · Excel — 서버에 저장된 내용으로 만든다
 import { api } from '../../api.js';
-import { h, toast, confirmModal, openModal } from '../../ui.js';
+import { h, toast, confirmModal, openModal, previewControls } from '../../ui.js';
 
 export async function copyQuote(quote) {
   const ok = await confirmModal({ title: '견적 복사', okLabel: '복사',
@@ -28,6 +28,7 @@ export async function viewQuote(quote) {
   const box = m.back.querySelector('.modal');
   box.style.width = '880px';
   box.querySelector('.modal-body').style.padding = '12px';
+  box.querySelector('.modal-foot').prepend(previewControls(frame, box));
   try {
     const r = await api.quoteHtml(quote.id);
     frame.srcdoc = r.html;

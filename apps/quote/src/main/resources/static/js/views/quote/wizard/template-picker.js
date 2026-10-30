@@ -3,7 +3,7 @@
 // 미리보기는 지금 작성 중인 기본정보(수신처 · 견적용도 등)에 템플릿의 구성 · 인력 · 견적조건을 얹어 그린다.
 // [이 템플릿으로 시작] 을 누르면 onStart() — 상태 반영은 1단계(step2-type.js)가 한다.
 import { api as http } from '../../../api.js';
-import { h, won, openModal } from '../../../ui.js';
+import { h, won, openModal, previewControls } from '../../../ui.js';
 import { appliedPatch, toBlocksPayload, previewHeader, recalcBlocks } from './step3-config.js';
 
 // 템플릿 종류(서버가 내용으로 정한다) — 구조만: 블록 틀만 있고 모듈 · 인력은 비어 있다 / 데이터 포함: 기본 모듈 · 인력까지 채워져 있다
@@ -26,6 +26,7 @@ export function openTemplatePreview({ state, tpl: t, onStart }) {
   const box = m.back.querySelector('.modal');
   box.style.width = '900px';
   box.querySelector('.modal-body').style.padding = '12px';
+  box.querySelector('.modal-foot').prepend(previewControls(frame, box));
   (async () => {
     try {
       const d = applyCache[t.code] || (applyCache[t.code] = await http.applyTemplate(t.code));

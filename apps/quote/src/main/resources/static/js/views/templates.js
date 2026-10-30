@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, toast, clear, resizableColumns, numInput, won, openModal } from '../ui.js';
+import { h, toast, clear, resizableColumns, numInput, won, openModal, previewControls } from '../ui.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
@@ -373,7 +373,7 @@ export async function renderTemplates(root) {
   async function preview() {
     const f = cur.form;
     const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
-    const state = h('span', { style: 'margin-right:auto;font-size:12px;color:var(--text-3)' }, '그리는 중...');
+    const state = h('span', { style: 'font-size:12px;color:var(--text-3);margin-right:8px' }, '그리는 중...');
     const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
     const m = openModal({
       title: `견적서 미리보기 — ${f.name || '새 템플릿'}${f.code ? ` (${f.code})` : ''}`,
@@ -383,6 +383,7 @@ export async function renderTemplates(root) {
     const box = m.back.querySelector('.modal');
     box.style.width = '880px';
     box.querySelector('.modal-body').style.padding = '12px';
+    box.querySelector('.modal-foot').prepend(previewControls(frame, box));
     try {
       const r = await api.previewQuote({
         blocks: previewBlocks(),
