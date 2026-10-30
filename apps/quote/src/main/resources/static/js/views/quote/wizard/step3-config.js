@@ -257,6 +257,24 @@ function dcPayload(dc) {
 // SaaS 견적의 구분 = 가격정책 SaaS 기본정보의 항목(기본 / 부가 / 옵션 — 2026-10-30 사용자 요청).
 // 품목에서 정한다(가격정책 화면의 예전 항목 → 분류와 같은 규칙): 옵션(옵션모듈) → 옵션,
 // 셋업 · Poa-BiA · 인프라 · 연계 · 유지보수 · 커스터마이징 → 부가, 나머지(서비스 이용료) → 기본
+// 결제 방안 기본 문구(서버 QuoteHtml.payPlanRows 와 같은 문구) — 견적 작성 결제 방안 · 템플릿 화면 결제 방안 탭이 같이 쓴다
+export function payPlanDefault(one, mon, ratio) {
+  const r = ratio > 0 && ratio <= 100 ? Number(ratio) : 50;
+  const first = Math.round(one * r / 100);
+  const rows = [];
+  if (one === 0) rows.push(['서비스\n셋업비용', '1. 무상제공', '1. 셋업비용 : 무상제공', '-']);
+  else if (r >= 100) {
+    rows.push(['서비스\n셋업비용', '1. 일시불\n  -. 계약체결 후 100%', `1. 일시불 비용 : ₩${won(one)}원`,
+      '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 100%']);
+  } else {
+    rows.push(['서비스\n셋업비용', `1. 일시불\n  -. 계약체결 후 ${r}%\n  -. 구축완료 후 ${100 - r}%`,
+      `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 ${r}% : ₩${won(first)}원\n   구축완료 후 ${100 - r}% : ₩${won(one - first)}원`,
+      `-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 ${r}% / 구축완료 후 ${100 - r}%`]);
+  }
+  rows.push(['서비스\n월 사용료', '1. 매월 말', `1. 서비스 사용료 : ₩${won(mon)}원/매월`, '-. 서비스 착수 후 월별로 세금계산서 발행']);
+  return rows;
+}
+
 export const POLICY_GROUPS = ['기본', '부가', '옵션'];
 export function policyGroup(it) {
   const t = `${it.category || ''} ${it.name || ''}`;
@@ -803,22 +821,6 @@ export async function renderStep3(root, state, wiz) {
   };
   const setPay = (part) => { wiz.patch({ pay_plan: { ...payState(), ...part } }); };
 
-  function payPlanDefault(one, mon, ratio) {
-    const r = ratio > 0 && ratio <= 100 ? Number(ratio) : 50;
-    const first = Math.round(one * r / 100);
-    const rows = [];
-    if (one === 0) rows.push(['서비스\n셋업비용', '1. 무상제공', '1. 셋업비용 : 무상제공', '-']);
-    else if (r >= 100) {
-      rows.push(['서비스\n셋업비용', '1. 일시불\n  -. 계약체결 후 100%', `1. 일시불 비용 : ₩${won(one)}원`,
-        '-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 100%']);
-    } else {
-      rows.push(['서비스\n셋업비용', `1. 일시불\n  -. 계약체결 후 ${r}%\n  -. 구축완료 후 ${100 - r}%`,
-        `1. 일시불 비용 : ₩${won(one)}원\n   계약체결 후 ${r}% : ₩${won(first)}원\n   구축완료 후 ${100 - r}% : ₩${won(one - first)}원`,
-        `-. 서비스계약 체결 후 7일 이내 세금계산서 발행\n-. 검수완료 후 7일 이내 세금계산서 발행\n-. 결제조건 : 계약체결 후 ${r}% / 구축완료 후 ${100 - r}%`]);
-    }
-    rows.push(['서비스\n월 사용료', '1. 매월 말', `1. 서비스 사용료 : ₩${won(mon)}원/매월`, '-. 서비스 착수 후 월별로 세금계산서 발행']);
-    return rows;
-  }
   const shownPayRows = (c) => {
     const pp = payState();
     return Array.isArray(pp.rows) && pp.rows.length ? pp.rows : payPlanDefault(c.final, c.monthlyFinal, pp.ratio ?? 50);

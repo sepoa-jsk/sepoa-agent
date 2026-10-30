@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, resizableColumns, numInput, won, openModal, previewControls } from '../ui.js';
-import { BAND_KINDS, bandOf, bandLine, POLICY_GROUPS, policyGroup } from './quote/wizard/step3-config.js';
+import { BAND_KINDS, bandOf, bandLine, POLICY_GROUPS, policyGroup, payPlanDefault } from './quote/wizard/step3-config.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
@@ -182,18 +182,19 @@ export async function renderTemplates(root) {
     //   결제 방안 = has_pay_plan, 견적조건 = condition_set(빼면 null — 견적 작성에서 견적조건 없이 시작한다)
     const boxLabel = (checked, onchange, text) => h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:13px' },
       h('input', { type: 'checkbox', checked, onchange: (e) => onchange(e.target.checked) }), text);
-    const condSel = h('select', { class: 'ss-select', disabled: !f.condition_set, onchange: (e) => { f.condition_set = e.target.value; } },
+    const condSel = h('select', { class: 'ss-select', disabled: !f.condition_set, onchange: (e) => { f.condition_set = e.target.value; if (tab === '__COND') paintTabs(); } },
       ...conditionSets.map((c) => h('option', { value: c.code, selected: c.code === f.condition_set }, c.name)));
     const blockBoxes = h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px 16px;min-height:var(--ss-ctrl-h);align-items:center' },
       ...blocksDef.filter((b) => b.code !== 'SUMMARY').map((b) => boxLabel(cur.blocks.has(b.code), (on) => {
         if (on) { cur.blocks.add(b.code); if (cur.form.deployment === 'SAAS' && !NO_ITEM_BLOCKS.includes(b.code)) tab = b.code; } else cur.blocks.delete(b.code); // SaaS 는 켠 블록 탭으로
         paintTabs(); // 고를 수 있는 블록이 바뀐다
       }, b.name)),
-      boxLabel(!!f.has_pay_plan, (on) => { f.has_pay_plan = on ? 1 : 0; }, '결제 방안'),
+      boxLabel(!!f.has_pay_plan, (on) => { f.has_pay_plan = on ? 1 : 0; if (on) tab = '__PAY'; paintTabs(); }, '결제 방안'),
       boxLabel(!!f.condition_set, (on) => {
         f.condition_set = on ? (condSel.value || defaultCondSet(f.deployment)) : null;
         condSel.disabled = !on;
-        if (on) condSel.value = f.condition_set;
+        if (on) { condSel.value = f.condition_set; tab = '__COND'; }
+        paintTabs();
       }, '견적조건'));
     // 종류 — 기본 모듈 · 인력이 없으면 구조만(블록 틀만), 있으면 데이터 포함. 저장 값이 아니라 내용으로 정해진다
     const kindText = () => (cur.items.length || cur.labor.length ? '데이터 포함 — 기본 모듈 · 인력까지 채워져 있습니다' : '구조만 — 블록 틀과 견적조건 문구만 있고 모듈 · 인력은 견적 작성에서 넣습니다');
@@ -243,6 +244,8 @@ export async function renderTemplates(root) {
     const body = h('div', { class: 'ss-tabbox__pane' });
     tabBox.appendChild(body);
     if (tab === 'labor') laborGrid(body);
+    else if (tab === '__PAY') payPlanTab(body);
+    else if (tab === '__COND') condTab(body);
     else if (cur.form.deployment === 'SAAS') saasItems(body, tab);
     else itemsGrid(body);
   }
@@ -257,6 +260,8 @@ export async function renderTemplates(root) {
       ...on.map((b) => [b.code, `${b.name} (${cnt(b.code)})`]),
       ...off.map((c) => [c, `${(blocksDef.find((b) => b.code === c) || {}).name || c} (꺼짐 · ${cnt(c)})`]),
       ...(cur.labor.length || cur.form.has_labor_plan ? [['labor', `인력 (${cur.labor.length})`]] : []),
+      ...(cur.form.has_pay_plan ? [['__PAY', '결제 방안']] : []),
+      ...(cur.form.condition_set ? [['__COND', '견적조건']] : []),
     ];
   }
 
@@ -370,6 +375,65 @@ export async function renderTemplates(root) {
     const at = blocks.findIndex((b) => b.code === code);
     const b = at >= 0 ? blocks[at] : { code, name: `${(blocksDef.find((x) => x.code === code) || {}).name || code} (블록 꺼짐 — 블록을 다시 켜거나 행을 지우세요)` };
     body.appendChild(saasBlockCard(b, at >= 0 ? at + 1 : '-', prices, at >= 0 ? null : cur.items.filter((r) => r.block_code === code)));
+  }
+
+  // 결제 방안 탭 — 템플릿은 넣을지(켜고 끔)만 정한다. 견적서에 들어갈 기본 표를 이 템플릿의 기본 금액으로 보여 준다.
+  // 비율 · 문구는 견적 작성 3단계(구성)의 결제 방안에서 견적마다 고친다
+  function payPlanTab(body) {
+    const blocks = previewBlocks();
+    const sum = (rec) => blocks.filter((b) => !!b.recurring === rec)
+      .reduce((a, b) => a + (b.items || []).reduce((x, r) => x + (r.proposed_price || 0) * (r.qty || 0), 0), 0);
+    const rows = payPlanDefault(sum(false), sum(true), 50);
+    body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
+      h('span', { class: 'ss-detailbar__note' }, '견적서에 들어갈 결제 방안 기본 표입니다(이 템플릿의 기본 금액 · 계약체결 50% 기준). 비율과 문구는 견적 작성 3단계(구성)에서 견적마다 고칩니다.')));
+    const cols = [['구분', 150], ['지급시점', 220], ['비용', 360], ['내역', 420]];
+    body.appendChild(h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' }, h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 결제 방안')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((a, [, w]) => a + w, 0)}px;min-width:100%` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((v, i) => h('td', { style: `white-space:pre-line;text-align:${i ? 'left' : 'center'}` }, v)))))))));
+  }
+
+  // 견적조건 탭 — 고른 문구 세트(위 '견적조건 문구')의 문장 + SaaS 는 가격정책(SaaS) 현재 버전의 견적조건이 뒤에 붙는다(같은 문장은 한 번).
+  // 견적 작성에서 템플릿을 고르면 이 순서 그대로 들어가고, 견적마다 고칠 수 있다
+  const policyConds = {};
+  async function condTab(body) {
+    const f = cur.form;
+    const set = conditionSets.find((c) => c.code === f.condition_set);
+    const lines = (set && set.lines) || [];
+    let extra = [];
+    if (f.deployment === 'SAAS' && f.solution) {
+      if (!policyConds[f.solution]) {
+        try {
+          const pv = await api.pricePolicy(f.solution, 'SAAS');
+          policyConds[f.solution] = ((pv.current && pv.current.content && pv.current.content.conds) || []).map((x) => String(x || '').trim()).filter(Boolean);
+        } catch { policyConds[f.solution] = []; }
+      }
+      extra = policyConds[f.solution].filter((t) => !lines.includes(t));
+    }
+    const sel = h('select', { class: 'ss-select', style: 'width:240px', onchange: (e) => { f.condition_set = e.target.value; paint(); } }, // 위 기본정보의 견적조건 문구도 같이 바뀌게 전체를 다시 그린다
+      ...conditionSets.map((c) => h('option', { value: c.code, selected: c.code === f.condition_set }, c.name)));
+    body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
+      h('span', { class: 'ss-detailbar__note' }, '견적 작성에서 이 템플릿을 고르면 아래 문장이 이 순서로 견적조건에 들어갑니다. 견적마다 고칠 수 있습니다.')));
+    const tbody = h('tbody');
+    const all = [...lines.map((t) => [t, set ? set.name : '']), ...extra.map((t) => [t, '가격정책 견적조건'])];
+    all.forEach(([t, src], i) => tbody.appendChild(h('tr', {},
+      h('td', { style: 'text-align:center' }, String(i + 1)),
+      h('td', { style: 'text-align:left;white-space:pre-line' }, t),
+      h('td', { style: 'text-align:center;color:var(--ss-ink-3)' }, src))));
+    if (!all.length) tbody.appendChild(h('tr', {}, h('td', { colspan: 3, class: 'ss-cell--empty', style: 'height:60px' }, '문구가 없습니다.')));
+    const cols = [['No', 60], ['문구', 760], ['출처', 180]];
+    body.appendChild(h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' },
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적조건'),
+        h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '문구 세트', sel)),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((a, [, w]) => a + w, 0)}px;min-width:100%` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          tbody))));
   }
 
   function saasBlockCard(b, no, prices, only) {
