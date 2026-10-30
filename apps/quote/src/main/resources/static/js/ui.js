@@ -145,11 +145,19 @@ export function resizableColumns(table, storeKey) {
 }
 
 // 숫자 칸 — 보일 때는 정수부에 3자리 콤마, 누르면(포커스) 콤마 없는 값으로 고친다.
-// 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자 · 점 · 빼기 외의 글자는 받지 않는다.
+// 소수부는 입력·저장된 그대로 둔다(0.20 → 0.20). 숫자만 받는다 — 소수점은 하나, 빼기는 맨 앞에만.
+// 입력하는 동안은 콤마가 없고, 커서가 다른 칸으로 가면(blur) 콤마를 붙인다.
 export const comma = (v) => {
   if (v == null || v === '') return '';
   const m = String(v).match(/^(-?)(\d+)(.*)$/);
   return m ? m[1] + m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + m[3] : String(v);
+};
+// 숫자 · 소수점 하나 · 맨 앞 빼기만 남긴다
+export const cleanNum = (v) => {
+  const s = String(v ?? '').replace(/[^\d.-]/g, '');
+  const neg = s.startsWith('-') ? '-' : '';
+  const [int, ...dec] = s.replace(/-/g, '').split('.');
+  return neg + int + (dec.length ? '.' + dec.join('') : '');
 };
 // plain 이면(연도 등) 콤마를 넣지 않는다
 export function numInput(raw, onRaw, attrs, plain = false) {
@@ -160,7 +168,7 @@ export function numInput(raw, onRaw, attrs, plain = false) {
     onfocus: (e) => { if (!e.target.readOnly) e.target.value = cur; },
     onblur: (e) => { e.target.value = show(cur); },
     oninput: (e) => {
-      const t = e.target.value.replace(/[^\d.-]/g, '');
+      const t = cleanNum(e.target.value);
       if (t !== e.target.value) e.target.value = t;
       cur = t;
       onRaw(t);

@@ -5,7 +5,7 @@
 // 인력투입계획 부록용 공수 배분이며, 금액은 이미 같은 블록의 셋업 품목에 들어 있다.
 // (실측 SK이터닉스: 셋업 3.7MM × 12,000,000 = 44,400,000 한 줄뿐, 인건비 행 없음)
 // 그래서 비-LABOR 블록에는 단가·금액 칸을 아예 만들지 않는다.
-import { h, won } from '../../../ui.js';
+import { h, won, numInput } from '../../../ui.js';
 import { RISK_FACTORS, FACTOR_NOTE } from './risk-factors.js';
 import { recalcBlocks } from './step3-config.js';
 
@@ -82,21 +82,16 @@ export function renderStep4(root, state, wiz) {
     l.grade ? h('span', { class: 'sub', style: 'margin-left:4px;color:var(--text-3)' }, l.grade) : null,
     h('div', {}, l.role_label || l.role_name || ''));
 
-  const mmInput = (l, after) => h('input', {
-    class: 'input', type: 'number', step: 'any', style: 'width:70px;text-align:right', value: l.mm,
-    oninput: (e) => { l.mm = e.target.value; if (after) after(); sync(); },
-  });
+  // 숫자 칸은 numInput — 숫자만 받고, 커서가 나가면 콤마
+  const mmInput = (l, after) => numInput(l.mm, (v) => { l.mm = v; if (after) after(); sync(); },
+    { class: 'input', style: 'width:70px;text-align:right' });
 
   const monthCells = (l) => (state.hasLaborPlan ? MONTHS.map((m) => h('td', { class: 'num' },
-    h('input', {
-      class: 'input', type: 'number', step: 'any', style: 'width:56px;text-align:right',
-      value: (l.month_alloc || {})[m] ?? '',
-      oninput: (e) => {
-        l.month_alloc = l.month_alloc || {};
-        if (e.target.value === '') delete l.month_alloc[m]; else l.month_alloc[m] = Number(e.target.value);
-        sync();
-      },
-    }))) : []);
+    numInput((l.month_alloc || {})[m] ?? '', (v) => {
+      l.month_alloc = l.month_alloc || {};
+      if (v === '' || v === '-' || v === '.') delete l.month_alloc[m]; else l.month_alloc[m] = Number(v);
+      sync();
+    }, { class: 'input', style: 'width:56px;text-align:right' }))) : []);
 
   for (const b of laborBlocks) {
     const isLabor = b.block_code === 'LABOR';
@@ -106,12 +101,8 @@ export function renderStep4(root, state, wiz) {
       if (isLabor) {
         const amt = h('td', { class: 'num' }, won(l.amount || 0));
         const recalc = () => { l.amount = Math.round(num(l.proposed_price) * num(l.mm)); amt.textContent = won(l.amount); };
-        const priceInp = h('input', {
-          class: 'input', type: 'number', step: 'any',
-          style: 'width:118px;text-align:right;background:var(--primary-weak);color:var(--primary);font-weight:600',
-          value: l.proposed_price,
-          oninput: (e) => { l.proposed_price = e.target.value; recalc(); sync(); },
-        });
+        const priceInp = numInput(l.proposed_price, (v) => { l.proposed_price = v; recalc(); sync(); },
+          { class: 'input', style: 'width:118px;text-align:right;background:var(--primary-weak);color:var(--primary);font-weight:600' });
         tb.appendChild(h('tr', {},
           roleCell(l), h('td', { class: 'sub' }, l.task || ''),
           h('td', { class: 'num' }, mmInput(l, recalc)),

@@ -290,8 +290,8 @@ export async function renderStep3(root, state, wiz) {
     // 글자는 왼쪽(단위 · 등급만 가운데), 숫자는 오른쪽. 금액은 3자리 콤마로 입력한다(다른 편집 그리드와 같은 numInput)
     const txt = (key, ph = '', align = 'left') => td(h('input', { class: 'ss-cellinput', value: r[key] ?? '', placeholder: ph,
       style: `text-align:${align}`, oninput: (e) => { r[key] = e.target.value; touched(); } }));
-    const numIn = (key, style = '') => td(h('input', { class: 'ss-cellinput', type: 'number', step: 'any', value: r[key] ?? '',
-      style: 'text-align:right;' + style, oninput: (e) => { r[key] = e.target.value === '' ? null : e.target.value; upd(); } }));
+    const numIn = (key, style = '') => td(numInput(r[key], (v) => { r[key] = v === '' ? null : v; upd(); },
+      { class: 'ss-cellinput', style: 'text-align:right;' + style }));
     const money = (key, style = '') => td(numInput(r[key], (v) => { r[key] = v === '' ? null : v; upd(); },
       { class: 'ss-cellinput', style: 'text-align:right;' + style }));
     // 세부기능 · 업무는 여러 줄 — 줄 수만큼 칸이 늘어난다
@@ -634,7 +634,7 @@ export async function renderStep3(root, state, wiz) {
       if (!(Array.isArray(payState().rows) && payState().rows.length)) setPay({ rows: shownPayRows(c).map((r) => [...r]) });
       return payState().rows;
     };
-    const ratio = h('input', { class: 'ss-input', type: 'number', min: 1, max: 100, step: 1, style: 'width:70px;text-align:right', value: pp.ratio ?? 50,
+    const ratio = numInput(pp.ratio ?? 50, () => {}, { class: 'ss-input', style: 'width:70px;text-align:right',
       onchange: (e) => {
         const v = Number(e.target.value);
         if (!(v > 0 && v <= 100)) { e.target.value = payState().ratio ?? 50; return toast('비율은 1~100 사이로 넣으세요.', 'err'); }
