@@ -3,7 +3,7 @@ import { store } from '../app.js';
 import { h, toast, clear, confirmModal, resizableColumns, numInput } from '../ui.js';
 
 // 가격정책 — 2026-10-30 다시 구성(사용자 요청): 1단계 솔루션(왼쪽 레일) → 2단계 SaaS | On-premise(탭) → 3단계 입력.
-//   SaaS       : 인원 구간 · 건수 구간 금액표(구간 월 금액). 솔루션마다 한 벌 — {접두}_SAAS_RANGE 품목의 variants(key USER / COUNT)에 둔다.
+//   SaaS       : 서비스(S2C · S2P 등)마다 인원 구간 · 건수 구간 금액표(구간 월 금액) — 서비스 품목의 variants(key USER / COUNT)에 둔다.
 //   On-premise : 모듈과 금액 — 구축형 견적 품목(sq_price_items, deployment ONPREM*)의 기준단가.
 //   그 밖에 셋업비 · 옵션 같은 SaaS 품목은 '전체 품목' 탭, 직무 단가는 '직무별 단가(공통)' 탭에서 고친다.
 // 그리드 탭은 L1 인라인 편집형 — 머리(행추가/행삭제/저장) + 편집 그리드.
@@ -347,52 +347,116 @@ export async function renderPricing(root) {
     load();
   }
 
-  // ── SaaS: 인원 구간 · 건수 구간 (구간 월 금액) ─────────────────────
-  // 솔루션마다 한 벌. {접두}_SAAS_RANGE 품목(BAND · 월)의 variants 에 key USER / COUNT 로 둔다 — 없으면 처음 저장할 때 만든다.
-  // 끝을 비우면 '이상'(마지막 구간). 저장할 때 시작 순으로 정렬하고 겹치는 구간은 막는다.
-  const RANGE_PREFIX = { EXPENSE: 'EXP', PROCURE: 'PRO', SEAL: 'SEAL' };
-  const rangeCode = () => `${RANGE_PREFIX[state.solution] || state.solution}_SAAS_RANGE`;
+  // ── SaaS: 서비스(S2C · S2P · P2P · Sourcing …) → 서비스마다 인원 구간 · 건수 구간 (구간 월 금액) ─────
+  // 서비스 = 이 솔루션의 SaaS 구간형 품목(sq_price_items: deployment SAAS · pricing_type BAND · 월).
+  // 구간은 그 품목의 variants 에 key USER(인원) / COUNT(건수)로 둔다. 끝을 비우면 '이상'(마지막 구간).
+  // 위 서비스 표에서 행을 누르면 아래에 그 서비스의 구간표가 나온다. [저장] 은 서비스 · 구간을 한 번에 저장한다.
+  // 셋업비 · 옵션 같은 고정 금액 SaaS 품목은 '전체 품목' 탭에서 고친다.
   const RANGE_KINDS = [['USER', '인원 구간', '인'], ['COUNT', '건수 구간', '건']];
-  let saas = null; // { item, lists: { USER: [], COUNT: [] }, base }
-  const rangeJson = () => JSON.stringify(saas && RANGE_KINDS.map(([k]) => saas.lists[k].map((r) => [r.min, r.max, r.price])));
-  const saasDirty = () => !!saas && rangeJson() !== saas.base;
+  let saas = null; // { services: [{ orig, form, isNew, checked, lists, base }], deleted: [], pick }
   const toNum = (v) => (v === '' || v == null ? null : Number(v));
+  const svcForm = (it) => ({ code: it.code || '', name: it.name || '', unit: it.unit || '', base_price: toNum(it.base_price), sort: toNum(it.sort) });
+  const rangeOf = (svc) => JSON.stringify(RANGE_KINDS.map(([k]) => svc.lists[k].map((r) => [r.min, r.max, r.price])));
+  const svcChanged = (svc) => svc.isNew || JSON.stringify(svc.form) !== JSON.stringify(svcForm(svc.orig)) || rangeOf(svc) !== svc.base;
+  const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged));
 
   async function paintSaas() {
     saas = null;
     pane.appendChild(h('div', { class: 'ss-edithead', style: 'margin-top:16px' }, h('div', { class: 'ss-edithead__fields' }),
       h('div', { class: 'ss-actions' }, h('button', { class: 'ss-btn ss-btn--save', onclick: saveSaas }, '저장'))));
     pane.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
-      h('span', { class: 'ss-detailbar__note' }, '인원 · 건수 구간마다 월 금액을 넣습니다. 그 구간이면 월 사용료가 이 금액입니다. 끝을 비우면 \'이상\'(마지막 구간)입니다.')));
-    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:8px' });
-    pane.appendChild(box);
-    box.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
+      h('span', { class: 'ss-detailbar__note' }, '서비스를 고르면 아래에 그 서비스의 인원 · 건수 구간표가 나옵니다. 구간 금액은 그 구간일 때의 월 사용료입니다. 끝을 비우면 \'이상\'입니다.')));
+    const body = h('div', { style: 'margin-top:8px' });
+    pane.appendChild(body);
+    body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
     try {
-      const r = await api.pricing(state.solution, 'SAAS', true);
-      const item = (r.items || []).find((x) => x.code === rangeCode()) || null;
-      const lists = { USER: [], COUNT: [] };
-      for (const v of (item && item.variants) || []) {
-        (v.key === 'COUNT' ? lists.COUNT : lists.USER).push({ min: toNum(v.min_qty), max: toNum(v.max_qty), price: toNum(v.price), checked: false });
-      }
-      saas = { item, lists };
-      saas.base = rangeJson();
+      const r = await api.pricing(state.solution, 'SAAS');
+      const services = (r.items || []).filter((x) => x.pricing_type === 'BAND').map((it) => {
+        const lists = { USER: [], COUNT: [] };
+        for (const v of it.variants || []) {
+          (v.key === 'COUNT' ? lists.COUNT : lists.USER).push({ min: toNum(v.min_qty), max: toNum(v.max_qty), price: toNum(v.price), checked: false });
+        }
+        const svc = { orig: it, form: svcForm(it), isNew: false, checked: false, lists };
+        svc.base = rangeOf(svc);
+        return svc;
+      });
+      saas = { services, deleted: [], pick: services[0] || null };
     } catch (err) {
-      clear(box).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
+      clear(body).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
       return;
     }
-    clear(box);
-    for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(k, label, unit));
+    saas.body = body;
+    paintSaasBody();
   }
 
-  function rangeCard(kind, label, unit) {
-    const list = saas.lists[kind];
+  function paintSaasBody() {
+    const body = clear(saas.body);
+    body.appendChild(serviceCard());
+    if (!saas.pick) {
+      body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '서비스를 고르거나 행추가로 만드세요.'));
+      return;
+    }
+    const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px' });
+    for (const [k, label, unit] of RANGE_KINDS) box.appendChild(rangeCard(saas.pick, k, label, unit));
+    body.appendChild(box);
+  }
+
+  // 서비스 표 — 코드 · 서비스명 · 단위 · 1 User 단가 · 정렬. 이미 있는 서비스의 코드는 템플릿 · 견적이 참조하므로 잠근다
+  function serviceCard() {
+    const tbody = h('tbody');
+    const cols = [['선택', 60], ['코드', 170], ['서비스', 240], ['단위', 110], ['1 User 단가 (원)', 150], ['정렬', 70], ['구간 수', 90]];
+    const txt = (svc, key, attrs = {}) => h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', 'aria-label': key, value: svc.form[key] ?? '', ...attrs,
+      onclick: (e) => e.stopPropagation(), oninput: (e) => { svc.form[key] = e.target.value; } }));
+    const num = (svc, key, money) => h('td', { class: 'ss-cell--input' }, numInput(svc.form[key], (v) => { svc.form[key] = toNum(v); },
+      { class: 'ss-cellinput', 'aria-label': key, style: money ? 'text-align:right' : 'text-align:center', onclick: (e) => e.stopPropagation() }, !money));
+    if (!saas.services.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' }, '서비스가 없습니다. 행추가로 넣으세요 (예: S2C, S2P).')));
+    for (const svc of saas.services) {
+      tbody.appendChild(h('tr', {
+        class: (svc === saas.pick ? 'is-selected' : '') + (svc.isNew ? ' is-new' : ''), style: 'cursor:pointer',
+        title: '눌러서 이 서비스의 구간표 보기', onclick: () => { saas.pick = svc; paintSaasBody(); },
+      },
+      h('td', {}, h('input', { type: 'checkbox', checked: svc.checked, 'aria-label': '선택', onclick: (e) => e.stopPropagation(), onchange: (e) => { svc.checked = e.target.checked; } })),
+      svc.isNew ? txt(svc, 'code', { style: 'text-align:center' }) : h('td', { class: 'ss-cell--link', style: 'text-align:center', title: '템플릿이 참조하는 코드라 고칠 수 없습니다' }, svc.form.code),
+      txt(svc, 'name'), txt(svc, 'unit', { style: 'text-align:center' }), num(svc, 'base_price', true), num(svc, 'sort'),
+      h('td', { style: 'text-align:center;color:var(--ss-ink-3)' }, `${svc.lists.USER.length} / ${svc.lists.COUNT.length}`)));
+    }
+    return h('div', {},
+      h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 서비스'),
+        h('span', { class: 'ss-detailbar__note' }, '구간 수 = 인원 / 건수'),
+        h('div', { class: 'ss-detailbar__spacer' }),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          const svc = { orig: null, form: { code: '', name: '', unit: 'User/월', base_price: null, sort: saas.services.length + 1 },
+            isNew: true, checked: false, lists: { USER: [], COUNT: [] } };
+          svc.base = rangeOf(svc);
+          saas.services.push(svc);
+          saas.pick = svc;
+          paintSaasBody();
+        } }, '행추가'),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
+          const picked = saas.services.filter((x) => x.checked);
+          if (!picked.length) return toast('삭제할 행을 선택하세요.', 'err');
+          picked.forEach((x) => { if (!x.isNew) saas.deleted.push(x.orig); });
+          saas.services = saas.services.filter((x) => !x.checked);
+          if (!saas.services.includes(saas.pick)) saas.pick = saas.services[0] || null;
+          paintSaasBody();
+        } }, '행삭제')),
+      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((x, [, w]) => x + w, 0)}px` },
+          h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+          tbody)));
+  }
+
+  function rangeCard(svc, kind, label, unit) {
+    const list = svc.lists[kind];
     const tbody = h('tbody');
     const paint = () => {
       clear(tbody);
       if (!list.length) { tbody.appendChild(h('tr', {}, h('td', { colspan: 5, class: 'ss-cell--empty' }, '구간이 없습니다. 행추가로 넣으세요.'))); return; }
       for (const r of list) {
         const show = h('td', { style: 'color:var(--ss-ink-3)' });
-        const sync = () => { show.textContent = r.min == null ? '' : r.max == null ? `${r.min}${unit} 이상` : `${r.min}~${r.max}${unit}`; };
+        const sync = () => { show.textContent = r.min == null ? '' : r.max == null ? `${r.min}${unit} 이상` : r.max === r.min ? `${r.min}${unit}` : `${r.min}~${r.max}${unit}`; };
         const cell = (key, money) => h('td', { class: 'ss-cell--input' },
           numInput(r[key], (v) => { r[key] = toNum(v); sync(); }, { class: 'ss-cellinput', 'aria-label': key, style: money ? 'text-align:right' : 'text-align:center' }, !money));
         sync();
@@ -405,7 +469,7 @@ export async function renderPricing(root) {
     const cols = [['선택', 60], [`시작 (${unit})`, 100], [`끝 (${unit})`, 100], ['구간', 130], ['월 금액 (원)', 160]];
     return h('div', { style: 'flex:1 1 520px;min-width:0' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${label}`),
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${svc.form.name || svc.form.code || '새 서비스'} — ${label}`),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           // 다음 구간은 앞 구간 끝 + 1 에서 시작
@@ -427,32 +491,64 @@ export async function renderPricing(root) {
           tbody)));
   }
 
-  async function saveSaas() {
-    if (!saas) return;
-    if (!saasDirty()) return toast('변경된 내용이 없습니다.', 'ok');
+  // 구간 → variants. 잘못된 구간은 서비스 이름과 함께 알리고 null
+  function variantsOf(svc) {
     const variants = [];
+    const name = svc.form.name || svc.form.code;
     for (const [k, label, unit] of RANGE_KINDS) {
-      const list = [...saas.lists[k]].sort((a, b) => (a.min ?? 0) - (b.min ?? 0));
+      const list = [...svc.lists[k]].sort((a, b) => (a.min ?? 0) - (b.min ?? 0));
       for (let i = 0; i < list.length; i++) {
         const r = list[i];
-        if (r.min == null || r.price == null) return toast(`${label} ${i + 1}번째: 시작과 월 금액을 넣으세요.`, 'err');
-        if (r.max != null && r.max < r.min) return toast(`${label} ${r.min}${unit}: 끝이 시작보다 작습니다.`, 'err');
+        if (r.min == null || r.price == null) { toast(`${name} ${label} ${i + 1}번째: 시작과 월 금액을 넣으세요.`, 'err'); return null; }
+        if (r.max != null && r.max < r.min) { toast(`${name} ${label} ${r.min}${unit}: 끝이 시작보다 작습니다.`, 'err'); return null; }
         const next = list[i + 1];
-        if (next && (r.max == null || r.max >= next.min)) return toast(`${label}: ${r.min}${unit} 구간과 ${next.min}${unit} 구간이 겹칩니다.`, 'err');
-        variants.push({ key: k, label: r.max == null ? `${r.min}${unit} 이상` : `${r.min}~${r.max}${unit}`,
+        if (next && (r.max == null || r.max >= next.min)) { toast(`${name} ${label}: ${r.min}${unit} 구간과 ${next.min}${unit} 구간이 겹칩니다.`, 'err'); return null; }
+        variants.push({ key: k, label: r.max == null ? `${r.min}${unit} 이상` : r.max === r.min ? `${r.min}${unit}` : `${r.min}~${r.max}${unit}`,
           min_qty: r.min, max_qty: r.max, price: r.price, sort: variants.length });
       }
     }
-    try {
-      if (saas.item) await api.updatePriceItem(saas.item.id, { variants, active: 1 });
-      else {
-        await api.createPriceItem({ solution: state.solution, deployment: 'SAAS', code: rangeCode(), name: `${solName()} SaaS 이용료`,
-          category: '서비스이용료', pricing_type: 'BAND', unit: '월', recurring: 1, base_price: 0, qty_default: 1, sort: 0, variants });
+    return variants;
+  }
+
+  async function saveSaas() {
+    if (!saas) return;
+    if (!saasDirty()) return toast('변경된 내용이 없습니다.', 'ok');
+    const todo = saas.services.filter(svcChanged);
+    const codes = saas.services.map((x) => String(x.form.code || '').trim());
+    for (const svc of todo) {
+      if (!String(svc.form.code || '').trim() || !String(svc.form.name || '').trim()) {
+        saas.pick = svc; paintSaasBody();
+        return toast('서비스의 코드와 서비스명을 넣으세요.', 'err');
       }
-      toast('저장되었습니다.', 'ok');
+    }
+    const dup = codes.find((v, i) => v && codes.indexOf(v) !== i);
+    if (dup) return toast(`코드가 겹칩니다: ${dup}`, 'err');
+    const plan = [];
+    for (const svc of todo) {
+      const variants = variantsOf(svc);
+      if (!variants) { saas.pick = svc; paintSaasBody(); return; }
+      plan.push([svc, variants]);
+    }
+    if (saas.deleted.length && !(await confirmModal({
+      title: '사용 중지', message: `행삭제한 서비스 ${saas.deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`, okLabel: '저장', danger: true,
+    }))) return;
+    let done = 0;
+    try {
+      for (const o of saas.deleted) { await api.deletePriceItem(o.id); done++; }
+      for (const [svc, variants] of plan) {
+        const f = { name: svc.form.name.trim(), unit: svc.form.unit?.trim() || null, base_price: svc.form.base_price ?? 0, sort: svc.form.sort ?? 0, variants };
+        if (svc.isNew) {
+          await api.createPriceItem({ ...f, solution: state.solution, deployment: 'SAAS', code: svc.form.code.trim(),
+            category: '서비스이용료', pricing_type: 'BAND', recurring: 1, qty_default: 1 });
+        } else {
+          await api.updatePriceItem(svc.orig.id, f);
+        }
+        done++;
+      }
+      toast(`저장되었습니다. (${done}건)`, 'ok');
       store.master = null;
     } catch (err) {
-      return toast(err.message, 'err');
+      toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
     }
     refresh();
   }
