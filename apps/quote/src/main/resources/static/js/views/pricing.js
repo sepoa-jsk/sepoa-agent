@@ -39,7 +39,9 @@ const onpremApi = {
 };
 
 const TABS = [
-  { key: 'saas', label: 'SaaS', custom: true },
+  // SaaS 는 기본정보와 가격을 페이지로 나눈다(2026-10-30 사용자 요청) — 버전 이력은 둘이 함께 쓴다
+  { key: 'saas_info', label: 'SaaS 기본정보', custom: true, part: 'info' },
+  { key: 'saas_price', label: 'SaaS 가격', custom: true, part: 'price' },
   {
     key: 'onprem', label: 'On-premise', api: onpremApi, scoped: true,
     note: '구축형 견적의 모듈과 금액입니다. 견적 작성 · 템플릿이 이 금액을 기준단가로 씁니다. 이미 있는 모듈의 코드는 고칠 수 없습니다.',
@@ -407,7 +409,8 @@ export async function renderPricing(root) {
   function paintSaasBody() {
     const body = clear(saas.body);
     body.appendChild(versionBar());
-    body.appendChild(infoCard());
+    // 기본정보 페이지는 정책 표만, 가격 페이지는 서비스 · 구간만. 저장은 어느 페이지든 정책 전체를 새 버전으로 남긴다
+    if (current().part === 'info') { body.appendChild(infoCard()); return; }
     body.appendChild(serviceCard());
     if (!saas.pick) return;
     const box = h('div', { style: 'display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;align-items:flex-start' });
@@ -484,8 +487,8 @@ export async function renderPricing(root) {
     }
     return h('div', { style: 'margin-top:16px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 서비스'),
-        h('span', { class: 'ss-detailbar__note' }, '서비스를 누르면 아래에 그 서비스의 인원 · 건수 구간표가 나옵니다. 구간 금액은 그 구간일 때의 월 사용료입니다.'),
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1);white-space:nowrap' }, '▣ 서비스'),
+        h('span', { class: 'ss-detailbar__note' }, '누르면 아래에 구간표(구간 월 사용료)가 나옵니다.'),
         h('div', { class: 'ss-detailbar__spacer' }),
         h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => {
           const svc = { orig: null, form: { code: '', name: '', unit: 'User/월', base_price: null, sort: saas.services.length + 1 },
