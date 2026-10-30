@@ -143,9 +143,9 @@ public class QuoteCalcController {
         }
 
         List<Object> conditions = new ArrayList<>();
-        // 구조만 템플릿(기본 모듈 · 인력 없음)은 견적조건 블록만 두고 문구는 빈칸으로 시작한다(2026-10-30 사용자 결정)
+        // 구조만 템플릿(기본 모듈 · 인력 없음)도 견적조건 문구는 채워서 시작한다 — 표(셋업 · 서비스)만 비어 있다(2026-10-30 사용자 결정)
         boolean structOnly = titems.isEmpty() && tlabor.isEmpty();
-        if (Rows.truthy(tpl.get("condition_set")) && !structOnly) {
+        if (Rows.truthy(tpl.get("condition_set"))) {
             for (Map<String, Object> r : db.query(
                     "SELECT `text` FROM sq_condition_lines WHERE set_code = ? ORDER BY line_no", tpl.get("condition_set"))) {
                 conditions.add(r.get("text"));

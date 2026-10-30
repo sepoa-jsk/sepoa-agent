@@ -186,7 +186,7 @@ export function appliedPatch(d) {
     round_unit: d.round_unit ?? 100000,
     hasLaborPlan: !!d.template.has_labor_plan,
     conds: (d.conditions || []).map((t) => ({ text: t })),
-    // 템플릿에 견적조건 세트가 없으면 뺀 채로 시작. 구조만 템플릿은 블록만 있고 문구는 빈칸
+    // 템플릿에 견적조건 세트가 없으면 뺀 채로 시작
     conds_on: d.template.has_conditions ?? (d.conditions || []).length > 0,
   };
 }
@@ -571,7 +571,7 @@ export async function renderStep3(root, state, wiz) {
       return row;
     };
     conds.forEach((c) => list.appendChild(rowOf(c)));
-    // 구조만 템플릿은 문구 없이 시작한다 — 비어 있으면 견적서에 견적조건 칸이 찍히지 않는다
+    // 문구가 비어 있으면 견적서에 견적조건 칸이 찍히지 않는다
     const empty = h('div', { class: 'ss-detailbar__note' }, '견적조건 문구가 없습니다. [행추가] 로 넣으세요. 비워 두면 견적서에 찍히지 않습니다.');
     if (!conds.length) list.appendChild(empty);
     const add = h('button', { class: 'ss-btn ss-btn--gridrow' }, '행추가');
