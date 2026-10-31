@@ -7,6 +7,7 @@ import java.util.Map;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -51,9 +52,10 @@ public class QuoteController {
     private final QuotePdf pdf;
     private final QuoteExcel excel;
     private final QuoteMailer mailer;
+    private final ObjectProvider<SystemController> system; // 메일 발송 이력(V10 sq_quote_dispatch) — 없으면(단위 시험 등) 남기지 않는다
 
     public QuoteController(Rows db, QuoteLoader loader, QuoteCalc calc, QuoteWriter writer, QuoteHtml html,
-            QuotePdf pdf, QuoteExcel excel, QuoteMailer mailer) {
+            QuotePdf pdf, QuoteExcel excel, QuoteMailer mailer, ObjectProvider<SystemController> system) {
         this.db = db;
         this.loader = loader;
         this.calc = calc;
@@ -62,6 +64,7 @@ public class QuoteController {
         this.pdf = pdf;
         this.excel = excel;
         this.mailer = mailer;
+        this.system = system;
     }
 
     /** #27 목록 — 최신순, {@code size} 최대 100 */
@@ -325,8 +328,19 @@ public class QuoteController {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
         }
         var user = AccessInterceptor.currentUser(req);
-        Map<String, Object> out = new LinkedHashMap<>(mailer.send(to, cc, subject, text, files,
-                user == null ? null : user.email(), user == null ? null : user.name()));
+        List<String> kinds = files.stream().map(f -> f.name().endsWith(".pdf") ? "PDF" : "Excel").toList();
+        Long uid = user == null ? null : user.id();
+        Map<String, Object> out;
+        try {
+            out = new LinkedHashMap<>(mailer.send(to, cc, subject, text, files,
+                    user == null ? null : user.email(), user == null ? null : user.name()));
+        } catch (RuntimeException e) {
+            // 보내다 실패한 것도 발송 이력에 남긴다(허용 목록에 막힌 것 포함)
+            system.ifAvailable(s -> s.logDispatch(q, to, cc, subject, kinds, "FAILED", e.getMessage(), uid));
+            throw e;
+        }
+        String result = Boolean.TRUE.equals(out.get("dry_run")) ? "DRY_RUN" : "SENT";
+        system.ifAvailable(s -> s.logDispatch(q, to, cc, subject, kinds, result, null, uid));
         Object status = q.get("status");
         if (Boolean.FALSE.equals(out.get("dry_run")) && "DRAFT".equals(status)) {
             db.update("UPDATE sq_quotes SET status = 'SENT' WHERE id = ? AND status = 'DRAFT'", q.get("id"));

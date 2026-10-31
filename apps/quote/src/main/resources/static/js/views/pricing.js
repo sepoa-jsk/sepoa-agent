@@ -391,10 +391,13 @@ export async function renderPricing(root) {
     return vs.length && vs.every((v) => /^-?[\d,]+(\.\d+)?$/.test(v)) ? 'money' : 'text';
   };
   const moneyValues = (values) => Object.fromEntries(Object.entries(values || {}).map(([k, v]) => [k, cleanNum(v)]));
-  // 견적조건 — 한 줄에 한 문장. 견적서 아래 '-. ' 로 시작하는 문장들(정책 버전 내용 content.conds 에 둔다)
-  const condsJson = () => JSON.stringify(saas.conds.map((r) => r.text.trim()).filter(Boolean));
+  // 견적조건 — 기준정보 > 견적조건 문구의 세트를 골라 가져다 쓴다(2026-10-31 사용자 요청 — 문장은 그 화면에서만 고친다).
+  //   정책 내용에는 고른 세트 코드(content.cond_set)와 저장 때 문장 사본(content.conds — 이력 보기용)을 둔다.
+  //   세트를 고르지 않은 예전 버전은 내용에 적힌 문장(conds)을 그대로 쓴다.
+  const condSetOf = (code) => (saas.condSets || []).find((c) => c.code === code);
+  const condLines = () => (saas.condSet ? ((condSetOf(saas.condSet) || {}).lines || []) : saas.legacyConds).map((t) => String(t || '').trim()).filter(Boolean);
   const saasDirty = () => !!saas && (saas.deleted.length > 0 || saas.services.some(svcChanged) || infoJson() !== saas.infoBase
-    || condsJson() !== saas.condsBase);
+    || saas.condSet !== saas.condSetBase);
   const shortName = (svc) => String(svc.form.name || svc.form.code || '새 서비스').replace(/\s*서비스\s*이용료$/, '');
   const when = (v) => String(v || '').replace('T', ' ').slice(0, 16);
 
@@ -407,7 +410,8 @@ export async function renderPricing(root) {
     body.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
     let policy;
     try {
-      const [r, p] = await Promise.all([api.pricing(state.solution, 'SAAS'), api.pricePolicy(state.solution, 'SAAS')]);
+      const [r, p, cs] = await Promise.all([api.pricing(state.solution, 'SAAS'), api.pricePolicy(state.solution, 'SAAS'),
+        api.conditionSets().catch(() => ({ sets: [] }))]);
       policy = p;
       const services = (r.items || []).filter((x) => x.pricing_type === 'BAND').map((it) => {
         const lists = { USER: [], COUNT: [] };
@@ -426,9 +430,11 @@ export async function renderPricing(root) {
       }) : INFO_ROWS.map(([label, sub, type]) => ({ ...normInfo({ label, sub }), desc: '', type: type || 'text', values: {}, checked: false }));
       saas = { services, deleted: [], pick: services[0] || null, info: { rows: sortInfo(rows) }, policy };
       saas.infoBase = infoJson();
-      const savedConds = policy.current && policy.current.content && policy.current.content.conds;
-      saas.conds = (Array.isArray(savedConds) ? savedConds : []).map((text) => ({ text: String(text || ''), checked: false }));
-      saas.condsBase = condsJson();
+      const content = (policy.current && policy.current.content) || {};
+      saas.condSets = cs.sets || [];
+      saas.condSet = content.cond_set || '';
+      saas.condSetBase = saas.condSet;
+      saas.legacyConds = !content.cond_set && Array.isArray(content.conds) ? content.conds : [];
     } catch (err) {
       clear(body).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
       return;
@@ -655,47 +661,31 @@ export async function renderPricing(root) {
     return m ? `v${m[1]}.${Number(m[2]) + 1}` : 'v1.0';
   }
 
-  // 견적조건 — 선택 · 번호 · 내용(여러 줄). 행추가 · 행삭제 · 위로 · 아래로
+  // 견적조건 — 문구 세트를 고르고, 그 세트의 문장을 보여만 준다. 문장은 [견적조건 문구에서 고치기] 로 가서 고친다
   function condsCard() {
-    const tbody = h('tbody');
-    const move = (d) => {
-      const list = saas.conds;
-      const picked = list.filter((r) => r.checked);
-      if (!picked.length) return toast('옮길 행을 선택하세요.', 'err');
-      const idx = picked.map((r) => list.indexOf(r));
-      if (d < 0 ? idx[0] === 0 : idx[idx.length - 1] === list.length - 1) return;
-      for (const i of d < 0 ? idx : [...idx].reverse()) [list[i], list[i + d]] = [list[i + d], list[i]];
-      paintSaasBody();
-    };
-    saas.conds.forEach((r, i) => {
-      const ta = h('textarea', { class: 'ss-cellinput', rows: Math.max(1, r.text.split('\n').length),
-        style: 'height:auto;resize:none;line-height:1.5;padding:4px 6px;text-align:left',
-        oninput: (e) => { r.text = e.target.value; e.target.rows = Math.max(1, e.target.value.split('\n').length); } });
-      ta.value = r.text;
-      tbody.appendChild(h('tr', {},
-        h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })),
-        h('td', { style: 'text-align:center' }, String(i + 1)),
-        h('td', { class: 'ss-cell--input' }, ta)));
-    });
-    if (!saas.conds.length) tbody.appendChild(h('tr', {}, h('td', { colspan: 3, class: 'ss-cell--empty' }, '견적조건이 없습니다. 행추가로 넣으세요.')));
-    const gbtn = (label, onclick) => h('button', { class: 'ss-btn ss-btn--gridrow', onclick }, label);
+    const sel = h('select', { class: 'ss-select', style: 'width:280px', 'aria-label': '문구 세트',
+      onchange: (e) => { saas.condSet = e.target.value; paintSaasBody(); } },
+    h('option', { value: '', selected: !saas.condSet }, saas.legacyConds.length ? '세트 고르기 (지금: 예전 버전의 문장)' : '세트 고르기'),
+    ...saas.condSets.map((c) => h('option', { value: c.code, selected: c.code === saas.condSet }, `${c.name} (${c.code})`)));
+    const lines = condLines();
+    const tbody = h('tbody', {}, ...lines.map((t, i) => h('tr', {},
+      h('td', { style: 'text-align:center' }, String(i + 1)),
+      h('td', { style: 'text-align:left;white-space:pre-line' }, t))));
+    if (!lines.length) tbody.appendChild(h('tr', {}, h('td', { colspan: 2, class: 'ss-cell--empty' }, '견적조건이 없습니다. 위에서 문구 세트를 고르세요.')));
     return h('div', { style: 'margin-top:16px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ SaaS 견적조건'),
-        h('span', { class: 'ss-detailbar__note' }, '한 줄에 한 조건. 견적서에는 \'-. \' 로 시작하는 문장으로 나옵니다.'),
+        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1);white-space:nowrap' }, '▣ SaaS 견적조건'),
+        h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px;white-space:nowrap' }, '문구 세트', sel),
+        h('span', { class: 'ss-detailbar__note' }, saas.condSet
+          ? '고른 세트의 문장이 SaaS 견적에 들어갑니다. 문장은 기준정보 > 견적조건 문구에서 고칩니다.'
+          : '세트를 고르고 저장하면 그 세트의 문장을 가져다 씁니다.'),
         h('div', { class: 'ss-detailbar__spacer' }),
-        gbtn('▲ 위로', () => move(-1)), gbtn('▼ 아래로', () => move(1)),
-        gbtn('행추가', () => { saas.conds.push({ text: '', checked: false }); paintSaasBody(); }),
-        gbtn('행삭제', () => {
-          if (!saas.conds.some((r) => r.checked)) return toast('삭제할 행을 선택하세요.', 'err');
-          saas.conds = saas.conds.filter((r) => !r.checked);
-          paintSaasBody();
-        })),
+        h('button', { class: 'ss-btn ss-btn--gridrow', onclick: () => { location.hash = '#/conditions'; } }, '견적조건 문구에서 고치기')),
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px' },
         sized(h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
-          h('colgroup', {}, h('col', { style: 'width:60px' }), h('col', { style: 'width:60px' }), h('col', {})),
-          h('thead', {}, h('tr', {}, h('th', { 'data-fixed': '' }, '선택'), h('th', {}, '번호'), h('th', {}, '내용'))),
-          tbody), 'conds')));
+          h('colgroup', {}, h('col', { style: 'width:60px' }), h('col', {})),
+          h('thead', {}, h('tr', {}, h('th', {}, '번호'), h('th', {}, '내용'))),
+          tbody), 'conds-set')));
   }
 
   // 정책 전체 사본 — 버전 이력에 남긴다
@@ -705,7 +695,8 @@ export async function renderPricing(root) {
       rows: saas.info.rows.map((r) => ({ label: r.label, sub: r.sub, desc: (r.desc || '').trim(), type: r.type,
         values: Object.fromEntries(saas.services.map((svc) => [svc.form.code, r.values[svc.form.code] || ''])) })),
     },
-    conds: saas.conds.map((r) => r.text.trim()).filter(Boolean),
+    cond_set: saas.condSet || null,
+    conds: condLines(),
     services: saas.services.map((svc) => ({ code: svc.form.code, name: svc.form.name, spec: svc.form.spec || '', unit: svc.form.unit,
       ranges: Object.fromEntries(RANGE_KINDS.map(([k]) => [k, [...svc.lists[k]].sort((a, b) => a.min - b.min).map((r) => [r.min, r.max, r.price])])) })),
   });

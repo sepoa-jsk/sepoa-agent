@@ -6,7 +6,7 @@
 // (실측 SK이터닉스: 셋업 3.7MM × 12,000,000 = 44,400,000 한 줄뿐, 인건비 행 없음)
 // 그래서 비-LABOR 블록에는 단가·금액 칸을 아예 만들지 않는다.
 import { h, won, numInput } from '../../../ui.js';
-import { RISK_FACTORS, FACTOR_NOTE } from './risk-factors.js';
+import { RISK_FACTORS, FACTOR_NOTE, riskLoaded, loadRiskFactors } from './risk-factors.js';
 import { recalcBlocks } from './step3-config.js';
 
 const num = (v) => Number(v) || 0;
@@ -28,7 +28,8 @@ export function renderStep4(root, state, wiz) {
   layout.appendChild(colL); layout.appendChild(colM); layout.appendChild(colR);
   root.appendChild(layout);
 
-  // ── 좌: 리스크 팩터 ──
+  // ── 좌: 리스크 팩터 ── (계수는 기준정보 > 리스크 계수 — 처음 한 번 읽고 다시 그린다)
+  if (!riskLoaded()) loadRiskFactors().then(() => { if (root.isConnected) renderStep4(root, wiz.get(), wiz); });
   const picked = new Set(state.riskFactors || []);
   const factorList = h('div', {});
   for (const f of RISK_FACTORS) {

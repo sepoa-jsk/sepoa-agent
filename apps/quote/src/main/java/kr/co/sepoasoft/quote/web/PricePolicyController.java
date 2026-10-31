@@ -49,7 +49,13 @@ public class PricePolicyController {
                         + " FROM sq_price_policy_versions v LEFT JOIN sq_users u ON u.id = v.created_by"
                         + " WHERE v.solution = ? AND v.deployment = ? ORDER BY v.id DESC", solution, deployment);
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("current", history.isEmpty() ? null : one(history.get(0).get("id")));
+        Map<String, Object> cur = history.isEmpty() ? null : one(history.get(0).get("id"));
+        // 현재 버전의 견적조건은 고른 문구 세트(cond_set)의 지금 문장으로 채운다 — 이력 버전은 저장 때 사본(conds) 그대로
+        if (cur != null && cur.get("content") instanceof Map<?, ?> c && Rows.truthy(c.get("cond_set"))) {
+            @SuppressWarnings("unchecked") Map<String, Object> content = (Map<String, Object>) c;
+            content.put("conds", ConditionController.policyConds(db, content));
+        }
+        out.put("current", cur);
         out.put("history", history);
         return out;
     }

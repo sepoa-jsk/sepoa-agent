@@ -32,6 +32,8 @@ public class UserRepository {
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM sq_users WHERE email = ?", normEmail);
         if (!rows.isEmpty()) {
             Map<String, Object> u = rows.get(0);
+            // 사용자 화면에서 사용 중지한 계정은 로그인하지 못한다(V10 active 칸 — 칸이 없으면 예전대로)
+            if (u.get("active") instanceof Number a && a.intValue() == 0) throw new DisabledUserException();
             long id = ((Number) u.get("id")).longValue();
             String newName = name != null ? name : (String) u.get("name");
             String newPicture = picture != null ? picture : (String) u.get("picture");
@@ -52,5 +54,12 @@ public class UserRepository {
             return ps;
         }, key);
         return new SessionUser(key.getKey().longValue(), normEmail, name, picture, role);
+    }
+
+    /** 사용 중지된 계정 */
+    public static class DisabledUserException extends RuntimeException {
+        public DisabledUserException() {
+            super("사용 중지된 계정입니다. 관리자에게 문의하세요.");
+        }
     }
 }

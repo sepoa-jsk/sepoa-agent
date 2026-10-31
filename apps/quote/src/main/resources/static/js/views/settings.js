@@ -35,7 +35,7 @@ export async function renderSettings(root) {
 
   // ── 공급자 정보(일반 key-value) — 템플릿 키는 제외 ──
   const inputs = {};
-  const keys = [...new Set([...KNOWN.map((k) => k[0]), ...Object.keys(settings)])].filter((k) => k !== TEMPLATE_KEY);
+  const keys = [...new Set([...KNOWN.map((k) => k[0]), ...Object.keys(settings)])].filter((k) => k !== TEMPLATE_KEY && k !== 'risk_factors'); // 리스크 계수는 기준정보 > 리스크 계수 화면에서
   const labelOf = (k) => (KNOWN.find((x) => x[0] === k)?.[1]) || k;
   const rows = keys.map((k) => {
     const isAddr = k === 'supplier_addr';

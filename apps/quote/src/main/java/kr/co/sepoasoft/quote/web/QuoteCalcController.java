@@ -166,14 +166,9 @@ public class QuoteCalcController {
         if ("SAAS".equals(tpl.get("deployment")) && Rows.truthy(tpl.get("condition_set"))) {
             Map<String, Object> pv = db.first("SELECT content FROM sq_price_policy_versions WHERE solution = ? AND deployment = 'SAAS'"
                     + " ORDER BY id DESC LIMIT 1", tpl.get("solution"));
-            if (pv != null && db.safeJson(pv.get("content")) instanceof Map<?, ?> content && content.get("conds") instanceof List<?> pc) {
-                List<Object> policy = new ArrayList<>();
-                for (Object c : pc) {
-                    String t = c == null ? "" : String.valueOf(c).trim();
-                    if (!t.isEmpty() && !policy.contains(t)) policy.add(t);
-                }
-                if (!policy.isEmpty()) { conditions.clear(); conditions.addAll(policy); }
-            }
+            // 가격정책이 고른 문구 세트(cond_set)의 지금 문장 — 예전 버전은 내용에 적힌 conds (2026-10-31 견적조건 문구 화면)
+            List<Object> policy = pv == null ? List.of() : ConditionController.policyConds(db, db.safeJson(pv.get("content")));
+            if (!policy.isEmpty()) { conditions.clear(); conditions.addAll(policy); }
         }
         Set<Object> unregistered = new LinkedHashSet<>();
         for (Map<String, Object> t : titems) if (!priceMap.containsKey(t.get("item_code"))) unregistered.add(t.get("item_code"));

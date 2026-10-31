@@ -105,6 +105,10 @@ export const api = {
   // 블록/견적조건/템플릿
   blocks: () => req('GET', '/api/blocks'),
   conditions: () => req('GET', '/api/conditions'),
+  // 견적조건 문구 관리(기준정보) — 세트 목록(문장 · 쓰는 곳 포함) / 세트 저장(없으면 생성) / 삭제
+  conditionSets: () => req('GET', '/api/condition-sets'),
+  saveConditionSet: (code, body) => req('PUT', `/api/condition-sets/${encodeURIComponent(code)}`, body),
+  deleteConditionSet: (code) => req('DELETE', `/api/condition-sets/${encodeURIComponent(code)}`),
   // templates() / templates('SEAL') / templates({ quote_type:'BUILD', solution:'SEAL' })
   templates: (opt) => {
     const p = typeof opt === 'string' ? { solution: opt } : (opt || {});
@@ -115,6 +119,19 @@ export const api = {
   createTemplate: (body) => req('POST', '/api/templates', body),
   updateTemplate: (id, body) => req('PUT', `/api/templates/${id}`, body),
   applyTemplate: (template_code) => req('POST', '/api/quotes/apply-template', { template_code }),
+
+  // 시스템관리 — 사용자 · 조직 · 역할·권한(V10) · 발송 이력
+  users: () => req('GET', '/api/users'),
+  updateUser: (id, body) => req('PUT', `/api/users/${id}`, body),
+  depts: () => req('GET', '/api/depts'),
+  createDept: (body) => req('POST', '/api/depts', body),
+  updateDept: (id, body) => req('PUT', `/api/depts/${id}`, body),
+  deleteDept: (id) => req('DELETE', `/api/depts/${id}`),
+  roles: () => req('GET', '/api/roles'),
+  saveRole: (code, body) => req('PUT', `/api/roles/${encodeURIComponent(code)}`, body),
+  deleteRole: (code) => req('DELETE', `/api/roles/${encodeURIComponent(code)}`),
+  myMenus: () => req('GET', '/api/roles/mine'),
+  dispatch: (params) => req('GET', `/api/dispatch${qs(params)}`),
 
   // 설정
   getSettings: () => req('GET', '/api/settings'),

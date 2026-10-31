@@ -11,13 +11,21 @@ import { renderMaster } from './views/master.js';
 import { renderLaborRates } from './views/labor-rates.js';
 import { renderTemplates } from './views/templates.js';
 import { renderCustomers } from './views/customers.js';
+import { renderConditions } from './views/conditions.js';
+import { renderRisk } from './views/risk.js';
+import { renderTco } from './views/tco.js';
+import { renderDispatch } from './views/dispatch.js';
+import { renderUsers } from './views/users.js';
+import { renderDepts } from './views/depts.js';
+import { renderRoles } from './views/roles.js';
 import { renderWizard } from './views/quote/wizard/index.js';
-import { renderSidebar, setActiveNav } from './layout/sidebar.js';
+import { renderSidebar, setActiveNav, canOpen } from './layout/sidebar.js';
 import { setPage, setUser, PAGE_META } from './layout/gnb.js';
 import { openTab, resetTabs } from './layout/tabbar.js';
 
 export const store = {
   user: null,
+  perms: null, // 업무 역할의 메뉴 권한 {nav: 'RCUD'} — 없으면 null(예전처럼 관리자 메뉴만 숨김)
   // 새 라우트: { solutions, deployments, company_classes, service_types,
   //   modules, labor_roles, labor_rates, thirdparty }. 예전 pricing.js 라우트는
   //   companyClasses(캐멀)을 줬으므로, 기존 화면 호환을 위해 별칭을 채운다.
@@ -58,6 +66,13 @@ const routes = [
   { re: /^#\/customers$/, admin: true, view: () => renderCustomers(viewEl()) },
   { re: /^#\/labor-rates$/, admin: true, view: () => renderLaborRates(viewEl()) },
   { re: /^#\/templates$/, admin: true, view: () => renderTemplates(viewEl()) },
+  { re: /^#\/conditions$/, admin: true, view: () => renderConditions(viewEl()) },
+  { re: /^#\/risk$/, admin: true, view: () => renderRisk(viewEl()) },
+  { re: /^#\/tco$/, view: () => renderTco(viewEl()) },
+  { re: /^#\/dispatch$/, view: () => renderDispatch(viewEl()) },
+  { re: /^#\/users$/, admin: true, view: () => renderUsers(viewEl()) },
+  { re: /^#\/depts$/, admin: true, view: () => renderDepts(viewEl()) },
+  { re: /^#\/roles$/, admin: true, view: () => renderRoles(viewEl()) },
   { re: /^#\/settings$/, admin: true, view: () => renderSettings(viewEl()) },
 ];
 
@@ -97,6 +112,13 @@ async function router() {
     : hash.startsWith('#/customers') ? 'customer'
     : hash.startsWith('#/labor-rates') ? 'labor-rates'
     : hash.startsWith('#/templates') ? 'templates'
+    : hash.startsWith('#/conditions') ? 'term'
+    : hash.startsWith('#/risk') ? 'risk'
+    : hash.startsWith('#/tco') ? 'tco'
+    : hash.startsWith('#/dispatch') ? 'dispatch'
+    : hash.startsWith('#/users') ? 'user'
+    : hash.startsWith('#/depts') ? 'dept'
+    : hash.startsWith('#/roles') ? 'role'
     : hash.startsWith('#/settings') ? 'settings' : 'quotes';
   setActiveNav(nav);
   // 상세는 별도 메타. 화면이 액션 버튼을 올리면 렌더 중 setPage({actions}) 로 덮어쓴다.
@@ -110,9 +132,12 @@ async function router() {
   for (const r of routes) {
     const m = hash.match(r.re);
     if (m) {
-      if (r.admin && store.user.role !== 'ADMIN') {
-        toast('관리자 권한이 필요합니다.', 'err');
-        location.hash = '#/quotes';
+      // 관리자는 모두 연다. 그 밖에는 업무 역할의 '조회' 권한(없으면 예전처럼 관리자 화면만 막는다)
+      const ctx = { isAdmin: store.user.role === 'ADMIN', perms: store.perms };
+      if (!canOpen(nav, ctx) || (r.admin && !ctx.isAdmin && !store.perms)) {
+        toast(r.admin && !store.perms ? '관리자 권한이 필요합니다.' : '이 메뉴를 열 권한이 없습니다.', 'err');
+        if (hash !== '#/quotes' && canOpen('quotes', ctx)) location.hash = '#/quotes';
+        else clear(viewEl());
         return;
       }
       try {
@@ -145,7 +170,7 @@ function showApp() {
   document.getElementById('login-gate').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   const u = store.user;
-  renderSidebar(null, { isAdmin: u.role === 'ADMIN' });
+  renderSidebar(null, { isAdmin: u.role === 'ADMIN', perms: store.perms });
   setUser(u);
 }
 
@@ -153,7 +178,7 @@ async function bootstrap() {
   // 로그아웃
   document.getElementById('logout-btn').onclick = async () => {
     await api.logout();
-    store.user = null; store.master = null;
+    store.user = null; store.master = null; store.perms = null;
     resetTabs();
     location.hash = '';
     showLogin();
@@ -200,6 +225,7 @@ function setupLoginMode(authMode) {
 }
 
 async function afterLogin() {
+  try { store.perms = (await api.myMenus()).perms || null; } catch { store.perms = null; }
   showApp();
   await store.getMaster();
   if (!location.hash || location.hash === '#/') location.hash = '#/quotes';

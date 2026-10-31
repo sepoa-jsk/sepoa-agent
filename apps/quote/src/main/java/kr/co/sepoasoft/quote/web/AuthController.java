@@ -71,6 +71,8 @@ public class AuthController {
         SessionUser user;
         try {
             user = users.provision(email, name, null);
+        } catch (UserRepository.DisabledUserException e) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "USER_DISABLED", e.getMessage());
         } catch (RuntimeException e) {
             throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "AUTH_FAILED", e.getMessage());
         }
