@@ -20,14 +20,14 @@ export const MENU = [
   { group: '기준정보', items: [
     { nav: 'pricing', label: '가격정책', href: '#/pricing', admin: true },
     { nav: 'master', label: '마스터 관리', href: '#/master', admin: true },
-    { nav: 'customer', label: '고객사', href: '#/customers', admin: true },
+    { nav: 'customer', label: '고객사관리', href: '#/customers', admin: true },
     { nav: 'risk', label: '리스크 계수', href: '#/risk', admin: true },
     { nav: 'labor-rates', label: '노임단가', href: '#/labor-rates', admin: true },
     { nav: 'term', label: '견적조건 문구', href: '#/conditions', admin: true },
     { nav: 'templates', label: '견적 템플릿', href: '#/templates', admin: true },
   ] },
   { group: '시스템관리', items: [
-    { nav: 'user', label: '사용자', href: '#/users', admin: true, system: true },
+    { nav: 'user', label: '사용자관리', href: '#/users', admin: true, system: true },
     { nav: 'role', label: '역할·권한', href: '#/roles', admin: true, system: true },
     { nav: 'dept', label: '조직', href: '#/depts', admin: true, system: true },
     { nav: 'settings', label: '설정', href: '#/settings', admin: true, system: true },

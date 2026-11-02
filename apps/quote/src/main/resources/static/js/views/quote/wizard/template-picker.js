@@ -3,9 +3,10 @@
 // 오른쪽은 템플릿 내용만 — 블록별 구분 · 모듈 · 세부기능 · 인원·건수 · 수량 · 단위, 인력, 결제 방안 포함 여부, 견적조건.
 // 금액은 보이지 않는다(2026-10-30 사용자 요청) — 단가 · 금액은 템플릿으로 시작한 뒤 3단계(구성)에서 가격정책으로 채운다.
 // [이 템플릿으로 시작] 을 누르면 onStart(tpl) — 상태 반영은 1단계(step2-type.js)가 한다.
+// [미리보기] — 고른 템플릿을 견적서 완성본(기본값 · 가격정책 기준단가)으로 큰 창에 그린다(2026-10-31 사용자 요청).
 import { api as http } from '../../../api.js';
-import { h, clear, openModal } from '../../../ui.js';
-import { appliedPatch, bandLine, bandUnitOf } from './step3-config.js';
+import { h, clear, won, openModal, previewControls } from '../../../ui.js';
+import { appliedPatch, bandLine, bandUnitOf, recalcBlocks, toBlocksPayload } from './step3-config.js';
 
 // 템플릿 종류(서버가 내용으로 정한다) — 구조만: 블록 틀만 있고 모듈 · 인력은 비어 있다 / 데이터 포함: 기본 모듈 · 인력까지 채워져 있다
 export const KIND_LABEL = { STRUCT: '구조만', DATA: '데이터 포함' };
@@ -15,6 +16,7 @@ const applyCache = {}; // code → apply-template 응답
 
 export function openTemplatePicker({ state, list: all, currentCode, title, onStart }) {
   let picked = null;           // 고른 템플릿
+  let pickedData = null;       // 고른 템플릿의 apply-template 응답(미리보기용)
   let seq = 0;                 // 늦게 온 응답이 새 선택을 덮지 않게
 
   const search = h('input', { class: 'ss-input', placeholder: '템플릿 코드 · 이름 검색', style: 'flex:1;min-width:0', oninput: () => paintList() });
@@ -22,6 +24,7 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
   const info = h('div', { style: 'font-size:12px;color:var(--ss-ink-3);min-height:18px' }, '왼쪽에서 템플릿을 고르세요.');
   const view = h('div', { style: 'flex:1;overflow:auto;border:1px solid #E7EAF0;background:#fff;padding:10px 12px' });
   const okBtn = h('button', { class: 'btn btn-primary', disabled: true }, '이 템플릿으로 시작');
+  const previewBtn = h('button', { class: 'btn', disabled: true, onclick: () => { if (pickedData) previewTemplate(pickedData); } }, '미리보기');
 
   const body = h('div', { style: 'display:grid;grid-template-columns:360px 1fr;gap:12px;height:70vh' },
     h('div', { style: 'display:flex;flex-direction:column;gap:8px;min-height:0' },
@@ -33,7 +36,7 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
     body,
     footer: [h('span', { style: 'margin-right:auto;font-size:12px;color:var(--ss-ink-3)' },
       '템플릿의 구성 · 기본 수량 · 인력 · 견적조건으로 시작합니다. 지금 입력한 기본정보(수신처 등)는 그대로 둡니다.'),
-    h('button', { class: 'btn', onclick: () => m.close() }, '취소'), okBtn],
+    previewBtn, h('button', { class: 'btn', onclick: () => m.close() }, '취소'), okBtn],
   });
   const box = m.back.querySelector('.modal');
   box.style.width = '1180px';
@@ -62,7 +65,7 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
 
   async function select(t) {
     const my = ++seq;
-    picked = null; okBtn.disabled = true;
+    picked = null; pickedData = null; okBtn.disabled = true; previewBtn.disabled = true;
     paintList();
     info.textContent = `${t.name} — 그리는 중...`;
     try {
@@ -74,7 +77,9 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
       const nLabor = blocks.reduce((a, b) => a + (b.labor || []).length, 0);
       info.textContent = `${t.code} · ${KIND_LABEL[t.kind] || ''} · 블록 ${blocks.length}개 · 모듈 ${nItems}개${nLabor ? ` · 인력 ${nLabor}명` : ''}`;
       picked = t;
+      pickedData = d;
       okBtn.disabled = false;
+      previewBtn.disabled = false;
       paintList();
     } catch (err) {
       if (my === seq) info.textContent = err.message;
@@ -121,6 +126,41 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
     if (conds.length) {
       section('▣ 견적조건', h('ol', { style: 'margin:0;padding-left:20px;font-size:12.5px;color:var(--ss-ink-2);line-height:1.7' },
         ...conds.map((c) => h('li', {}, String(c)))));
+    }
+  }
+
+  // 견적서 완성본 — 견적 작성 [미리보기] 와 같은 렌더러(POST /api/quotes/preview). 수신처 등은 빈 칸.
+  async function previewTemplate(d) {
+    const s = appliedPatch(d);
+    recalcBlocks(s); // 행 금액(amount)을 채운다 — 서버는 보낸 금액을 그대로 합산한다
+    const t = d.template || {};
+    const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
+    const state = h('span', { style: 'font-size:12px;color:var(--text-3);margin-right:8px' }, '그리는 중...');
+    const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
+    const pm = openModal({
+      title: `견적서 미리보기 — ${t.name || t.code || ''}${t.code ? ` (${t.code})` : ''}`,
+      body: frame,
+      footer: [state, printBtn, h('button', { class: 'btn btn-primary', onclick: () => pm.close() }, '닫기')],
+    });
+    const pbox = pm.back.querySelector('.modal');
+    pbox.style.width = '880px';
+    pbox.querySelector('.modal-body').style.padding = '12px';
+    previewControls(frame, pbox, () => pm.close());
+    try {
+      const r = await http.previewQuote({
+        blocks: toBlocksPayload(s),
+        header: { blank: true, template_code: t.code || null, solution: t.solution, brand: t.brand || null,
+          deployment: t.deployment, quote_type: t.quote_type || 'BUILD', pay_plan: t.has_pay_plan ? 1 : 0,
+          conditions: s.conds_on ? s.conds.map((c) => ({ text: c.text, auto: false, edited: true })) : [] },
+        round_unit: s.round_unit,
+      });
+      frame.srcdoc = r.html;
+      const c = r.calc || {};
+      state.textContent = `기본값 기준 · 일시불 ${won(c.onetime_total)}원${c.monthly_total ? ` / 월 ${won(c.monthly_total)}원` : ''}`;
+      printBtn.disabled = false;
+    } catch (err) {
+      state.textContent = '';
+      frame.replaceWith(h('div', { class: 'ss-cell--empty', style: 'padding:24px' }, err.message));
     }
   }
 

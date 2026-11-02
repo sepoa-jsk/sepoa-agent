@@ -15,7 +15,7 @@
 //      상태(작성중 · 발송 · 수주 · 실주)만 상세에서도 바로 바꾼다(PATCH /status).
 //      상세 ↔ 수정을 오갈 때 보던 단계를 이어서 연다(sessionStorage).
 import { api as http } from '../../../api.js';
-import { copyQuote, viewQuote, deleteQuote, downloadQuote, mailQuote } from '../quote-actions.js';
+import { copyQuote, reviseQuote, viewQuote, deleteQuote, downloadQuote, mailQuote, sealPreview } from '../quote-actions.js';
 import { h, toast, clear, confirmModal } from '../../../ui.js';
 import { setPage } from '../../../layout/gnb.js';
 import { renderStep1 } from './step1-basic.js';
@@ -51,8 +51,14 @@ function blankState() {
       customer_name: '', customer_contact: '', purpose: '', phone: '', email: '',
       quote_date: todayStr(), valid_until: addDays(todayStr(), 30),
       pay_terms: '고객사 결제조건', install_note: '협의된 프로젝트 기간',
-      // 마스터 연동 예정 (작업 13) — 화면에는 비활성으로 노출한다
+      // 기업구분 — 드롭다운(기업구분 마스터 key). 메모 [기업구분] 줄로 저장한다. 채널(DIRECT · AGENCY)은 [채널] 줄
       company_class: null, channel: null,
+      // 담당자 정보(우리 영업 담당) — 로그인한 사용자로 채운다. 메모 [영업담당] · [영업연락처] · [영업이메일] 줄(2026-11-02)
+      rep_name: '', rep_phone: '', rep_email: '',
+      // 최종 고객사 — 채널이 간접(AGENCY)일 때. 수신처는 중간업체(예: BSG), 견적용도에는 최종 고객(예: JW). 메모 [최종고객]
+      end_customer: '',
+      // 근거 메일(V14 source_mail) — 고객사에서 온 메일 링크 · 붙여넣은 본문. 본문에서 고객 담당자 · 연락처 · 이메일을 뽑는다
+      mail_url: '', mail_text: '',
     },
     type: { quote_type: 'BUILD', deployment: null, template_code: null, solution: null }, // solution — 1단계에서 고른 솔루션(템플릿을 거른다)
     blocks: [], applied: null, laborYear: null, hasLaborPlan: false,
@@ -69,7 +75,8 @@ function blankState() {
 }
 
 // 저장된 견적 → 위저드 상태. 메모에 접어 둔 견적용도·결제조건·연락처·이메일을 다시 풀어낸다(previewHeader 의 역).
-const MEMO_KEYS = { 견적용도: 'purpose', 결제조건: 'pay_terms', 연락처: 'phone', 이메일: 'email' };
+const MEMO_KEYS = { 견적용도: 'purpose', 결제조건: 'pay_terms', 연락처: 'phone', 이메일: 'email', 기업구분: 'company_class',
+  채널: 'channel', 최종고객: 'end_customer', 영업담당: 'rep_name', 영업연락처: 'rep_phone', 영업이메일: 'rep_email' };
 const n0 = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
 const day = (v) => (v ? String(v).slice(0, 10) : '');
 function dcOf(type, value) {
@@ -93,7 +100,9 @@ function fromQuote(q, tpl, tplConds) {
   Object.assign(st.basic, {
     customer_name: q.customer_name || '', customer_contact: q.customer_contact || '',
     quote_date: day(q.quote_date) || st.basic.quote_date, valid_until: day(q.valid_until),
-    purpose: memo.purpose || '', phone: memo.phone || '', email: memo.email || '',
+    purpose: memo.purpose || '', phone: memo.phone || '', email: memo.email || '', company_class: memo.company_class || null,
+    mail_url: (q.source_mail && q.source_mail.url) || '', mail_text: (q.source_mail && q.source_mail.text) || '',
+    channel: memo.channel || null, end_customer: memo.end_customer || '', rep_name: memo.rep_name || '', rep_phone: memo.rep_phone || '', rep_email: memo.rep_email || '',
     pay_terms: memo.pay_terms && memo.pay_terms !== '-' ? memo.pay_terms : '',
   });
   st.type = { quote_type: q.quote_type || 'BUILD', deployment: q.deployment, template_code: q.template_code, manual: !q.template_code, solution: q.solution };
@@ -125,6 +134,7 @@ function fromQuote(q, tpl, tplConds) {
     st.conds_on = true;
   }
   st.quoteId = q.id; st.quoteNo = q.quote_no;
+  st.revision = q.revision || 1; st.revisionReason = q.revision_reason || ''; // 차수(V11) · 차수 추가 사유(V13) — 읽기만
   st.status = q.status || 'DRAFT';
   st.pay_plan = q.pay_plan && typeof q.pay_plan === 'object' ? q.pay_plan : null;
   st.step = 3;
@@ -196,6 +206,7 @@ export async function renderWizard(root, opts = {}) {
     addDays,
     focusCustomer: () => focusCustomer(), // STEP⑤ 가 수신처 없음 오류에서 쓴다
     readOnly,
+    editMode, // 저장된 견적을 [수정] 으로 연 경우 — 견적용도 자동 문구를 건드리지 않는다
     // 상태 — 상세에서는 바로 서버에 반영하고, 작성 · 수정 중에는 저장할 때 같이 보낸다
     async setStatus(v) {
       if (!readOnly) { api.patch({ status: v }); return true; }
@@ -308,14 +319,15 @@ export async function renderWizard(root, opts = {}) {
       setPage({ title: head, path, actions: [
         { label: '목록', onClick: () => { location.hash = '#/quotes'; } },
         { label: '수정', onClick: () => switchTo(`#/quotes/${state.quoteId}/edit`) },
+        { label: '차수 추가', onClick: () => reviseQuote(q) },
         { label: '복사', onClick: () => copyQuote(q) },
         { label: '견적서 보기', onClick: () => viewQuote(q) },
         { label: 'PDF', onClick: () => downloadQuote(q, 'pdf') },
         { label: 'Excel', onClick: () => downloadQuote(q, 'excel') },
         { label: '메일 발송', onClick: () => mailQuote(mailTarget(), onMailSent) },
+        { label: '인장시스템 연계', onClick: () => sealPreview(q) }, // 날인 신청에 넣을 내용 미리보기(2026-11-02 사용자 요청)
         { label: '삭제', onClick: () => deleteQuote(q) },
-        { label: '이전', onClick: () => api.prev() },
-        { label: '다음', primary: true, onClick: () => api.next() },
+        // 이전 · 다음은 두지 않는다 — 단계 이동은 단계 탭을 누른다(2026-10-31 사용자 요청)
       ] });
       return;
     }
@@ -327,8 +339,9 @@ export async function renderWizard(root, opts = {}) {
         ...(topExtra ? [{ node: topExtra }] : []),
         { label: '미리보기', onClick: () => openPreview(api) },
         { label: '임시저장', onClick: saveDraft },
-        { label: '이전', onClick: () => api.prev() },
-        { label: '다음', primary: true, onClick: () => api.next() },
+        // 첫 단계에는 이전이, 마지막 단계(검토·발행)에는 다음이 없다 — 눌러도 반응이 없던 것을 끈다(2026-11-02 사용자 요청)
+        { label: '이전', disabled: state.step <= 1, onClick: () => api.prev() },
+        { label: '다음', primary: true, disabled: state.step >= STEPS.length, onClick: () => api.next() },
       ],
     });
   }
@@ -337,7 +350,7 @@ export async function renderWizard(root, opts = {}) {
     return h('div', { class: 'steps' }, ...STEPS.map((s) => {
       const cls = s.n < state.step ? 'done' : s.n === state.step ? 'on' : '';
       return h('div', { class: cls, onclick: () => api.go(s.n), style: 'cursor:pointer' },
-        h('span', { class: 'n' }, String(s.n)), s.label);
+        h('span', { class: 'n' }, s.n < state.step ? '✓' : String(s.n)), s.label); // 끝난 단계는 체크(개선안 v2)
     }));
   }
 
@@ -368,17 +381,19 @@ export async function renderWizard(root, opts = {}) {
         api.patch(patch);
       },
     });
-    const cell = (label, el, req) => h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);white-space:nowrap' },
+    const cell = (label, el, req) => h('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;color:#64748B;white-space:nowrap' },
       label, req ? h('span', { style: 'color:var(--danger)' }, '*') : null, el);
     loadCustomers();
-    return h('div', { class: 'card', style: 'margin-bottom:12px' },
-      h('div', { class: 'card-b', style: 'display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;padding:10px 14px' },
+    // 상자 없이 한 줄(개선안 v2) — 저장된 견적이면 오른쪽에 번호 · 차수
+    return h('div', { class: 'qz-info' },
+      h('div', { class: 'qz-info__row' },
         // 5단계는 수신처 유무로 발행 가능 여부가 바뀐다 — 입력을 마치면(포커스가 나가면) 다시 그린다
         cell('수신처', inp('customer_name', '고객사명 (예: 솔브레인)', '220px', { list: 'wiz-customer-list',
           onchange: () => { if (state.step === 5) paint(); } }), true),
-        cell('담당자', inp('customer_contact', '예) 김OO 책임', '150px')),
+        cell('고객 담당자', inp('customer_contact', '예) 김OO 책임', '150px')),
         cell('견적용도', inp('purpose', '예) 전자구매시스템 구축 견적 (SaaS)', '320px')),
         h('span', { 'data-keep': '' }, cell('상태', statusSelect({ style: 'width:96px' }))),
+        state.quoteNo ? h('span', { class: 'qz-info__no' }, `${state.quoteNo}${state.revision > 1 ? ` · ${state.revision}차` : ''}`) : null,
         list));
   }
 

@@ -250,6 +250,12 @@ public class SystemController {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("admin", me != null && me.isAdmin());
         out.put("perms", null);
+        // 내 정보 — 견적 작성 기본정보의 담당자 · 이메일 기본값(2026-10-31). 직위는 V10 뒤에만 있다
+        if (me != null) {
+            boolean org = hasColumn("sq_users", "position");
+            Map<String, Object> p = db.first("SELECT name, email" + (org ? ", position" : "") + " FROM sq_users WHERE id = ?", me.id());
+            if (p != null) out.put("profile", p);
+        }
         if (me == null || me.isAdmin() || !hasColumn("sq_users", "role_code")) return out;
         Map<String, Object> u = db.first("SELECT role_code FROM sq_users WHERE id = ?", me.id());
         if (u == null || !Rows.truthy(u.get("role_code"))) return out;

@@ -133,9 +133,14 @@ public class QuoteHtml {
         String memo = str(quote.get("memo"));
         String purpose = tag(memo, "견적용도");
         String payTerms = tag(memo, "결제조건");
+        // 담당자 정보(우리 영업 담당, 2026-11-02 사용자 요청) — 오른쪽 자사 표 아래 줄. 메모에 없으면(옛 견적) 줄도 없다
+        String repName = tag(memo, "영업담당"), repPhone = tag(memo, "영업연락처"), repEmail = tag(memo, "영업이메일");
+        String repLine = String.join(" / ", java.util.stream.Stream.of(repName, repPhone).filter(v -> !v.isEmpty()).toList());
+        String repRows = (repLine.isEmpty() ? "" : "<tr><td class=\"lbl\">담 당 자</td><td>" + esc(repLine) + "</td></tr>")
+                + (repEmail.isEmpty() ? "" : "<tr><td class=\"lbl\">이 메 일</td><td>" + esc(repEmail) + "</td></tr>");
         if (payTerms.isEmpty()) payTerms = "고객사 결제조건";
 
-        String logo = dataUri("logo.png"), seal = dataUri("seal.png"), bandTop = dataUri("band_top.png"), bandBot = dataUri("band_bottom.png");
+        String logo = dataUri("logo.png"), bandTop = dataUri("band_top.png"), bandBot = dataUri("band_bottom.png");
         String supplier = or(settings.get("supplier_name"), "㈜세포아소프트");
         String ceo = or(settings.get("supplier_ceo"), "이 희 림");
         String addr = or(settings.get("supplier_addr"), "서울시 구로구 디지털로31길 62, 아티스포럼 714~717호");
@@ -192,7 +197,9 @@ public class QuoteHtml {
 
         // ── 머리 상자 ──
         String customer = str(quote.get("customer_name"));
-        String sealImg = seal != null ? "<img class=\"sealimg\" src=\"" + seal + "\">" : "";
+        // 인감 도장은 찍지 않는다(2026-11-02 사용자 요청) — 도장은 인장시스템 결재 완료 후 인장시스템에서 찍힌다.
+        // 자리(.seal · .sealimg 스타일, 이미지 seal.png)는 남겨 둔다
+        String sealImg = "";
         String grand;
         if (monthlyTotal != 0 || monthlySub != 0) {
             grand = "<tr><td class=\"lbl\" rowspan=\"2\">총 견 적 가</td><td class=\"amt\">" + wonSign(onetimeTotal) + "</td>"
@@ -239,7 +246,8 @@ public class QuoteHtml {
                 + "<tr><td class=\"lbl\">견 적 일 자</td><td>" + korDate(quote.get("quote_date")) + "</td></tr>"
                 + "<tr><td class=\"lbl\">견적유효일</td><td>" + esc(validUntil) + "</td></tr>"
                 + "<tr><td class=\"lbl\">상 호</td><td>" + esc(supplier) + "</td></tr>"
-                + "<tr><td class=\"lbl\">대 표 이 사</td><td class=\"seal\">" + esc(ceo) + sealImg + "</td></tr></table>"
+                + "<tr><td class=\"lbl\">대 표 이 사</td><td class=\"seal\">" + esc(ceo) + sealImg + "</td></tr>"
+                + repRows + "</table>"
                 + "\n  </div>"
                 + "\n  <div class=\"note\">하기와 같이 견적하오니 참조 바랍니다.</div>"
                 + "\n\n  " + body

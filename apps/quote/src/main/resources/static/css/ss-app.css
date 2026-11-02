@@ -81,3 +81,96 @@
 /* 페이지 이동 — 100건이 넘을 때만 그리드 아래에 텍스트로 */
 .ss-pager { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--ss-ink-3); }
 .ss-pager[hidden] { display: none; }
+
+/* ── 견적 작성 3단계(구성) — 개선안 v2 (2026-11-02, docs/mockups/step3-redesign-v2.html) ──
+   본문(견적 품목 · 견적서 문구) + 오른쪽 견적 요약(읽기만, 고정). 블록은 묶음 머리(번호 · 이름 · 소계 · 버튼) + 표 */
+.qz-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+.qz-card { border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; margin-bottom: 16px; }
+.qz-cardhead { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--ss-bd); }
+.qz-cardhead__title { font-size: 15px; font-weight: 600; color: var(--ss-ink); }
+.qz-group { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px 0 8px; background: #F3F6FA; border-top: 1px solid var(--ss-bd); }
+.qz-card > .qz-block:first-of-type .qz-group { border-top: 0; }
+.qz-caret { width: 24px; height: 24px; border: 0; background: none; cursor: pointer; color: #64748B; display: inline-flex; align-items: center; justify-content: center; transition: transform .15s; }
+.qz-caret.is-closed { transform: rotate(-90deg); }
+.qz-group__no { min-width: 22px; height: 22px; padding: 0 4px; border-radius: 4px; background: var(--ss-primary); color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.qz-group__name { font-size: 14px; font-weight: 600; color: var(--ss-ink); white-space: nowrap; }
+.qz-tag { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; background: #FFF4D6; color: #9A6700; }
+.qz-move { display: inline-flex; }
+.qz-move button { width: 24px; height: 24px; border: 1px solid transparent; background: none; color: #64748B; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.qz-move button:hover:not(:disabled) { background: #E6EBF2; }
+.qz-move button:disabled { color: #CBD5E1; cursor: default; }
+.qz-group__sum { margin-left: auto; margin-right: 10px; font-size: 12px; color: #64748B; white-space: nowrap; }
+.qz-group__sum b { font-size: 14px; color: var(--ss-emphasis); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.qz-group__tools { display: flex; gap: 4px; align-items: center; }
+.qz-group__tools .ss-btn { height: 28px; padding: 0 12px; }
+.qz-block__grid { padding: 8px 12px 12px; }
+.qz-code { font-size: 11px; font-weight: 500; color: var(--ss-link); padding: 0 6px 3px; text-align: left; }
+.qz-spec { height: auto; resize: none !important; line-height: 1.5; padding: 4px 6px; text-align: left; border-color: transparent !important; background: transparent; }
+.qz-spec:focus { border-color: var(--ss-primary) !important; background: #FFFFFF; }
+tr.qz-zero td { opacity: .6; }
+tr.qz-zero td:first-child { opacity: 1; }
+.qz-doc { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px 0 12px; border-top: 1px solid #EEF1F5; cursor: pointer; font-size: 13px; }
+.qz-doc:hover { background: #F8FAFC; }
+.qz-doc__name { font-weight: 600; color: var(--ss-ink); width: 80px; flex: none; }
+.qz-doc__sum { color: #64748B; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qz-doc__open { color: var(--ss-link); font-size: 12px; flex: none; }
+.qz-side { position: sticky; top: 0; }
+.qz-sum { border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; }
+.qz-sum__head { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--ss-ink); border-bottom: 1px solid var(--ss-bd); background: var(--ss-head-bg); }
+.qz-sum__row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px; font-size: 13px; color: #64748B; }
+.qz-sum__row b { font-size: 16px; color: var(--ss-ink); font-variant-numeric: tabular-nums; }
+.qz-sum__row--main b { font-size: 20px; color: var(--ss-emphasis); }
+.qz-sum__line { border-top: 1px solid #EEF1F5; margin: 4px 12px; }
+.qz-sum__meta { padding: 4px 12px 10px; font-size: 12px; color: #64748B; line-height: 1.8; word-break: keep-all; }
+.qz-warn { margin-top: 12px; padding: 8px 12px; border: 1px solid #FFE380; border-radius: 4px; background: #FFFBEB; font-size: 12.5px; color: #78350F; line-height: 1.7; }
+
+/* 견적 작성 단계 막대 · 상단 기본정보 줄 — 개선안 v2 (2026-11-02) */
+.steps { height: 40px; margin-bottom: 12px; border-color: var(--ss-bd); }
+.steps div { padding: 0 14px; font-size: 13px; position: relative; }
+.steps .n { width: 20px; height: 20px; }
+.steps .on { color: var(--ss-primary); }
+.steps .on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ss-primary); }
+.qz-info { margin: 0 0 14px; padding: 0 2px; }
+.qz-info__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
+.qz-info__row .input, .qz-info__row select { height: 30px; font-size: 13px; }
+.qz-info__no { margin-left: auto; font-size: 12px; padding: 3px 8px; border-radius: 3px; background: #EEF1F5; color: var(--ss-ink-3); white-space: nowrap; }
+
+/* 품목 블록 표 하나(개선안 v2 1번, 2026-11-02) — 묶음 행 · 낮은 행 · 칸은 글처럼 보이고 누르면 고친다 */
+.qz-onetable td.qz-grouptd { padding: 0 !important; height: auto; text-align: left; background: #F3F6FA; border-left: 0; border-right: 0; }
+.qz-onetable tr.qz-grouprow:not(:first-child) td.qz-grouptd .qz-group { border-top: 2px solid var(--ss-bd); }
+.qz-onetable .qz-group { border-top: 0; }
+.qz-onetable td { height: 34px; padding: 2px 4px; }
+.qz-onetable select.ss-cellinput { -webkit-appearance: none; appearance: none; background-image: none; background-color: transparent; border-color: transparent; padding: 0 6px; cursor: pointer; }
+.qz-onetable select.ss-cellinput:hover, .qz-onetable select.ss-cellinput:focus { border-color: var(--ss-bd); background-color: #FFFFFF; }
+.qz-onetable td:nth-child(3) select.ss-cellinput, .qz-onetable td:nth-child(3) input.ss-cellinput { font-weight: 600; color: var(--ss-ink); }
+.qz-onetable input.ss-cellinput { border-color: transparent; background-color: transparent; }
+.qz-onetable input.ss-cellinput:hover, .qz-onetable input.ss-cellinput:focus { border-color: var(--ss-bd); background-color: #FFFFFF; }
+
+/* 구성 질문(SaaS) — 개선안 v2 2번 (2026-11-02) */
+.qz-q { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.2fr); gap: 12px 16px; padding: 12px 14px; }
+.qz-q__item label { display: block; font-size: 12px; color: #64748B; margin-bottom: 4px; }
+.qz-q__item .ss-select, .qz-q__item .ss-input { height: 30px; font-size: 13px; width: 100%; }
+.qz-q__row { display: flex; gap: 4px; }
+.qz-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; min-height: 30px; align-items: center; }
+.qz-checks label { display: inline-flex !important; align-items: center; gap: 4px; margin: 0 !important; font-size: 13px !important; color: var(--ss-ink-2) !important; cursor: pointer; }
+
+/* 할인율 칸(계산만) — 개선안 v2 3번 (2026-11-02). 할인은 초록, 없으면 흐린 '-' */
+.ss-grid td.qz-dc { text-align: center; font-weight: 600; color: var(--ss-ok-fg); font-variant-numeric: tabular-nums; }
+.ss-grid td.qz-dc.is-off { color: #A3AEBD; font-weight: 400; }
+
+/* 발행 전 확인 — 개선안 v2 4번 (2026-11-02). 읽기만, 오른쪽 요약 아래 */
+.qz-check { margin-top: 12px; border: 1px solid #FFE380; border-radius: 4px; background: #FFFBEB; }
+.qz-check__head { padding: 8px 12px; font-size: 13px; font-weight: 600; color: #9A6700; }
+.qz-check__head.is-ok { color: var(--ss-ok-fg); }
+.qz-check ul { margin: 0; padding: 0 12px 10px 28px; font-size: 12.5px; color: #78350F; line-height: 1.7; border-top: 1px solid #FFE380; padding-top: 8px; }
+.qz-check li.is-info { color: #64748B; }
+
+/* 인장시스템 연계 — 상세설명 에디터 (2026-11-02) */
+.q2-editor { border: 1px solid var(--ss-bd-input, #E3E3E3); border-radius: 4px; background: #FFFFFF; }
+.q2-editor__bar { display: flex; align-items: center; gap: 2px; padding: 4px 6px; border-bottom: 1px solid #EEF1F5; background: var(--ss-head-bg); }
+.q2-editor__btn { min-width: 28px; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 3px; background: none; font-size: 12.5px; color: var(--ss-ink-3); cursor: pointer; }
+.q2-editor__btn:hover { background: #E6EBF2; border-color: var(--ss-bd); }
+.q2-editor__sep { width: 1px; height: 16px; background: var(--ss-bd); margin: 0 4px; }
+.q2-editor__area { min-height: 260px; max-height: 420px; overflow: auto; padding: 10px 12px; font-size: 13px; line-height: 1.7; color: var(--ss-ink-2); outline: none; }
+.q2-editor__area p { margin: 0; }
+.q2-editor__area ul, .q2-editor__area ol { margin: 2px 0 8px; padding-left: 22px; }

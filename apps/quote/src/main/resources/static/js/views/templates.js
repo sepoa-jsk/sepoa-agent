@@ -605,7 +605,7 @@ export async function renderTemplates(root) {
     const box = m.back.querySelector('.modal');
     box.style.width = '880px';
     box.querySelector('.modal-body').style.padding = '12px';
-    box.querySelector('.modal-foot').prepend(previewControls(frame, box));
+    previewControls(frame, box, () => m.close());
     try {
       const r = await api.previewQuote({
         blocks: previewBlocks(),

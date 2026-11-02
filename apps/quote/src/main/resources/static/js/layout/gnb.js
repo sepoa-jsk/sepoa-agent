@@ -38,6 +38,7 @@ function paint() {
     b.className = 'ss-btn ' + (act.primary ? 'ss-btn--save' : 'ss-btn--default');
     b.textContent = act.label;
     if (act.id) b.id = act.id;
+    if (act.disabled) b.disabled = true; // 예: 마지막 단계의 [다음]
     if (act.onClick) b.addEventListener('click', act.onClick);
     a.appendChild(b);
   }
@@ -51,14 +52,14 @@ export const PAGE_META = {
   detail: { title: '견적 상세', path: '견적관리 / 견적 목록 / 상세' },
   pricing: { title: '가격정책', path: '기준정보 / 가격정책' },
   master: { title: '마스터 관리', path: '기준정보 / 마스터 관리' },
-  customer: { title: '고객사', path: '기준정보 / 고객사' },
+  customer: { title: '고객사관리', path: '기준정보 / 고객사관리' },
   'labor-rates': { title: '노임단가', path: '기준정보 / 노임단가' },
   templates: { title: '견적 템플릿', path: '기준정보 / 견적 템플릿' },
   term: { title: '견적조건 문구', path: '기준정보 / 견적조건 문구' },
   risk: { title: '리스크 계수', path: '기준정보 / 리스크 계수' },
   tco: { title: 'TCO 비교', path: '시뮬레이션 / TCO 비교' },
   dispatch: { title: '발송·열람 현황', path: '견적관리 / 발송·열람 현황' },
-  user: { title: '사용자', path: '시스템관리 / 사용자' },
+  user: { title: '사용자관리', path: '시스템관리 / 사용자관리' },
   role: { title: '역할·권한', path: '시스템관리 / 역할·권한' },
   dept: { title: '조직', path: '시스템관리 / 조직' },
   settings: { title: '설정', path: '시스템관리 / 설정' },

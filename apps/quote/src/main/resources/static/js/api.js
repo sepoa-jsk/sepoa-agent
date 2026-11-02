@@ -78,6 +78,7 @@ export const api = {
   setStatus: (id, status) => req('PATCH', `/api/quotes/${id}/status`, { status }),
   deleteQuote: (id) => req('DELETE', `/api/quotes/${id}`),
   copyQuote: (id) => req('POST', `/api/quotes/${id}/copy`),
+  reviseQuote: (id, reason) => req('POST', `/api/quotes/${id}/revise`, { reason }),
   quoteHtml: (id) => req('GET', `/api/quotes/${id}/html`),
   mailConfig: () => req('GET', '/api/quotes/mail-config'),
   mailQuote: (id, body) => req('POST', `/api/quotes/${id}/mail`, body),

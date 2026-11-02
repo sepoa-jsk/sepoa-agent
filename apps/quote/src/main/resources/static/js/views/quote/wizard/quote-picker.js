@@ -1,9 +1,11 @@
 // 기존 견적서 불러오기 창 — 템플릿 불러오기와 따로 둔다(2026-10-30 사용자 요청).
 // 템플릿은 '틀'에서 시작하고, 이 창은 이미 작성한 견적서의 구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 그대로 가져온다.
 // 왼쪽: 저장된 견적 목록(고객사 · 견적번호 검색) / 오른쪽: 고른 견적의 견적서 미리보기(저장된 그대로).
+// [미리보기] — 고른 견적서를 큰 창(견적서 보기와 같은 창)으로 띄운다(2026-10-31 사용자 요청).
 // [불러오기] 를 누르면 onPick({ quote }) — quote 는 GET /api/quotes/{id} 응답. 상태 반영은 위저드(index.js)가 한다.
 import { api as http } from '../../../api.js';
 import { h, won, clear, openModal } from '../../../ui.js';
+import { viewQuote } from '../quote-actions.js';
 
 const DEP_LABEL = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', SAAS: 'SaaS', PCLOUD: 'Private Cloud' };
 const STATUS_LABEL = { DRAFT: '작성중', SUBMITTED: '제출', SENT: '발송', WON: '수주', LOST: '실주' };
@@ -22,6 +24,7 @@ export async function openQuotePicker({ currentId, onPick }) {
   const info = h('div', { style: 'font-size:12px;color:var(--ss-ink-3);min-height:18px' }, '왼쪽에서 견적서를 고르세요.');
   const frame = h('iframe', { style: 'flex:1;width:100%;border:1px solid #E7EAF0;background:#fff' });
   const okBtn = h('button', { class: 'btn btn-primary', disabled: true }, '불러오기');
+  const previewBtn = h('button', { class: 'btn', disabled: true, onclick: () => { if (picked) viewQuote(picked.quote); } }, '미리보기');
 
   const body = h('div', { style: 'display:grid;grid-template-columns:360px 1fr;gap:12px;height:70vh' },
     h('div', { style: 'display:flex;flex-direction:column;gap:8px;min-height:0' },
@@ -33,7 +36,7 @@ export async function openQuotePicker({ currentId, onPick }) {
     body,
     footer: [h('span', { style: 'margin-right:auto;font-size:12px;color:var(--ss-ink-3)' },
       '구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져옵니다. 지금 입력한 기본정보(수신처 등)는 그대로 둡니다.'),
-    h('button', { class: 'btn', onclick: () => m.close() }, '취소'), okBtn],
+    previewBtn, h('button', { class: 'btn', onclick: () => m.close() }, '취소'), okBtn],
   });
   const box = m.back.querySelector('.modal');
   box.style.width = '1180px';
@@ -73,7 +76,7 @@ export async function openQuotePicker({ currentId, onPick }) {
 
   async function select(q) {
     const my = ++seq;
-    picked = null; okBtn.disabled = true;
+    picked = null; okBtn.disabled = true; previewBtn.disabled = true;
     paintList();
     info.textContent = `${q.quote_no} — 그리는 중...`;
     try {
@@ -84,6 +87,7 @@ export async function openQuotePicker({ currentId, onPick }) {
       info.textContent = `${q.quote_no} · ${q.customer_name || ''} · 일시불 ${won(quote.onetime_total)}원${Number(quote.monthly_total) ? ` / 월 ${won(quote.monthly_total)}원` : ''}`;
       picked = { quote };
       okBtn.disabled = false;
+      previewBtn.disabled = false;
       paintList();
     } catch (err) {
       if (my === seq) info.textContent = err.message;

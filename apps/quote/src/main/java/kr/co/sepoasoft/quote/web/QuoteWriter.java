@@ -35,6 +35,16 @@ public class QuoteWriter {
         this.db = db;
     }
 
+    // 근거 메일 칸(V14)이 있는지 — 한 번 있으면 기억한다(없을 때는 매번 다시 본다: 적용하면 재시작 없이 켜진다)
+    private volatile boolean sourceMailReady;
+
+    private boolean hasSourceMail() {
+        if (sourceMailReady) return true;
+        Map<String, Object> r = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'sq_quotes' AND column_name = 'source_mail'");
+        return sourceMailReady = r != null && r.get("n") instanceof Number n && n.longValue() > 0;
+    }
+
     /** #26 새 견적. {@code header} 는 요청 본문에 {@code quote_date} 를 정해 넣은 것 */
     @Transactional
     public long create(Map<String, Object> header, Map<String, Object> calc, boolean blockMode, Object createdBy) {
@@ -42,6 +52,19 @@ public class QuoteWriter {
         return blockMode
                 ? persistQuoteBlocks(header, calc, quoteNo, createdBy, null)
                 : persistQuote(header, calc, quoteNo, createdBy);
+    }
+
+    /**
+     * 차수 견적(V11) — 1차 번호 + '-차수' 를 그대로 쓴다(채번 카운터를 건드리지 않는다).
+     * {@code baseId} 는 1차 견적 id. {@code reason} 은 차수 추가 사유(V13) — null 이면 사유 칸을 건드리지 않는다.
+     */
+    @Transactional
+    public long createRevision(Map<String, Object> header, Map<String, Object> calc, String quoteNo,
+            int revision, long baseId, String reason, Object createdBy) {
+        long id = persistQuoteBlocks(header, calc, quoteNo, createdBy, null);
+        db.update("UPDATE sq_quotes SET revision = ?, base_quote_id = ? WHERE id = ?", revision, baseId, id);
+        if (reason != null) db.update("UPDATE sq_quotes SET revision_reason = ? WHERE id = ?", reason, id);
+        return id;
     }
 
     /** #29 블록형 수정 — 헤더 갱신, 블록·섹션 지우고 다시 넣는다. quote_no·작성자는 그대로 */
@@ -108,6 +131,11 @@ public class QuoteWriter {
         cols.put("conditions", conditions(header));
         // 견적별 결제 방안(V6) — {enabled, ratio, rows}. 보내지 않으면 NULL = 템플릿 설정 · 기본 문구
         cols.put("pay_plan", header.get("pay_plan") instanceof Map<?, ?> pp ? db.stringify(pp) : null);
+        // 근거 메일(V14) — {url, text}. 요청에 실려 왔고 칸이 있을 때만 쓴다(V14 전 DB · 옛 화면은 그대로)
+        if (header.containsKey("source_mail") && hasSourceMail()) {
+            Object sm = header.get("source_mail");
+            cols.put("source_mail", sm instanceof Map<?, ?> m ? (m.isEmpty() ? null : db.stringify(m)) : sm);
+        }
 
         long id;
         if (quoteId != null) {

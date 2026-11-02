@@ -68,8 +68,9 @@ public class MasterController {
                 List.of("year", "role_code", "role_name", "daily_rate", "work_days", "overhead_rate", "tech_rate",
                         "sort")));
         // 고객사는 V4 에서 새로 만든 표다 (Node 에는 없다 — API-spec 3절 J ④)
+        // solutions(사용 솔루션, V12)는 보낸 경우에만 쓴다 — V12 전 DB 에서는 화면이 보내지 않는다
         TABLES.put("customers", new Meta("sq_mst_customer", "id", "sort, name",
-                List.of("code", "name", "company_key", "channel", "contact_name", "contact_phone", "contact_email",
+                List.of("code", "name", "solutions", "company_key", "channel", "contact_name", "contact_phone", "contact_email",
                         "payment_terms", "note", "active", "sort")));
     }
 
@@ -106,7 +107,15 @@ public class MasterController {
             where = "WHERE solution = ?";
             params = new Object[] { solution };
         }
-        return Map.of("rows", db.query("SELECT * FROM " + m.table() + " " + where + " ORDER BY " + m.order(), params));
+        List<Map<String, Object>> rows = db.query("SELECT * FROM " + m.table() + " " + where + " ORDER BY " + m.order(), params);
+        if (!"customers".equals(type)) return Map.of("rows", rows);
+        // 고객사 — 사용 솔루션 칸(V12)이 있는지 알려 준다(행이 없어도 화면이 칸을 보이게)
+        Map<String, Object> c = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'sq_mst_customer' AND column_name = 'solutions'");
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("rows", rows);
+        out.put("has_solutions", c != null && c.get("n") instanceof Number n && n.longValue() > 0);
+        return out;
     }
 
     /** #8 생성 — 편집 컬럼 중 보낸 것만 넣고, 넣은 행을 다시 읽어 돌려준다 */
@@ -116,12 +125,18 @@ public class MasterController {
             @RequestBody(required = false) Map<String, Object> body) {
         Meta m = meta(type);
         Map<String, Object> b = body == null ? Map.of() : body;
-        List<String> cols = m.cols().stream().filter(b::containsKey).toList();
+        // 고객사 코드는 자동 채번(2026-10-31) — 비워 보내면 C0001, C0002 … (C+숫자 코드 중 가장 큰 것 + 1)
+        if ("customers".equals(type) && b.containsKey("name") && !Rows.truthy(b.get("code"))) {
+            b = new LinkedHashMap<>(b);
+            b.put("code", nextCustomerCode());
+        }
+        final Map<String, Object> body2 = b;
+        List<String> cols = m.cols().stream().filter(body2::containsKey).toList();
         if (cols.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "MISSING_FIELDS", null);
         Object idVal;
         try {
             long insertId = db.insert("INSERT INTO " + m.table() + " (" + String.join(",", cols.stream().map(MasterController::bt).toList())
-                    + ") VALUES (" + Rows.placeholders(cols.size()) + ")", cols.stream().map(b::get).toArray());
+                    + ") VALUES (" + Rows.placeholders(cols.size()) + ")", cols.stream().map(body2::get).toArray());
             idVal = "id".equals(m.pk()) ? insertId : b.get(m.pk());
         } catch (DuplicateKeyException e) {
             throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE", "중복된 키입니다.");
@@ -140,14 +155,23 @@ public class MasterController {
             @RequestBody(required = false) Map<String, Object> body) {
         Meta m = meta(type);
         Map<String, Object> b = body == null ? Map.of() : body;
+        // 코드가 비어 있는 옛 고객사는 고칠 때 코드를 붙인다(자동 채번 전에 만든 행)
+        if ("customers".equals(type) && !b.containsKey("code")) {
+            Map<String, Object> cur = db.first("SELECT code FROM sq_mst_customer WHERE id = ?", id);
+            if (cur != null && !Rows.truthy(cur.get("code"))) {
+                b = new LinkedHashMap<>(b);
+                b.put("code", nextCustomerCode());
+            }
+        }
+        final Map<String, Object> b2 = b;
         Object newPk = b.get(m.pk());
         boolean renamePk = m.cols().contains(m.pk()) && newPk != null && !String.valueOf(newPk).isBlank()
                 && !String.valueOf(newPk).equals(id);
         List<String> editable = m.cols().stream()
-                .filter(c -> (renamePk || !c.equals(m.pk())) && b.containsKey(c)).toList();
+                .filter(c -> (renamePk || !c.equals(m.pk())) && b2.containsKey(c)).toList();
         if (editable.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NOTHING_TO_UPDATE", null);
         List<Object> params = new ArrayList<>();
-        for (String c : editable) params.add(b.get(c));
+        for (String c : editable) params.add(b2.get(c));
         params.add(id);
         int r;
         try {
@@ -158,6 +182,13 @@ public class MasterController {
         }
         if (r == 0) throw ApiException.notFound();
         return row(m, renamePk ? newPk : id);
+    }
+
+    /** 고객사 다음 코드 — C+숫자 코드 중 가장 큰 것 + 1 (C0001 …) */
+    private String nextCustomerCode() {
+        Map<String, Object> mx = db.first("SELECT MAX(CAST(SUBSTRING(code, 2) AS UNSIGNED)) AS n FROM sq_mst_customer WHERE code REGEXP '^C[0-9]+$'");
+        long next = (mx == null || mx.get("n") == null ? 0 : ((Number) mx.get("n")).longValue()) + 1;
+        return String.format("C%04d", next);
     }
 
     /** #10 삭제 — active 컬럼이 있으면 active=0, 없으면 실삭제 */

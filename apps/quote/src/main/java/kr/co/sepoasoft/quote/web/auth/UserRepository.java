@@ -35,7 +35,9 @@ public class UserRepository {
             // 사용자 화면에서 사용 중지한 계정은 로그인하지 못한다(V10 active 칸 — 칸이 없으면 예전대로)
             if (u.get("active") instanceof Number a && a.intValue() == 0) throw new DisabledUserException();
             long id = ((Number) u.get("id")).longValue();
-            String newName = name != null ? name : (String) u.get("name");
+            // 이름은 등록된 값을 지킨다(사원정보에서 가져온 실명 — 2026-10-31). 비어 있을 때만 로그인 이름으로 채운다
+            String saved = (String) u.get("name");
+            String newName = saved != null && !saved.isBlank() ? saved : name;
             String newPicture = picture != null ? picture : (String) u.get("picture");
             jdbc.update("UPDATE sq_users SET name = ?, picture = ?, last_login_at = NOW() WHERE id = ?",
                     newName, newPicture, id);

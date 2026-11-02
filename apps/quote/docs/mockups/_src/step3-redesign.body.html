@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko" data-ss-theme="legacy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>견적 구성 개선안</title>
+<style>
+/*BASE_CSS*/
+
+/* ── 개선안 전용 (견적 작성 3단계 · 구성) ─────────────────────────── */
+.mk-steps, .mk-info, .mk-layout, .mk-review, .ss-formhead { flex-shrink: 0; }
+.mk-steps { display: flex; height: 40px; border: 1px solid var(--ss-bd); border-radius: 4px; overflow: hidden; margin-top: 12px; background: #FFFFFF; }
+.mk-step { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 13px; color: #94A3B8; border-right: 1px solid var(--ss-bd); position: relative; cursor: pointer; }
+.mk-step:last-child { border-right: 0; }
+.mk-step__n { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: #EEF1F5; color: #94A3B8; }
+.mk-step--done { color: var(--ss-ink-3); }
+.mk-step--done .mk-step__n { background: var(--ss-ok-bg); color: var(--ss-ok-fg); }
+.mk-step--on { color: var(--ss-primary); font-weight: 600; background: var(--ss-primary-soft); }
+.mk-step--on .mk-step__n { background: var(--ss-primary); color: #FFFFFF; }
+.mk-step--on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ss-primary); }
+
+.mk-info { display: flex; align-items: center; gap: 24px; margin-top: 12px; padding: 0 2px; font-size: 13px; }
+.mk-info__item { display: flex; align-items: center; gap: 8px; }
+.mk-info__item label { color: #64748B; white-space: nowrap; }
+.mk-info__item .ss-input, .mk-info__item .ss-select { height: 30px; font-size: 13px; }
+.mk-info__item .req { color: var(--ss-emphasis); }
+
+.mk-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+
+/* 왼쪽: 견적 구성 목록 — 블록 순서 · 소계를 한눈에 */
+.mk-nav { position: sticky; top: 0; border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; }
+.mk-nav__head { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--ss-ink); border-bottom: 1px solid var(--ss-bd); background: var(--ss-head-bg); }
+.mk-nav__item { display: grid; grid-template-columns: 22px 1fr; gap: 0 6px; padding: 10px 12px; border-bottom: 1px solid #EEF1F5; cursor: pointer; }
+.mk-nav__item:hover { background: #F8FAFC; }
+.mk-nav__item--on { background: var(--ss-primary-soft); box-shadow: inset 3px 0 0 var(--ss-primary); }
+.mk-nav__no { font-size: 12px; font-weight: 700; color: var(--ss-primary); line-height: 18px; }
+.mk-nav__name { font-size: 13px; font-weight: 600; color: var(--ss-ink); line-height: 18px; }
+.mk-nav__sub { grid-column: 2; font-size: 12px; color: #64748B; margin-top: 2px; }
+.mk-nav__sub b { color: var(--ss-emphasis); font-weight: 600; }
+.mk-nav__add { display: flex; gap: 4px; padding: 10px 12px; }
+.mk-nav__add .ss-select { flex: 1; min-width: 0; height: 30px; font-size: 12px; }
+.mk-nav__add .ss-btn { height: 30px; padding: 0 10px; }
+
+/* 블록 카드 — 제목 · 소계를 머리에, 버튼은 한 줄로 가볍게 */
+.mk-block { border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; margin-bottom: 16px; }
+.mk-block__head { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--ss-bd); }
+.mk-block__no { width: 22px; height: 22px; border-radius: 4px; background: var(--ss-primary); color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.mk-block__title { font-size: 15px; font-weight: 600; color: var(--ss-ink); }
+.mk-tag { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; background: #FFF4D6; color: #9A6700; }
+.mk-move { display: inline-flex; margin-left: 4px; }
+.mk-move button { width: 26px; height: 26px; border: 1px solid transparent; background: none; color: #64748B; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.mk-move button:hover:not(:disabled) { background: #EEF1F5; border-color: var(--ss-bd); }
+.mk-move button:disabled { color: #CBD5E1; cursor: default; }
+.mk-block__sum { margin-left: auto; margin-right: 12px; font-size: 13px; color: #64748B; }
+.mk-block__sum b { font-size: 15px; color: var(--ss-emphasis); margin-left: 6px; }
+.mk-block__tools { display: flex; gap: 4px; align-items: center; }
+.mk-block__tools .ss-btn { height: 30px; }
+.mk-block__tools .mk-sep { width: 1px; height: 18px; background: var(--ss-bd); margin: 0 4px; }
+.mk-block__body { padding: 10px 12px 12px; }
+.mk-block__note { font-size: 12px; color: #64748B; margin: 0 2px 8px; }
+
+/* 그리드 — 같은 토큰, 정보 위계만 정리 */
+.mk-grid { width: 100%; table-layout: fixed; }
+.mk-grid td { vertical-align: middle; }
+.mk-grid td.mk-mod { text-align: left; padding-left: 10px; }
+.mk-mod__name { font-size: 13px; font-weight: 600; color: var(--ss-ink); }
+.mk-mod__code { font-size: 11px; color: var(--ss-link); margin-top: 2px; }
+.mk-grid td.mk-spec { text-align: left; padding: 6px 10px; white-space: pre-line; line-height: 1.55; font-size: 12px; color: var(--ss-ink-2); }
+.mk-grid td.mk-edit { background: var(--ss-cell-edit); }
+.mk-grid td.mk-num { text-align: right; padding-right: 10px; font-variant-numeric: tabular-nums; }
+.mk-grid td.mk-amt, .mk-grid tfoot td.mk-amt { text-align: right; padding-right: 10px; font-weight: 700; color: var(--ss-emphasis); font-variant-numeric: tabular-nums; }
+.mk-cat { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--ss-bd); color: var(--ss-ink-3); background: #FFFFFF; }
+.mk-cat--base { border-color: #BFD3F2; color: var(--ss-primary); background: var(--ss-primary-soft); }
+.mk-grid td.mk-empty { color: #A3AEBD; font-weight: 400; }
+.mk-grid tr.mk-row--zero td { color: #94A3B8; }
+.mk-row--zero .mk-mod__name { color: #64748B; font-weight: 500; }
+.mk-band { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding-right: 10px; }
+.mk-band__kind { font-size: 11px; padding: 1px 6px; border-radius: 3px; background: #EEF1F5; color: var(--ss-ink-3); }
+.mk-grid tfoot td:not(.mk-amt) { background: var(--ss-head-bg); font-weight: 600; color: var(--ss-ink); height: 39px; }
+
+/* 검토용 표시 — 실제 화면에는 없다 */
+.mk-review { margin-top: 12px; border: 1px dashed #A78BFA; border-radius: 4px; background: #FAF8FF; font-size: 12.5px; color: #4C1D95; }
+.mk-review__head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+.mk-review__head span { margin-left: auto; font-weight: 400; color: #7C3AED; }
+.mk-review ol { margin: 0; padding: 0 16px 10px 34px; line-height: 1.8; }
+.mk-review[data-closed] ol { display: none; }
+.mk-pin { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #7C3AED; color: #FFFFFF; font-size: 11px; font-weight: 700; vertical-align: middle; margin-left: 4px; flex: 0 0 auto; }
+body[data-hide-pins] .mk-pin { display: none; }
+</style>
+</head>
+<body>
+<div class="ss-app">
+
+  <header class="ss-gnb">
+    <span class="ss-gnb__logo">SepoaSoft Single Suite</span>
+    <a class="ss-gnb__home" href="#" title="홈"><svg class="ss-gnb__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+    <svg class="ss-gnb__icon" aria-label="전체 메뉴" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+    <span class="ss-gnb__spacer"></span>
+    <div class="ss-gnb__right">
+      <span>English</span>
+      <svg class="ss-gnb__icon ss-gnb__icon--sm" aria-label="도움말" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      <span>전선경 ( jsk )</span>
+      <svg class="ss-gnb__icon ss-gnb__icon--sm" aria-label="로그아웃" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+    </div>
+  </header>
+
+  <div class="ss-title">견적 수정</div>
+
+  <div class="ss-main">
+    <div class="ss-body" style="overflow:auto">
+
+      <!-- 검토용 메모 — 실제 화면에는 없다 -->
+      <div class="mk-review" id="review">
+        <div class="mk-review__head" onclick="toggleReview()">검토용 메모 — 바꾼 점 (실제 화면에는 없음)<span id="reviewHint">접기 · 번호 숨기기</span></div>
+        <ol>
+          <li>단계 표시를 한 줄 진행 막대로 — 끝난 단계는 초록, 지금 단계는 파란 막대로 바로 보입니다.</li>
+          <li>수신처 · 담당자 · 견적용도 · 상태는 상자 없이 한 줄 — 입력 칸은 그대로입니다.</li>
+          <li>왼쪽 <b>견적 구성</b> 목록 — 블록 순서와 블록마다 소계를 늘 보여 주고, 누르면 그 블록으로 갑니다. 블록 추가도 여기로 옮겼습니다.</li>
+          <li>블록 머리에 <b>소계</b>를 크게 — 표 끝까지 내리지 않아도 금액이 보입니다. 위로 · 아래로는 작은 화살표로, 버튼 수는 같습니다.</li>
+          <li>모듈 칸 아래에 품목코드를 작게 붙이고 <b>품목코드 칸을 없앴습니다</b> — 표가 한 칸 줄어 금액 칸이 넓어집니다.</li>
+          <li>세부기능은 입력 상자 테두리 · 끌기 손잡이 없이 글로 — 누르면 고칠 수 있는 칸(옅은 파랑)입니다.</li>
+          <li>수량 0 · 금액 없는 행은 흐리게, 빈 금액은 <b>-</b> 로 — 값이 있는 행이 먼저 눈에 들어옵니다.</li>
+          <li>구분(기본 · 부가)은 드롭다운 대신 작은 표시 — 누르면 고를 수 있습니다. 제안금액은 굵은 빨강으로 통일했습니다.</li>
+        </ol>
+      </div>
+
+      <!-- 우상단 액션 — 지금 화면과 같은 버튼 -->
+      <div class="ss-formhead" style="margin-top:12px">
+        <div class="ss-actions">
+          <button class="ss-btn ss-btn--default">취소</button>
+          <button class="ss-btn ss-btn--default">미리보기</button>
+          <button class="ss-btn ss-btn--default">임시저장</button>
+          <button class="ss-btn ss-btn--default">이전</button>
+          <button class="ss-btn ss-btn--save">다음</button>
+        </div>
+      </div>
+
+      <div class="mk-steps">
+        <div class="mk-step mk-step--done"><span class="mk-step__n">✓</span>유형 선택</div>
+        <div class="mk-step mk-step--done"><span class="mk-step__n">✓</span>기본정보</div>
+        <div class="mk-step mk-step--on"><span class="mk-step__n">3</span>구성<span class="mk-pin">1</span></div>
+        <div class="mk-step"><span class="mk-step__n">4</span>인건비</div>
+        <div class="mk-step"><span class="mk-step__n">5</span>검토·발행</div>
+      </div>
+
+      <div class="mk-info">
+        <div class="mk-info__item"><label>수신처<span class="req"> *</span></label><input class="ss-input" value="창성" style="width:200px"></div>
+        <div class="mk-info__item"><label>담당자</label><input class="ss-input" value="전선경" style="width:140px"></div>
+        <div class="mk-info__item"><label>견적용도</label><input class="ss-input" placeholder="예) 전자구매시스템 구축 견적 (SaaS)" style="width:320px"></div>
+        <div class="mk-info__item"><label>상태</label><select class="ss-select" style="width:100px"><option>작성중</option></select></div>
+        <span class="mk-pin">2</span>
+      </div>
+
+      <div class="mk-layout">
+
+        <aside class="mk-nav">
+          <div class="mk-nav__head">견적 구성<span class="mk-pin">3</span></div>
+          <div class="mk-nav__item mk-nav__item--on" onclick="go('b1', this)">
+            <span class="mk-nav__no">1</span><span class="mk-nav__name">셋업비용</span>
+            <span class="mk-nav__sub">소계 <b>3,000,000</b></span>
+          </div>
+          <div class="mk-nav__item" onclick="go('b2', this)">
+            <span class="mk-nav__no">2</span><span class="mk-nav__name">서비스 이용료(월)</span>
+            <span class="mk-nav__sub">월 <b>1,200,000</b></span>
+          </div>
+          <div class="mk-nav__item" onclick="go('b3', this)">
+            <span class="mk-nav__no">3</span><span class="mk-nav__name">결제 방안</span>
+            <span class="mk-nav__sub">계약체결 시 50%</span>
+          </div>
+          <div class="mk-nav__item" onclick="go('b4', this)">
+            <span class="mk-nav__no">4</span><span class="mk-nav__name">견적조건</span>
+            <span class="mk-nav__sub">3문장</span>
+          </div>
+          <div class="mk-nav__add">
+            <select class="ss-select"><option>솔루션 견적</option><option>라이선스비용</option><option>시스템 구축 견적</option></select>
+            <button class="ss-btn ss-btn--save">블록 추가</button>
+          </div>
+        </aside>
+
+        <div>
+          <!-- 1. 셋업비용 -->
+          <section class="mk-block" id="b1">
+            <div class="mk-block__head">
+              <span class="mk-block__no">1</span><span class="mk-block__title">셋업비용</span>
+              <span class="mk-move"><button disabled title="위로"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 15 6-6 6 6"/></svg></button><button title="아래로"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button></span>
+              <span class="mk-block__sum">소계<b>3,000,000</b></span><span class="mk-pin">4</span>
+              <div class="mk-block__tools">
+                <button class="ss-btn ss-btn--gridrow">행추가</button>
+                <button class="ss-btn ss-btn--gridrow">행삭제</button>
+                <span class="mk-sep"></span>
+                <button class="ss-btn ss-btn--delete">블록 빼기</button>
+              </div>
+            </div>
+            <div class="mk-block__body">
+              <div class="ss-gridwrap">
+                <table class="ss-grid mk-grid">
+                  <colgroup><col style="width:60px"><col style="width:76px"><col style="width:190px"><col><col style="width:80px"><col style="width:64px"><col style="width:120px"><col style="width:130px"><col style="width:130px"></colgroup>
+                  <thead><tr><th>선택</th><th>구분</th><th>모듈 <span class="mk-pin">5</span></th><th>세부기능 <span class="mk-pin">6</span></th><th>수량</th><th>단위</th><th>기준단가</th><th>제안단가</th><th>제안금액</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat">부가</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">기본 셋업비</div><div class="mk-mod__code">PRO_SAAS_SETUP</div></td>
+                      <td class="mk-spec mk-edit">초기 환경설정</td>
+                      <td class="mk-num mk-edit">1</td><td>식</td>
+                      <td class="mk-num">3,000,000</td>
+                      <td class="mk-num mk-edit" style="font-weight:600;color:var(--ss-primary)">3,000,000</td>
+                      <td class="mk-amt">3,000,000</td>
+                    </tr>
+                    <tr class="mk-row--zero">
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat">부가</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">내부시스템 연계</div><div class="mk-mod__code">PRO_SAAS_IF</div></td>
+                      <td class="mk-spec mk-edit">■ ERP(오라클) — 기준정보(품목, 협력사, 기타 등)
+■ 그룹웨어 — 결재연동, 메일연동
+■ 인사시스템 — 사원정보, 조직도</td>
+                      <td class="mk-num mk-edit">0</td><td>MM</td>
+                      <td class="mk-num mk-empty">-</td>
+                      <td class="mk-num mk-edit mk-empty">-</td>
+                      <td class="mk-num mk-empty">-<span class="mk-pin">7</span></td>
+                    </tr>
+                    <tr class="mk-row--zero">
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat">부가</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">커스터마이징</div><div class="mk-mod__code">PRO_SAAS_CUSTOM</div></td>
+                      <td class="mk-spec mk-edit">■ 현재 업무요건 기준 — 상세 협의 후 추가 제안</td>
+                      <td class="mk-num mk-edit">0</td><td>M/M</td>
+                      <td class="mk-num mk-empty">-</td>
+                      <td class="mk-num mk-edit mk-empty">-</td>
+                      <td class="mk-num mk-empty">-</td>
+                    </tr>
+                  </tbody>
+                  <tfoot><tr><td colspan="8">셋업비용 소계</td><td class="mk-amt">3,000,000</td></tr></tfoot>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 2. 서비스 이용료(월) -->
+          <section class="mk-block" id="b2">
+            <div class="mk-block__head">
+              <span class="mk-block__no">2</span><span class="mk-block__title">서비스 이용료(월)</span><span class="mk-tag">월정액</span>
+              <span class="mk-move"><button title="위로"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 15 6-6 6 6"/></svg></button><button disabled title="아래로"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button></span>
+              <span class="mk-block__sum">월 소계<b>1,200,000</b></span>
+              <div class="mk-block__tools">
+                <button class="ss-btn ss-btn--gridrow">행추가</button>
+                <button class="ss-btn ss-btn--gridrow">행삭제</button>
+                <span class="mk-sep"></span>
+                <button class="ss-btn ss-btn--delete">블록 빼기</button>
+              </div>
+            </div>
+            <div class="mk-block__body">
+              <div class="ss-gridwrap">
+                <table class="ss-grid mk-grid">
+                  <colgroup><col style="width:60px"><col style="width:76px"><col style="width:190px"><col><col style="width:130px"><col style="width:70px"><col style="width:60px"><col style="width:110px"><col style="width:120px"><col style="width:120px"></colgroup>
+                  <thead><tr><th>선택</th><th>구분 <span class="mk-pin">8</span></th><th>모듈</th><th>세부기능</th><th>인원·건수</th><th>수량</th><th>단위</th><th>기준단가</th><th>제안단가(월)</th><th>제안금액(월)</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat mk-cat--base">기본</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">서비스 이용료</div><div class="mk-mod__code">PRO_SAAS_S2C</div></td>
+                      <td class="mk-spec mk-edit">견적/입찰/계약관리</td>
+                      <td class="mk-edit"><div class="mk-band"><span class="mk-band__kind">건수</span><b>300</b> 건</div></td>
+                      <td class="mk-num mk-edit">1</td><td>건</td>
+                      <td class="mk-num">1,200,000</td>
+                      <td class="mk-num mk-edit" style="font-weight:600;color:var(--ss-primary)">1,200,000</td>
+                      <td class="mk-amt">1,200,000</td>
+                    </tr>
+                    <tr class="mk-row--zero">
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat">부가</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">Poa-BiA 비용</div><div class="mk-mod__code">PRO_SAAS_BIA</div></td>
+                      <td class="mk-spec mk-edit">인터페이스 모듈</td>
+                      <td></td>
+                      <td class="mk-num mk-edit">1</td><td>월</td>
+                      <td class="mk-num mk-empty">-</td>
+                      <td class="mk-num mk-edit mk-empty">-</td>
+                      <td class="mk-num mk-empty">-</td>
+                    </tr>
+                    <tr class="mk-row--zero">
+                      <td><input type="checkbox"></td>
+                      <td><span class="mk-cat">부가</span></td>
+                      <td class="mk-mod"><div class="mk-mod__name">독립인프라(S2C)</div><div class="mk-mod__code">PRO_SAAS_INFRA_S2C</div></td>
+                      <td class="mk-spec mk-edit">서버/DBMS</td>
+                      <td></td>
+                      <td class="mk-num mk-edit">1</td><td>월</td>
+                      <td class="mk-num mk-empty">-</td>
+                      <td class="mk-num mk-edit mk-empty">-</td>
+                      <td class="mk-num mk-empty">-</td>
+                    </tr>
+                  </tbody>
+                  <tfoot><tr><td colspan="9">서비스 이용료(월) 소계</td><td class="mk-amt">1,200,000</td></tr></tfoot>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 3. 결제 방안 -->
+          <section class="mk-block" id="b3">
+            <div class="mk-block__head">
+              <span class="mk-block__no">3</span><span class="mk-block__title">결제 방안</span>
+              <span style="font-size:13px;color:#64748B;margin-left:8px">계약체결 시</span>
+              <input class="ss-input" value="50" style="width:56px;height:28px;text-align:right">
+              <span style="font-size:13px;color:#64748B">%</span>
+              <span class="mk-block__sum"></span>
+              <div class="mk-block__tools">
+                <button class="ss-btn ss-btn--gridrow">행추가</button>
+                <button class="ss-btn ss-btn--gridrow">행삭제</button>
+                <button class="ss-btn ss-btn--gridrow">기본값으로</button>
+                <span class="mk-sep"></span>
+                <button class="ss-btn ss-btn--delete">블록 빼기</button>
+              </div>
+            </div>
+            <div class="mk-block__body">
+              <div class="ss-gridwrap">
+                <table class="ss-grid mk-grid">
+                  <colgroup><col style="width:60px"><col style="width:130px"><col style="width:220px"><col style="width:300px"><col></colgroup>
+                  <thead><tr><th>선택</th><th>구분</th><th>지급시점</th><th>비용</th><th>내역</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><input type="checkbox"></td>
+                      <td class="mk-mod"><div class="mk-mod__name">서비스 셋업비용</div></td>
+                      <td class="mk-spec mk-edit">1. 일시불
+ -. 계약체결 후 50%
+ -. 구축완료 후 50%</td>
+                      <td class="mk-spec">일시불 비용 3,000,000원
+ 계약체결 후 50% : 1,500,000원
+ 구축완료 후 50% : 1,500,000원</td>
+                      <td class="mk-spec mk-edit">-. 서비스계약 체결 후 7일 이내 세금계산서 발행
+-. 검수완료 후 7일 이내 세금계산서 발행</td>
+                    </tr>
+                    <tr>
+                      <td><input type="checkbox"></td>
+                      <td class="mk-mod"><div class="mk-mod__name">서비스 월 사용료</div></td>
+                      <td class="mk-spec mk-edit">1. 매월 말</td>
+                      <td class="mk-spec">서비스 사용료 1,200,000원/매월</td>
+                      <td class="mk-spec mk-edit">-. 서비스 착수 후 월별로 세금계산서 발행</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- 4. 견적조건 -->
+          <section class="mk-block" id="b4">
+            <div class="mk-block__head">
+              <span class="mk-block__no">4</span><span class="mk-block__title">견적조건</span>
+              <span style="font-size:12px;color:#64748B;margin-left:8px">견적서 하단에 그대로 인쇄됩니다</span>
+              <span class="mk-block__sum"></span>
+              <div class="mk-block__tools">
+                <button class="ss-btn ss-btn--gridrow">행추가</button>
+                <span class="mk-sep"></span>
+                <button class="ss-btn ss-btn--delete">블록 빼기</button>
+              </div>
+            </div>
+            <div class="mk-block__body">
+              <div class="ss-gridwrap">
+                <table class="ss-grid mk-grid">
+                  <colgroup><col style="width:60px"><col style="width:60px"><col></colgroup>
+                  <thead><tr><th>선택</th><th>번호</th><th>내용</th></tr></thead>
+                  <tbody>
+                    <tr><td><input type="checkbox"></td><td>1</td><td class="mk-spec mk-edit">서비스 이용료에는 유지보수, 인프라이용료 등이 포함되어 있습니다.</td></tr>
+                    <tr><td><input type="checkbox"></td><td>2</td><td class="mk-spec mk-edit">내부시스템 연계는 상세 협의 후 연계 필요량에 따라 달라질 수 있습니다.</td></tr>
+                    <tr><td><input type="checkbox"></td><td>3</td><td class="mk-spec mk-edit">커스터마이징 추가 필요 시 비용은 상세 협의 후 SaaS로 가능한 부분에 대해 추가 제안드립니다.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <nav class="ss-tabbar">
+    <div class="ss-tabbar__tab">SUMMARY</div>
+    <div class="ss-tabbar__tab ss-tabbar__tab--active">견적 작성 <span class="ss-tabbar__close">&times;</span></div>
+  </nav>
+
+</div>
+<script>
+  function go(id, el) {
+    document.querySelectorAll('.mk-nav__item').forEach(function (x) { x.classList.remove('mk-nav__item--on'); });
+    el.classList.add('mk-nav__item--on');
+    document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function toggleReview() {
+    var r = document.getElementById('review');
+    var closed = r.hasAttribute('data-closed');
+    if (closed) { r.removeAttribute('data-closed'); document.body.removeAttribute('data-hide-pins'); document.getElementById('reviewHint').textContent = '접기 · 번호 숨기기'; }
+    else { r.setAttribute('data-closed', ''); document.body.setAttribute('data-hide-pins', ''); document.getElementById('reviewHint').textContent = '펼치기 · 번호 보이기'; }
+  }
+</script>
+</body>
+</html>

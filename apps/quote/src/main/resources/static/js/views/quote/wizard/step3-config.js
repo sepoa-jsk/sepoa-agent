@@ -5,6 +5,7 @@
 import { api as http } from '../../../api.js';
 import { h, won, toast, openModal, confirmModal, numInput, previewControls } from '../../../ui.js';
 import { pickItems, pickRole, itemRow } from '../pickers.js';
+import { store } from '../../../app.js';
 
 // 블록 정의(sq_blocks) — 블록 추가 목록. 한 번 받아 둔다
 let blockDefsCache = null;
@@ -132,6 +133,32 @@ async function loadBands(solution) {
   return Object.fromEntries(items.filter((x) => x.pricing_type === 'BAND' && (x.variants || []).length).map((x) => [x.code, x.variants]));
 }
 
+// 견적용도 자동 문구(2026-11-02 사용자 요청) — 고객명 + 솔루션 + '구축 견적' + (구축형태: SaaS · 온프레미스 · Private Cloud).
+// 구축형태를 아직 안 골랐으면 괄호는 뺀다
+const PURPOSE_DEP = { SAAS: 'SaaS', ONPREM: '온프레미스', ONPREM_LUMP: '온프레미스', ONPREM_INSTALL: '온프레미스', PCLOUD: 'Private Cloud' };
+export async function autoPurpose(state) {
+  const sol = state.type && state.type.solution;
+  const dep = state.type && PURPOSE_DEP[state.type.deployment];
+  // 간접(중간업체 경유)이면 견적용도에는 수신처(중간업체) 대신 최종 고객사 이름
+  const b = state.basic;
+  const who = b.channel === 'AGENCY' && String(b.end_customer || '').trim() ? b.end_customer : b.customer_name;
+  return [String(who || '').trim(), sol ? store.solutionName(sol) : '', '구축 견적', dep ? `(${dep})` : '']
+    .filter(Boolean).join(' ');
+}
+// 견적용도를 자동 문구로 맞춘다 — 비어 있거나 앞서 자동으로 넣은 그대로일 때만(손으로 고친 문구는 둔다). 바뀌면 true
+export async function syncPurpose(wiz) {
+  if (wiz.readOnly || wiz.editMode) return false; // 신규 작성에만 — 수정 · 상세에서는 바꾸지 않는다(2026-11-02 사용자 요청)
+  const st = wiz.get();
+  const cur = String(st.basic.purpose || '');
+  // 자동 문구 모양('… 구축 견적' 또는 '… 구축 견적 (구축형태)')이면 자동으로 본다 — 임시저장 후 다시 열어 purpose_auto 가 없어도 고객명 · 구축형태를 따라간다
+  const autoShape = /(^|\s)구축 견적( \([^)]*\))?$/.test(cur.trim());
+  if (cur.trim() && cur !== st.basic.purpose_auto && !autoShape) return false;
+  const next = await autoPurpose(st);
+  if (next === cur) return false;
+  wiz.patch({ basic: { purpose: next, purpose_auto: next } });
+  return true;
+}
+
 // SaaS 견적의 서비스(S2C · S2P …) — 2단계(기본정보)에서 고른 것(type.service), 없으면 견적에 들어 있는 서비스 행
 export function quoteService(state, services) {
   const codes = services.map((x) => x.code);
@@ -142,7 +169,7 @@ export function quoteService(state, services) {
 
 // 고른 서비스에 맞춰 구성 행을 바꾼다 — 다른 서비스의 이용료 행은 고른 서비스로,
 // '(S2C)' 처럼 서비스가 붙은 품목(독립인프라 등)은 같은 이름의 고른 서비스 품목으로. 맞는 품목이 없으면 그대로 둔다.
-// 바꾼 행은 가격정책 기준가(이용료는 인원 · 건수 구간 금액)로 다시 채운다. 바꾼 행 수를 돌려준다
+// 바꾼 행은 셋업비용 블록이면 가격정책 기준가로 다시 채우고, 그 밖은 금액을 비운다. 바꾼 행 수를 돌려준다
 function syncService(state, code, catalog) {
   const svc = catalog.services.find((x) => x.code === code);
   if (!svc) return 0;
@@ -168,7 +195,8 @@ function syncService(state, code, catalog) {
         const v = it.band_qty == null || it.band_qty === '' ? null : bandOf(to.variants, it.band, num(it.band_qty)); // 숫자를 넣기 전이면 금액 없음
         price = v ? num(v.price) : null;
       }
-      it.base_price = price; it.proposed_price = price || 0;
+      // 셋업비용 블록 밖은 금액 없이 둔다(템플릿으로 시작할 때와 같은 규칙) — 인원 · 건수를 고치면 그때 구간 금액이 들어간다
+      if (b.block_code === 'SETUP') { it.base_price = price; it.proposed_price = price || 0; } else { it.base_price = null; it.proposed_price = 0; }
       n++;
     }
   }
@@ -221,6 +249,12 @@ export function previewHeader(state) {
       '[특별DC] ' + dcMemo(state.discount),
       b.phone ? '[연락처] ' + b.phone : '',
       b.email ? '[이메일] ' + b.email : '',
+      b.company_class ? '[기업구분] ' + b.company_class : '', // 2026-10-31 — 없으면 줄도 없다(옛 견적 메모 그대로)
+      b.channel ? '[채널] ' + b.channel : '', // 이하 2026-11-02 — 채널 · 최종 고객사 · 담당자 정보(우리 영업 담당)
+      b.channel === 'AGENCY' && b.end_customer ? '[최종고객] ' + b.end_customer : '',
+      b.rep_name ? '[영업담당] ' + b.rep_name : '',
+      b.rep_phone ? '[영업연락처] ' + b.rep_phone : '',
+      b.rep_email ? '[영업이메일] ' + b.rep_email : '',
     ].filter(Boolean).join('\n'),
     // 견적조건 — 넣으면 문장 목록, 뺐으면 빈 목록(견적서에 견적조건 칸이 없다).
     // 정해지지 않은 옛 견적(conds_on 없음 · 문장 없음)은 보내지 않는다 — 서버가 템플릿 문구를 쓴다
@@ -310,7 +344,9 @@ export function appliedPatch(d) {
   const saas = d.template && d.template.deployment === 'SAAS';
   const blocks = d.blocks.filter((b) => b.block_code !== 'SUMMARY').map((b) => ({
     ...b,
-    items: (b.items || []).map((it) => ({ ...(saas ? withPolicyGroup(it) : it), proposed_price: it.base_price || 0,
+    // SaaS 는 셋업비용(SETUP) 블록만 가격정책 금액으로 시작하고, 나머지(서비스 이용료 등)는 금액 없이 시작한다(2026-10-31 사용자 요청)
+    items: (b.items || []).map((it) => ({ ...(saas ? withPolicyGroup(it) : it),
+      ...(saas && b.block_code !== 'SETUP' ? { base_price: null, proposed_price: 0, amount: 0 } : { proposed_price: it.base_price || 0 }),
       ...(bandUnitOf(it.band) ? { unit: bandUnitOf(it.band) } : {}) })),
     labor: (b.labor || []).map((l) => ({ ...l, proposed_price: l.base_price || 0, month_alloc: l.month_alloc || {} })),
   }));
@@ -348,7 +384,7 @@ export async function openPreview(wiz) {
   const box = m.back.querySelector('.modal');
   box.style.width = '880px';
   box.querySelector('.modal-body').style.padding = '12px';
-  box.querySelector('.modal-foot').prepend(previewControls(frame, box));
+  previewControls(frame, box, () => m.close());
   try {
     const r = await http.previewQuote({
       blocks: toBlocksPayload(s), header: { ...previewHeader(s), quote_no: s.quoteNo || undefined },
@@ -390,6 +426,7 @@ export async function renderStep3(root, state, wiz) {
     if (n) { wiz.patch({}); toast(`서비스에 맞춰 ${n}개 행을 바꿨습니다.`, 'ok'); }
   }
   const policyItems = st0.type.deployment === 'SAAS' ? await loadPolicyItems(solution0) : {};
+  const catalog = st0.type.deployment === 'SAAS' ? await loadSaasCatalog(solution0) : null; // 구성 질문(SaaS)
   // SaaS — 서비스 이용료 행(구간형 품목)의 모듈 이름은 가격정책 용어(기본의 '서비스 이용료')로 쓴다.
   // 어느 서비스인지는 1단계에서 고르고 세부기능이 말해 준다(2026-10-30 사용자 요청 — 예전 'S2C 서비스 이용료')
   const svcTerm = ((policyItems['기본'] || []).find((x) => /서비스 이용료$/.test(x.sub)) || {}).sub;
@@ -422,9 +459,14 @@ export async function renderStep3(root, state, wiz) {
     if (n) wiz.patch({});
   }
 
-  // 입력이 전체 폭을 쓴다 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
+  // 본문(견적 품목 · 견적서 문구) + 오른쪽 견적 요약(읽기만) — 개선안 v2(2026-11-02). 견적서 미리보기는 위쪽 [미리보기] 버튼
   const left = h('div', { style: 'min-width:0' });
-  root.appendChild(left);
+  const sumBox = h('div', { class: 'qz-sum' });
+  const checkBox = h('div', { class: 'qz-check' }); // 발행 전 확인(개선안 v2 4번)
+  const side = h('aside', { class: 'qz-side' }, sumBox, checkBox);
+  root.appendChild(h('div', { class: 'qz-layout' }, left, side));
+  const collapsed = new Set(); // 접은 블록(block_code)
+  const openDocs = new Set();  // 펼친 견적서 문구(PAY · CONDS)
   const preview = { schedule() {} }; // 예전 오른쪽 미리보기 갱신 자리 — 지금은 창으로 연다
 
   const els = {};
@@ -436,6 +478,7 @@ export async function renderStep3(root, state, wiz) {
     set('mdc', c.mdcAmt ? '-' + won(c.mdcAmt) : '0');
     set('monFin', c.monthly ? won(c.monthlyFinal) : '-');
     paintPayPlan(c); // 금액이 바뀌면 결제 방안 금액도 따라 바뀐다
+    paintSide(c);
     if (els.warn) {
       els.warn.textContent = c.laborErrors.length ? '인력투입계획 확인: ' + c.laborErrors.join(' / ') : '';
       els.warn.style.display = c.laborErrors.length ? '' : 'none';
@@ -443,27 +486,92 @@ export async function renderStep3(root, state, wiz) {
   }
   function touched() { wiz.patch({}); syncTotals(recalcBlocks(wiz.get())); preview.schedule(wiz); }
 
+  // 오른쪽 견적 요약 — 읽기만. 특별 DC · 절사 입력은 3단계에서 뺐다(저장된 값은 계산에 그대로 쓴다)
+  function paintSide(c) {
+    const s = wiz.get();
+    const row = (label, v, main) => h('div', { class: 'qz-sum__row' + (main ? ' qz-sum__row--main' : '') }, label, h('b', {}, v));
+    const ru = num(s.round_unit ?? 100000);
+    const meta = [
+      '부가세 별도 · ' + (ru === 100000 ? '십만원 미만 절사' : ru === 10000 ? '만원 미만 절사' : '절사 없음'),
+      c.dcAmt ? `특별 DC -${won(c.dcAmt)}` : null,
+      s.revision > 1 ? `${s.revision}차${s.revisionReason ? ' — ' + s.revisionReason : ''}` : null,
+    ].filter(Boolean);
+    const hasMonthly = c.monthly || (s.blocks || []).some((b) => b.recurring);
+    sumBox.replaceChildren(...[ // replaceChildren 은 null 을 글자로 넣는다 — 걸러서 넘긴다
+      h('div', { class: 'qz-sum__head' }, '견적 요약'),
+      row('일시불', won(c.final), true),
+      hasMonthly ? row('월 사용료', won(c.monthlyFinal)) : null,
+      h('div', { class: 'qz-sum__line' }),
+      h('div', { class: 'qz-sum__meta' }, ...meta.flatMap((t, i) => (i ? [h('br'), t] : [t]))),
+    ].filter(Boolean));
+    paintChecks(s, c);
+  }
+
+  // 발행 전 확인 — 보내기 전에 볼 것을 모아 보인다(읽기만, 막지는 않는다). 개선안 v2 4번(2026-11-02 사용자 승인)
+  //   수신처 · 견적용도 빈칸 / 금액 없는 행 / 견적조건 문장 없음 / 인력투입계획 공수 / 가장 큰 할인율(참고)
+  function paintChecks(s, c) {
+    const short = (list) => list.slice(0, 4).join(' · ') + (list.length > 4 ? ` 외 ${list.length - 4}` : '');
+    const rows = (s.blocks || []).filter((b) => b.block_code !== 'LABOR').flatMap((b) => b.items || []);
+    const items = [];
+    // 5단계 발행을 막는 것 — 여기서 먼저 알린다(2026-11-02 사용자 요청)
+    if (!(s.blocks || []).length) items.push('견적 품목이 비어 있습니다 — 블록을 추가해야 발행할 수 있습니다');
+    else if (!num(c.onetime) && !num(c.monthly)) items.push('금액이 0원입니다 — 금액을 넣어야 발행할 수 있습니다');
+    if (!String(s.basic.customer_name || '').trim()) items.push('수신처가 비어 있습니다');
+    if (!String(s.basic.purpose || '').trim()) items.push('견적용도가 비어 있습니다');
+    const noAmt = rows.filter((r) => num(r.qty) === 0 || !num(r.proposed_price));
+    if (noAmt.length) items.push(`금액 없는 행 ${noAmt.length}건 (${short(noAmt.map((r) => r.name || r.item_code || '이름 없음'))})`);
+    if (condsOn(s) && !(s.conds || []).some((x) => x.text && x.text.trim())) items.push('견적조건 문장이 없습니다 — 견적서에 찍히지 않습니다');
+    for (const e of c.laborErrors || []) items.push('인력투입계획: ' + e);
+    let top = null;
+    for (const r of rows) {
+      const base = num(r.base_price), prop = num(r.proposed_price);
+      if (!base || !prop || prop >= base) continue;
+      const pct = Math.round(((base - prop) / base) * 1000) / 10;
+      if (!top || pct > top.pct) top = { pct, name: r.name || r.item_code };
+    }
+    checkBox.replaceChildren(
+      h('div', { class: 'qz-check__head' + (items.length ? '' : ' is-ok') }, items.length ? `발행 전 확인 ${items.length}건` : '발행 전 확인 — 이상 없음'),
+      ...(items.length || top ? [h('ul', {}, ...items.map((t) => h('li', {}, t)),
+        ...(top ? [h('li', { class: 'is-info' }, `가장 큰 할인율 ${top.pct}% — ${top.name}`)] : []))] : [])); // null 을 넘기면 'null' 글자가 찍힌다
+  }
+
   // ── 블록 그리드 ─────────────────────────────────────────────
   // 견적서 표와 같은 칸 구성으로 칸마다 따로 입력한다(SingleSuite 편집 그리드 — 선택 칸 · 행추가 · 행삭제 · 소계 행).
   //   품목: 구분 · 모듈 · 세부기능 · 수량 · 단위 · 기준단가 · 제안단가 · 제안금액 · 품목코드
   //   인력: 역할(표시명) · 직무(노임단가 팝업) · 등급 · 업무 · 공수 · 기준단가 · 제안단가 · 제안금액
   // 고르는 값(품목 · 직무)은 팝업에서 고르고, 고른 뒤에도 모든 칸을 고칠 수 있다.
-  const ITEM_COLS = [['선택', 44], ['구분', 160], ['모듈', 180], ['세부기능', 360], ['수량', 76], ['단위', 72],
-    ['기준단가 (원)', 122], ['제안단가 (원)', 122], ['제안금액 (원)', 130], ['품목코드', 140]];
+  // 품목코드 칸은 뺐다 — 모듈 칸 아래에 작게 붙인다(개선안 v2)
+  const ITEM_COLS = [['선택', 44], ['구분', 100], ['모듈', 170], ['세부기능', 360], ['수량', 70], ['단위', 64],
+    ['기준단가 (원)', 110], ['할인율', 64], ['제안단가 (원)', 112], ['제안금액 (원)', 120]]; // 할인율 — 계산만(개선안 v2 3번)
   const LABOR_COLS = [['선택', 44], ['역할', 140], ['직무 (노임단가)', 190], ['등급', 90], ['업무', 340], ['공수 (MM)', 76],
     ['기준단가 (원)', 122], ['제안단가 (원)', 122], ['제안금액 (원)', 130]];
 
-  const BAND_COL = ['인원·건수', 170];
+  const BAND_COL = ['인원·건수', 150];
   const itemCols = (rows) => (rows.some((r) => bands[r.item_code])
     ? [...ITEM_COLS.slice(0, 4), BAND_COL, ...ITEM_COLS.slice(4)] : ITEM_COLS);
 
   function rowEl(b, r, isLabor, picked, hasBand) {
     // 수량 0 이거나 단가를 아직 안 넣은 행(템플릿에 없는 금액 — 서비스 이용료 인원·건수 입력 전 등)은 금액 칸을 비운다
-    const amtText = () => (!isLabor && (num(r.qty) === 0 || r.proposed_price == null || r.proposed_price === '') ? '' : won(r.amount || 0));
+    const amtText = () => (!isLabor && (num(r.qty) === 0 || r.proposed_price == null || r.proposed_price === '') ? '-' : won(r.amount || 0));
     const amtCell = h('td', { class: 'ss-cell--amount' }, amtText());
+    // 할인율 — 기준단가 대비 제안단가(입력 없음). 네고 차수에서 얼마 깎았는지 보인다. 같거나 비교할 값이 없으면 '-'
+    const dcText = () => {
+      const base = num(r.base_price);
+      if (!base || r.proposed_price == null || r.proposed_price === '') return '-';
+      const pct = Math.round(((base - num(r.proposed_price)) / base) * 1000) / 10;
+      return pct > 0 ? `${pct}%` : pct < 0 ? `+${-pct}%` : '-';
+    };
+    const dcCell = h('td', { class: 'qz-dc' }, dcText());
+    const paintDc = () => { dcCell.textContent = dcText(); dcCell.classList.toggle('is-off', dcCell.textContent.startsWith('-')); };
+    paintDc();
+    // 수량 0 이거나 금액이 없는 행은 흐리게 — 값이 있는 행이 먼저 보인다
+    const isZero = () => !isLabor && (num(r.qty) === 0 || !num(r.proposed_price));
+    let trEl = null;
     const upd = () => {
       const c = recalcBlocks(wiz.get());
       amtCell.textContent = amtText();
+      paintDc();
+      if (trEl) trEl.classList.toggle('qz-zero', isZero());
       const sub = document.getElementById('sub-' + b.block_code);
       if (sub) sub.textContent = won(b._sub || 0);
       wiz.patch({}); syncTotals(c); preview.schedule(wiz);
@@ -478,17 +586,19 @@ export async function renderStep3(root, state, wiz) {
       { class: 'ss-cellinput', style: 'text-align:right;' + style }));
     // 세부기능 · 업무는 여러 줄 — 줄 수만큼 칸이 늘어난다
     const specKey = isLabor ? 'task' : 'spec';
-    const spec = h('textarea', { class: 'ss-cellinput', style: 'height:auto;resize:vertical;line-height:1.45;padding:4px 6px;text-align:left',
-      oninput: (e) => { r[specKey] = e.target.value; e.target.rows = lines(e.target.value); touched(); } });
+    const spec = h('textarea', { class: 'ss-cellinput qz-spec',
+      oninput: (e) => { r[specKey] = e.target.value; e.target.rows = lines(e.target.value); touched(); } }); // 입력 중에는 다 보인다
     spec.value = r[specKey] || '';
-    spec.rows = lines(spec.value);
+    spec.rows = Math.min(3, lines(spec.value)); // 표가 길어지지 않게 3줄까지 — 누르면 다 보인다
+    spec.addEventListener('focus', () => { spec.rows = lines(spec.value); });
+    spec.addEventListener('blur', () => { spec.rows = Math.min(3, lines(spec.value)); });
     const sel = h('td', {}, h('input', { type: 'checkbox', 'aria-label': '선택', checked: picked.has(r),
       onchange: (e) => { if (e.target.checked) picked.add(r); else picked.delete(r); } }));
     const proposed = money('proposed_price', 'background:var(--primary-weak);color:var(--primary);font-weight:600');
     // SaaS 견적의 구분은 가격정책 항목(기본 / 부가 / 옵션)에서 고른다. 예전 값(서비스이용료 등)은 그대로 한 줄 더 보인다
     const category = () => (wiz.get().type.deployment !== 'SAAS' ? txt('category')
       : td(h('select', { class: 'ss-cellinput', 'aria-label': '구분', style: 'text-align:center',
-        onchange: (e) => { r.category = e.target.value; moduleTd.replaceWith(moduleTd = moduleCell()); touched(); } },
+        onchange: (e) => { r.category = e.target.value; moduleTd.replaceWith(moduleTd = moduleWithCode()); touched(); } },
         ...(r.category ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
         ...(r.category && !POLICY_GROUPS.includes(r.category) ? [h('option', { value: r.category, selected: true }, r.category)] : []),
         ...POLICY_GROUPS.map((g) => h('option', { value: g, selected: r.category === g }, g)))));
@@ -509,7 +619,9 @@ export async function renderStep3(root, state, wiz) {
         ...(r.name && !subs.includes(r.name) ? [h('option', { value: r.name, selected: true }, r.name)] : []),
         ...subs.map((v) => h('option', { value: v, selected: r.name === v }, v))));
     };
-    let moduleTd = isLabor ? null : moduleCell();
+    // 모듈 칸 아래에 품목코드를 작게
+    const moduleWithCode = () => { const t = moduleCell(); if (r.item_code) t.appendChild(h('div', { class: 'qz-code' }, r.item_code)); return t; };
+    let moduleTd = isLabor ? null : moduleWithCode();
     if (isLabor) {
       const roleBtn = h('button', { class: 'ss-cellinput', style: 'text-align:left;cursor:pointer', title: '노임단가에서 직무 선택' },
         r.role_code ? `${r.role_name || r.role_code} ▾` : '직무 선택 ▾');
@@ -528,8 +640,9 @@ export async function renderStep3(root, state, wiz) {
     }
     const variants = bands[r.item_code];
     if (!variants) {
-      return h('tr', {}, sel, category(), moduleTd, td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
-        money('base_price'), proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
+      trEl = h('tr', { class: isZero() ? 'qz-zero' : null }, sel, category(), moduleTd, td(spec), ...(hasBand ? [h('td', {})] : []), numIn('qty'), txt('unit', '', 'center'),
+        money('base_price'), dcCell, proposed, amtCell);
+      return trEl;
     }
     // 구간형 서비스 — 인원·건수 칸에서 [인원 / 건수] 를 고르고 숫자를 넣으면 구간 월 금액을 단가로 채운다. 수량 · 단위는 그대로
     const base = money('base_price');
@@ -568,8 +681,9 @@ export async function renderStep3(root, state, wiz) {
     applyBand(false); // 처음 그릴 때는 구간 안내만 — 이미 고친 제안단가를 덮지 않는다
     const bandCell = h('td', { class: 'ss-cell--input' }, h('div', { style: 'display:flex;gap:4px;align-items:center' }, bandSel, bandIn, bandUnit));
     let unitTd = txt('unit', '', 'center');
-    return h('tr', {}, sel, category(), moduleTd, td(spec), bandCell, numIn('qty'), unitTd,
-      base, proposed, amtCell, h('td', { class: 'ss-cell--link', style: 'font-size:11px' }, r.item_code || ''));
+    trEl = h('tr', { class: isZero() ? 'qz-zero' : null }, sel, category(), moduleTd, td(spec), bandCell, numIn('qty'), unitTd,
+      base, dcCell, proposed, amtCell);
+    return trEl;
   }
 
   function lines(v) { return Math.min(8, Math.max(1, String(v || '').split('\n').length)); }
@@ -607,11 +721,13 @@ export async function renderStep3(root, state, wiz) {
       unknown.length ? 'err' : 'ok');
   }
 
-  function blockCard(b, repaint) {
+  // shared — { cols } 를 주면 표 하나를 같이 쓰는 모드: 카드 대신 [묶음 행, 품목 행 …] 을 돌려준다(개선안 v2 — 품목 블록은 표 하나)
+  function blockCard(b, repaint, shared) {
     const isLabor = b.block_code === 'LABOR';
+    const noPick = b.block_code === 'SETUP' || b.block_code === 'SERVICE';
     const rows = isLabor ? b.labor : b.items;
     const picked = new Set();
-    const cols = isLabor ? LABOR_COLS : itemCols(rows);
+    const cols = shared ? shared.cols : isLabor ? LABOR_COLS : itemCols(rows);
     const hasBand = cols.includes(BAND_COL);
     const gbtn = (label, onclick, cls = 'ss-btn--gridrow') => h('button', { class: 'ss-btn ' + cls, onclick }, label);
 
@@ -661,26 +777,44 @@ export async function renderStep3(root, state, wiz) {
       repaint();
       document.getElementById('blk-' + b.block_code)?.scrollIntoView({ block: 'nearest' });
     };
-    const head = h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${at + 1}. ${b.name}`),
-      b.recurring ? h('span', { class: 'badge badge-yellow' }, '월정액') : null,
-      h('button', { class: 'ss-btn ss-btn--gridrow', style: 'margin-left:8px', disabled: at <= 0, title: '위로', onclick: () => move(-1) }, '▲ 위로'),
-      h('button', { class: 'ss-btn ss-btn--gridrow', disabled: at >= all.length - 1, title: '아래로', onclick: () => move(1) }, '▼ 아래로'),
-      h('div', { class: 'ss-detailbar__spacer' }),
-      gbtn('행추가', addRow), gbtn(isLabor ? '직무 선택' : '품목 선택', pickRows),
-      isLabor ? null : gbtn('엑셀 붙여넣기', () => pasteInto(b, rows, repaint)),
-      gbtn('행삭제', delRows), gbtn('블록 빼기', dropBlock, 'ss-btn--delete'));
+    // 묶음 머리 — 접기 · 번호 · 이름 · 위로/아래로(작은 화살표) · 소계 · 버튼(개선안 v2). 소계는 표 끝 대신 머리에
+    const closed = collapsed.has(b.block_code);
+    const arrow = (d) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="${d}"/></svg>`;
+    const head = h('div', { class: 'qz-group' },
+      h('button', { class: 'qz-caret' + (closed ? ' is-closed' : ''), title: closed ? '펴기' : '접기', html: arrow('m6 9 6 6 6-6'),
+        onclick: () => { if (closed) collapsed.delete(b.block_code); else collapsed.add(b.block_code); repaint(); } }),
+      h('span', { class: 'qz-group__no' }, String(at + 1)),
+      h('span', { class: 'qz-group__name' }, b.name),
+      b.recurring ? h('span', { class: 'qz-tag' }, '월정액') : null,
+      h('span', { class: 'qz-move' },
+        h('button', { disabled: at <= 0, title: '위로', html: arrow('m6 15 6-6 6 6'), onclick: () => move(-1) }),
+        h('button', { disabled: at >= all.length - 1, title: '아래로', html: arrow('m6 9 6 6 6-6'), onclick: () => move(1) })),
+      h('span', { class: 'qz-group__sum' }, b.recurring ? '월 소계' : '소계', h('b', { id: 'sub-' + b.block_code }, won(b._sub || 0))),
+      h('span', { class: 'qz-group__tools' },
+        // 셋업비용 · 서비스 이용료 블록은 품목 선택 · 엑셀 붙여넣기를 두지 않는다(2026-10-31 사용자 요청) — 행추가 후 모듈 칸에서 고른다
+        gbtn('행추가', addRow), noPick ? null : gbtn(isLabor ? '직무 선택' : '품목 선택', pickRows),
+        isLabor || noPick ? null : gbtn('엑셀 붙여넣기', () => pasteInto(b, rows, repaint)),
+        gbtn('행삭제', delRows), gbtn('블록 빼기', dropBlock, 'ss-btn--delete')));
+
+    const emptyText = isLabor ? '[직무 선택] 으로 노임단가 직무를 넣거나 [행추가] 로 직접 입력하세요.'
+      : noPick ? '[행추가] 로 행을 넣고 모듈 칸에서 고르세요.' : '[품목 선택] 으로 가격정책 품목을 넣거나 [행추가] 로 직접 입력하세요.';
+    if (shared) {
+      const trs = [h('tr', { class: 'qz-grouprow', id: 'blk-' + b.block_code }, h('td', { colspan: cols.length, class: 'qz-grouptd' }, head))];
+      if (!closed) {
+        rows.forEach((r) => trs.push(rowEl(b, r, isLabor, picked, hasBand)));
+        if (!rows.length) trs.push(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' }, emptyText)));
+        // 셋업비용 등 비-LABOR 블록의 인력 행은 금액이 아니라 인력투입계획 부록용 공수 배분 — 4단계(인건비)에서 고친다
+        if (b.labor && b.labor.length) {
+          trs.push(h('tr', {}, h('td', { colspan: cols.length, style: 'text-align:left;color:#64748B;font-weight:400' },
+            `인력투입계획 부록용 공수 배분 ${b.labor.length}건이 있습니다. 공수는 다음 단계(인건비)에서 입력합니다.`)));
+        }
+      }
+      return trs;
+    }
 
     const tbody = h('tbody');
     rows.forEach((r) => tbody.appendChild(rowEl(b, r, isLabor, picked, hasBand)));
-    if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' },
-      isLabor ? '[직무 선택] 으로 노임단가 직무를 넣거나 [행추가] 로 직접 입력하세요.' : '[품목 선택] 으로 가격정책 품목을 넣거나 [행추가] 로 직접 입력하세요.')));
-    // 소계 행 — 견적서와 같은 자리
-    const amtIdx = cols.findIndex(([t]) => t.startsWith('제안금액'));
-    tbody.appendChild(h('tr', { style: 'background:#F4F9E3;font-weight:600' },
-      h('td', { colspan: amtIdx, style: 'text-align:center' }, `${b.name} 소계${b.recurring ? ' (월)' : ''}`),
-      h('td', { class: 'ss-cell--amount', id: 'sub-' + b.block_code }, won(b._sub || 0)),
-      ...(cols.length - amtIdx - 1 > 0 ? [h('td', { colspan: cols.length - amtIdx - 1 })] : [])));
+    if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty' }, emptyText)));
 
     const width = cols.reduce((a, [, w]) => a + w, 0);
     const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${width}px;min-width:100%` },
@@ -688,11 +822,11 @@ export async function renderStep3(root, state, wiz) {
       h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
       tbody);
 
-    const card = h('div', { class: 'card', id: 'blk-' + b.block_code, style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' }, head,
-      h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' }, table));
+    const card = h('div', { class: 'qz-block', id: 'blk-' + b.block_code, style: 'scroll-margin-top:12px' }, head,
+      closed ? null : h('div', { class: 'qz-block__grid' }, h('div', { class: 'ss-gridwrap', style: 'overflow:auto' }, table)));
     // 셋업비용 등 비-LABOR 블록의 인력 행은 금액이 아니라 인력투입계획 부록용 공수 배분 — 4단계(인건비)에서 고친다
-    if (!isLabor && b.labor && b.labor.length) {
-      card.appendChild(h('div', { class: 'banner inf', style: 'margin-top:8px' },
+    if (!closed && !isLabor && b.labor && b.labor.length) {
+      card.appendChild(h('div', { class: 'banner inf', style: 'margin:0 12px 12px' },
         h('div', {}, `인력투입계획 부록용 공수 배분 ${b.labor.length}건이 있습니다. 공수는 다음 단계(인건비)에서 입력합니다.`)));
     }
     return card;
@@ -759,6 +893,7 @@ export async function renderStep3(root, state, wiz) {
       if (sel.value === '__PAY' || sel.value === '__COND') {
         if (sel.value === '__PAY') setPay({ enabled: true });
         else wiz.patch({ conds_on: true });
+        openDocs.add(sel.value === '__PAY' ? 'PAY' : 'CONDS'); // 다시 넣으면 펼쳐서 보인다
         repaintLeft();
         document.getElementById(sel.value === '__PAY' ? 'blk-PAY' : 'blk-CONDS')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
@@ -770,42 +905,187 @@ export async function renderStep3(root, state, wiz) {
       repaintLeft();
       document.getElementById('blk-' + d.code)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-    const chip = (label, id) => h('button', {
-      class: 'ss-chip', style: 'cursor:pointer;border:1px solid #DCE3EC;background:#F8FAFC',
-      title: '이 블록으로 가기', onclick: () => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    }, label);
-    const chips = blocks.map((x, i) => chip(`${i + 1}. ${x.name}`, 'blk-' + x.block_code));
-    if (payOn()) chips.push(chip(`${blocks.length + 1}. 결제 방안`, 'blk-PAY'));
-    if (condsOn(wiz.get())) chips.push(chip(`${blocks.length + (payOn() ? 2 : 1)}. 견적조건`, 'blk-CONDS'));
-    return h('div', { class: 'card', style: 'margin-bottom:12px;padding:10px 12px' },
-      h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap;gap:8px' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적 구성'),
-        h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center' }, ...chips),
-        blocks.length ? null : h('span', { class: 'ss-detailbar__note' }, '견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 · 개발인건비 등)을 먼저 추가하세요.'),
-        h('div', { class: 'ss-detailbar__spacer' }), sel, btn));
+    // 예전 '견적 구성' 칩 줄은 뺐다 — 순서 · 소계는 묶음 머리 번호와 오른쪽 견적 요약이 대신한다(개선안 v2)
+    sel.style.height = '30px'; btn.style.height = '30px';
+    return h('div', { class: 'qz-cardhead' },
+      // 필수 — 블록 · 품목이 없거나 금액이 0원이면 발행할 수 없다(5단계 발행 전 확인)
+      h('span', { class: 'qz-cardhead__title', style: 'white-space:nowrap', title: '블록과 품목을 넣어야 발행할 수 있습니다' }, '견적 품목', h('span', { class: 'req-mark' }, '*')),
+      blocks.length ? null : h('span', { class: 'ss-detailbar__note' }, '견적서에 넣을 블록(셋업비용 · 솔루션 견적 · 서비스 이용료 · 개발인건비 등)을 먼저 추가하세요.'),
+      h('div', { class: 'ss-detailbar__spacer' }), sel, btn);
+  }
+
+  // ── 구성 질문(SaaS) — 개선안 v2 2번(2026-11-02 사용자 승인) ──────────────
+  // 답하면 아래 품목 행이 바뀐다. 표에서 직접 고친 값은 질문을 다시 건드리기 전까지 그대로 둔다.
+  //   서비스     — 서비스 이용료 · '(S2C)' 붙은 품목을 고른 서비스로(syncService)
+  //   요금 기준  — 서비스 이용료 행의 인원 / 건수 + 숫자 → 가격정책 구간 금액
+  //   독립인프라 — 사용: 고른 서비스의 독립인프라 행을 넣는다(금액은 비움) / 사용 안 함: 뺀다
+  //   내부 연계  — 내부시스템 연계 품목 설명의 ■ 항목 중 고른 것만 세부기능에 남긴다
+  function questionsCard() {
+    if (!catalog || !catalog.services.length) return null;
+    const st = wiz.get();
+    const allRows = () => (wiz.get().blocks || []).flatMap((b) => (b.items || []).map((r) => ({ b, r })));
+    const svcCode = quoteService(st, catalog.services);
+    const svc = catalog.services.find((x) => x.code === svcCode);
+    const field = (label, ...ctrl) => h('div', { class: 'qz-q__item' }, h('label', {}, label), ...ctrl);
+    const dis = (el, on) => { if (on || wiz.readOnly) el.disabled = true; return el; };
+
+    // 서비스
+    const svcSel = dis(h('select', { class: 'ss-select', onchange: (e) => {
+      wiz.patch({ type: { service: e.target.value } });
+      const n = syncService(wiz.get(), e.target.value, catalog);
+      // 서비스 이용료 행 — 이름은 가격정책 용어 그대로, 이미 넣은 인원 · 건수가 있으면 새 서비스의 구간 금액으로
+      for (const b of wiz.get().blocks || []) for (const it of b.items || []) {
+        if (!bands[it.item_code]) continue;
+        if (svcTerm) it.name = svcTerm;
+        const v = it.band && it.band_qty != null && it.band_qty !== '' ? bandOf(bands[it.item_code], it.band, num(it.band_qty)) : null;
+        if (v) { it.base_price = num(v.price); it.proposed_price = num(v.price); }
+      }
+      repaintLeft();
+      if (n) toast(`서비스에 맞춰 ${n}개 행을 바꿨습니다.`, 'ok');
+    } }, ...(svcCode ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
+    ...catalog.services.map((x) => h('option', { value: x.code, selected: x.code === svcCode }, `${x.label} — ${x.item.spec || ''}`))));
+
+    // 요금 기준 — 서비스 이용료 행(구간형)
+    const bandHit = allRows().find(({ r }) => bands[r.item_code]);
+    const bandRow = bandHit && bandHit.r;
+    const variants = bandRow ? bands[bandRow.item_code] : [];
+    const kinds = Object.keys(BAND_KINDS).filter((k) => variants.some((v) => (v.key === 'COUNT' ? 'COUNT' : 'USER') === k));
+    const applyBandQ = (band, qty) => {
+      if (!bandRow) return;
+      bandRow.band = band || null;
+      bandRow.band_qty = qty === '' || qty == null ? null : num(qty);
+      if (bandRow.band) bandRow.unit = bandUnitOf(bandRow.band);
+      const v = bandRow.band && bandRow.band_qty != null ? bandOf(variants, bandRow.band, bandRow.band_qty) : null;
+      bandRow.base_price = v ? num(v.price) : null;
+      bandRow.proposed_price = v ? num(v.price) : null;
+      repaintLeft();
+    };
+    const kindSel = dis(h('select', { class: 'ss-select', style: 'width:90px;flex:none', onchange: (e) => applyBandQ(e.target.value, bandRow.band_qty ?? 1) },
+      ...(bandRow && bandRow.band ? [] : [h('option', { value: '', selected: true, disabled: true }, '선택')]),
+      ...kinds.map((k) => h('option', { value: k, selected: bandRow && bandRow.band === k }, BAND_KINDS[k][0]))), !bandRow);
+    const qtyIn = dis(numInput(bandRow ? bandRow.band_qty ?? '' : '', () => {}, { class: 'ss-input', style: 'text-align:right;flex:1;min-width:0',
+      onchange: (e) => applyBandQ(bandRow.band || kinds[0], String(e.target.value).replace(/,/g, '')) }), !bandRow || !bandRow.band);
+    const qtyUnit = h('span', { style: 'align-self:center;font-size:13px;width:14px' }, bandRow && bandRow.band ? BAND_KINDS[bandRow.band][1] : '');
+
+    // 독립인프라
+    const infraHits = allRows().filter(({ r }) => /^독립인프라/.test(String(r.name || '')));
+    const infraItem = svc && catalog.items.find((x) => x.name === `독립인프라(${svc.label})`);
+    const infraSel = dis(h('select', { class: 'ss-select', onchange: (e) => {
+      if (e.target.value === 'N') {
+        for (const { b, r } of infraHits) { const i = b.items.indexOf(r); if (i >= 0) b.items.splice(i, 1); }
+      } else if (infraItem) {
+        // 서비스 이용료 행이 있는 블록(없으면 첫 월정액 블록)에 넣는다 — 금액은 비움(셋업비용 밖 규칙)
+        const blk = (bandHit && bandHit.b) || (wiz.get().blocks || []).find((b) => b.recurring);
+        if (!blk) { toast('월정액 블록(서비스 이용료)을 먼저 넣으세요.', 'err'); return repaintLeft(); }
+        blk.items = blk.items || [];
+        blk.items.push({ ...withPolicyGroup(itemRow(infraItem)), base_price: null, proposed_price: 0, amount: 0 });
+      }
+      repaintLeft();
+    } }, h('option', { value: 'Y', selected: infraHits.length > 0 }, '사용'), h('option', { value: 'N', selected: !infraHits.length }, '사용 안 함')),
+    !infraHits.length && !infraItem);
+
+    // 내부 연계 — 품목 설명의 ■ 항목
+    const ifHit = allRows().find(({ r }) => r.item_code === 'PRO_SAAS_IF' || r.name === '내부시스템 연계');
+    const ifItem = catalog.items.find((x) => x.code === 'PRO_SAAS_IF');
+    const sections = [];
+    for (const line of String((ifItem && ifItem.spec) || '').split('\n')) {
+      if (/^\s*■/.test(line)) sections.push({ title: line.replace(/^\s*■\s*/, '').trim(), lines: [line] });
+      else if (sections.length) sections[sections.length - 1].lines.push(line);
+    }
+    const ifSpec = ifHit ? String(ifHit.r.spec || '') : '';
+    const checks = sections.map((sec) => {
+      const cb = dis(h('input', { type: 'checkbox', checked: !!ifHit && ifSpec.includes(sec.title), onchange: () => {
+        const on = checks.filter(([c]) => c.checked).map(([, x]) => x);
+        ifHit.r.spec = on.map((x) => x.lines.join('\n')).join('\n');
+        repaintLeft();
+      } }), !ifHit);
+      return [cb, sec];
+    });
+
+    return h('div', { class: 'qz-card' },
+      h('div', { class: 'qz-cardhead' }, h('span', { class: 'qz-cardhead__title' }, '구성 질문'),
+        h('span', { class: 'ss-detailbar__note' }, '답하면 아래 품목이 바뀝니다. 표에서 직접 고친 값은 그대로 둡니다.')),
+      h('div', { class: 'qz-q' },
+        field('서비스', svcSel),
+        field('요금 기준', h('div', { class: 'qz-q__row' }, kindSel, qtyIn, qtyUnit)),
+        field('독립인프라', infraSel),
+        field('내부 연계', sections.length
+          ? h('div', { class: 'qz-checks' }, ...checks.map(([cb, sec]) => h('label', {}, cb, sec.title.replace(/\(.*\)$/, ''))))
+          : h('span', { class: 'ss-detailbar__note' }, '연계 항목이 없습니다'))));
+  }
+
+  // 품목 블록은 표 하나에 묶음 행으로(머리 칸은 한 번만). 개발인건비(LABOR)는 칸이 달라 그 자리에 따로 표를 둔다
+  function blockTables() {
+    const blocks = wiz.get().blocks;
+    const cols = itemCols(blocks.filter((b) => b.block_code !== 'LABOR').flatMap((b) => b.items || []));
+    const specAt = cols.findIndex(([t]) => t === '세부기능');
+    const minW = cols.reduce((a, [, w], i) => a + (i === specAt ? 200 : w), 0);
+    const table = (trs) => h('div', { class: 'qz-block__grid' }, h('div', { class: 'ss-gridwrap', style: 'overflow:auto' },
+      h('table', { class: 'ss-grid ss-grid--sized qz-onetable', style: `width:100%;min-width:${minW}px` },
+        // 세부기능 칸은 너비를 두지 않는다 — 남는 폭을 받아 표가 화면 폭에 맞는다
+        h('colgroup', {}, ...cols.map(([, w], i) => h('col', { style: i === specAt ? '' : `width:${w}px` }))),
+        h('thead', {}, h('tr', {}, ...cols.map(([t]) => h('th', {}, t)))),
+        h('tbody', {}, ...trs))));
+    const parts = [];
+    let cur = null;
+    for (const b of blocks) {
+      if (b.block_code === 'LABOR') {
+        if (cur) { parts.push(table(cur)); cur = null; }
+        parts.push(blockCard(b, repaintLeft));
+        continue;
+      }
+      (cur = cur || []).push(...blockCard(b, repaintLeft, { cols }));
+    }
+    if (cur) parts.push(table(cur));
+    return parts;
   }
 
   function repaintLeft() {
     const c = recalcBlocks(wiz.get());
     left.replaceChildren();
-    left.appendChild(blockBar());
-    for (const b of wiz.get().blocks) left.appendChild(blockCard(b, repaintLeft));
+    const q = questionsCard();
+    if (q) left.appendChild(q);
+    // 결제 방안은 견적 품목 카드 안 맨 아래 묶음으로(블록들 다음 번호) — 견적서 문구 카드에는 견적조건만
+    const nBlocks = wiz.get().blocks.length;
+    els.payPlan = null; els.payNote = null;
+    left.appendChild(h('div', { class: 'qz-card' }, blockBar(), ...blockTables(), payOn() ? payPlanCard(nBlocks + 1, 'group') : null));
     // 견적서 순서대로 번호 — 블록들 다음 결제 방안(넣는 경우), 그다음 견적조건
     const n = wiz.get().blocks.length;
     const payNo = payOn() ? n + 1 : null;
     const condNo = condsOn(wiz.get()) ? n + (payOn() ? 2 : 1) : null;
     // 옵션(서버이중화 · 계열사 추가 등 규칙 마스터 연동) 안내 칸은 뺐다 — 기능이 생기면 그때 넣는다
     // 견적서와 같은 순서 — 결제 방안 다음에 견적조건
-    if (payNo) left.appendChild(payPlanCard(payNo)); else els.payPlan = null;
-    if (condNo) left.appendChild(condCard(condNo));
-    left.appendChild(summaryCard(c));
+    if (condNo) left.appendChild(docsCard(null, condNo));
+    // 합계 표(소계 · 특별 DC · 절사 · 부가세)는 화면에서 뺐다(2026-11-02 사용자 요청) — 금액은 5단계 견적 요약 · 미리보기에서 본다.
+    // 저장된 특별 DC · 절사 값은 그대로 계산에 쓴다. 인력투입계획 경고 줄만 남긴다. summaryCard 는 다시 쓸 때를 위해 둔다
+    // 인력투입계획 경고는 오른쪽 '발행 전 확인' 에 함께 보인다(els.warn 은 두지 않는다)
+    syncTotals(c);
     wiz.patch({});
     preview.schedule(wiz);
   }
 
+  // 견적서 문구 — 결제 방안 · 견적조건은 접힌 요약 줄. 누르면 그 자리에서 펼쳐 고친다(개선안 v2)
+  function docsCard(payNo, condNo) {
+    const row = (key, no, name, summary, build) => {
+      const open = openDocs.has(key);
+      const line = h('div', { class: 'qz-doc', onclick: () => { if (open) openDocs.delete(key); else openDocs.add(key); repaintLeft(); } },
+        h('span', { class: 'qz-group__no' }, String(no)), h('span', { class: 'qz-doc__name' }, name),
+        h('span', { class: 'qz-doc__sum' }, open ? '' : summary), h('span', { class: 'qz-doc__open' }, open ? '접기 ▴' : '펼치기 ▾'));
+      return h('div', {}, line, open ? build() : null);
+    };
+    const pp = payState();
+    const r = pp.ratio ?? 50;
+    const conds = (wiz.get().conds || []).filter((c) => c.text && c.text.trim());
+    return h('div', { class: 'qz-card' },
+      h('div', { class: 'qz-cardhead', style: 'border-bottom:0' }, h('span', { class: 'qz-cardhead__title' }, '견적서 문구'),
+        h('span', { class: 'ss-detailbar__note' }, '누르면 펼쳐서 고칩니다')),
+      payNo ? row('PAY', payNo, '결제 방안', `셋업비용 계약체결 ${r}% / 구축완료 ${100 - r}%${Array.isArray(pp.rows) && pp.rows.length ? ' · 직접 고친 문구' : ''}`, () => payPlanCard(payNo, true)) : null,
+      condNo ? row('CONDS', condNo, '견적조건', conds.length ? `${conds.length}문장 — ${conds[0].text}` : '문장 없음 — 견적서에 찍히지 않습니다', () => condCard(condNo, true)) : null);
+  }
+
   // 견적조건 — 템플릿 조건셋으로 채워지고, 여기서 문구를 고치거나 줄을 더한다.
   // 견적서 하단 "▣ 견적조건" 블록이 이 배열을 그대로 싣는다.
-  function condCard(no) {
+  function condCard(no, embedded) {
     const conds = wiz.get().conds || [];
     const list = h('div', {});
     const touch = () => { wiz.patch({ conds }); preview.schedule(wiz); };
@@ -830,9 +1110,9 @@ export async function renderStep3(root, state, wiz) {
       empty.remove();
       const c = { text: '' }; conds.push(c); list.appendChild(rowOf(c)); touch();
     });
-    return h('div', { class: 'card', id: 'blk-CONDS', style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' },
+    return h('div', { class: embedded ? '' : 'card', id: 'blk-CONDS', style: (embedded ? 'padding:0 12px 12px' : 'margin-bottom:12px;padding:10px 12px') + ';scroll-margin-top:12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
-        h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 견적조건`),
+        embedded ? null : h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 견적조건`),
         h('span', { class: 'ss-detailbar__note' }, '견적서 하단에 그대로 인쇄됩니다'),
         h('div', { class: 'ss-detailbar__spacer' }), add,
         // 빼도 문장은 남겨 둔다 — 블록 추가에서 다시 넣으면 그대로 돌아온다
@@ -859,7 +1139,7 @@ export async function renderStep3(root, state, wiz) {
   };
 
   // 결제 방안을 넣는 견적에서만 그린다(repaintLeft). 빼면 맨 위 [블록 추가] 목록에 '결제 방안' 이 나온다
-  function payPlanCard(no) {
+  function payPlanCard(no, embedded) {
     const pp = payState();
     const picked = new Set();
     const gbtn = (label, onclick) => h('button', { class: 'ss-btn ss-btn--gridrow', onclick }, label);
@@ -877,11 +1157,7 @@ export async function renderStep3(root, state, wiz) {
         repaintLeft();
         toast(`계약체결 ${v}% / 구축완료 ${100 - v}% 로 다시 만들었습니다.`, 'ok');
       } });
-    const bar = h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap' },
-      h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 결제 방안`),
-      h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '계약체결 시', ratio, '%'),
-      h('div', { class: 'ss-detailbar__spacer' }),
-      ...([
+    const tools = [
         gbtn('행추가', () => { const rows = materialize(); rows.push(['', '', '', '']); setPay({ rows }); repaintLeft(); }),
         gbtn('행삭제', () => {
           if (!picked.size) return toast('삭제할 행을 선택하세요.', 'err');
@@ -891,8 +1167,37 @@ export async function renderStep3(root, state, wiz) {
         gbtn('기본값으로', () => { setPay({ rows: null }); repaintLeft(); toast('금액과 비율로 기본 문구를 다시 만들었습니다.', 'ok'); }),
         // 빼면 견적서에서 결제 방안 표가 빠진다. 다시 넣을 때는 맨 위 [블록 추가] 에서 '결제 방안'
         h('button', { class: 'ss-btn ss-btn--delete', onclick: () => { setPay({ enabled: false }); repaintLeft(); toast('결제 방안을 뺐습니다. 맨 위 [블록 추가] 에서 다시 넣을 수 있습니다.', 'ok'); } }, '블록 빼기'),
-      ]));
-    const card = h('div', { class: 'card', id: 'blk-PAY', style: 'margin-bottom:12px;padding:10px 12px;scroll-margin-top:12px' }, bar);
+    ];
+    const ratioLabel = h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:' + (embedded ? '4px' : '12px') }, '계약체결 시', ratio, '%');
+    // group — 견적 품목 카드 안의 묶음(2026-11-02 사용자 요청 "결제방안도 견적 품목으로"). 머리 줄은 다른 블록과 같은 모양
+    if (embedded === 'group') {
+      const closed = collapsed.has('PAY');
+      const head = h('div', { class: 'qz-group', style: 'border-top:2px solid var(--ss-bd)' },
+        h('button', { class: 'qz-caret' + (closed ? ' is-closed' : ''), title: closed ? '펴기' : '접기',
+          html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg>',
+          onclick: () => { if (closed) collapsed.delete('PAY'); else collapsed.add('PAY'); repaintLeft(); } }),
+        h('span', { class: 'qz-group__no' }, String(no)), h('span', { class: 'qz-group__name' }, '결제 방안'), ratioLabel,
+        h('span', { class: 'qz-group__sum' }), h('span', { class: 'qz-group__tools' }, ...tools));
+      const blk = h('div', { class: 'qz-block', id: 'blk-PAY', style: 'scroll-margin-top:12px' }, head);
+      if (closed) return blk;
+      const body = h('div', { class: 'qz-block__grid' });
+      blk.appendChild(body);
+      const tbody = h('tbody');
+      els.payPlan = { tbody, picked };
+      paintPayPlan(recalcBlocks(wiz.get()));
+      body.appendChild(h('div', { class: 'ss-gridwrap', style: 'overflow:auto' },
+        h('table', { class: 'ss-grid ss-grid--sized', style: `width:${PAY_COLS.reduce((x, [, w]) => x + w, 0)}px;min-width:100%` },
+          h('colgroup', {}, ...PAY_COLS.map(([, w]) => h('col', { style: `width:${w}px` }))),
+          h('thead', {}, h('tr', {}, ...PAY_COLS.map(([t]) => h('th', {}, t)))),
+          tbody)));
+      body.appendChild(els.payNote = h('div', { class: 'ss-detailbar__note', style: 'margin-top:6px' }));
+      paintPayNote();
+      return blk;
+    }
+    const bar = h('div', { class: 'ss-detailbar', style: 'margin-top:0;flex-wrap:wrap' },
+      embedded ? null : h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, `▣ ${no}. 결제 방안`),
+      ratioLabel, h('div', { class: 'ss-detailbar__spacer' }), ...tools);
+    const card = h('div', { class: embedded ? '' : 'card', id: 'blk-PAY', style: (embedded ? 'padding:0 12px 12px' : 'margin-bottom:12px;padding:10px 12px') + ';scroll-margin-top:12px' }, bar);
     const tbody = h('tbody');
     els.payPlan = { tbody, picked };
     paintPayPlan(recalcBlocks(wiz.get()));

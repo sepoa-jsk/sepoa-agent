@@ -73,41 +73,53 @@ export function openModal({ title, body, footer }) {
   return { close: () => back.remove(), back };
 }
 
-// 견적서 미리보기 창 조절 — [−] 배율 [+] 로 글자 · 표를 키우고 줄이고(50~200%, 배율을 누르면 100%),
-// [창 크게] 로 창을 화면 가득 넓힌다. 배율은 이 브라우저에 기억한다. 창 아래 줄(footer)에 넣는다.
-const ZOOM_KEY = 'quote2:preview-zoom';
-export function previewControls(frame, box) {
-  let zoom = 1;
-  try { zoom = Number(localStorage.getItem(ZOOM_KEY)) || 1; } catch { /* 기억 못 해도 된다 */ }
-  const pct = h('button', { class: 'btn', title: '눌러서 100%', style: 'min-width:58px' });
-  const apply = () => {
-    pct.textContent = Math.round(zoom * 100) + '%';
-    const doc = frame.contentDocument;
-    if (doc && doc.documentElement) doc.documentElement.style.zoom = String(zoom);
-  };
-  const set = (z) => {
-    zoom = Math.min(2, Math.max(0.5, Math.round(z * 10) / 10));
-    try { localStorage.setItem(ZOOM_KEY, String(zoom)); } catch { /* 무시 */ }
-    apply();
-  };
-  frame.addEventListener('load', apply); // 내용을 다시 그리면(srcdoc) 배율을 다시 건다
-  pct.onclick = () => set(1);
-  // 창 크기 — 높이를 쥔 것이 iframe 자신(height)이거나 감싼 상자(flex)다
+// 견적서 미리보기 창 버튼 — 창 머리 줄 오른쪽에 [—] 최소화 · [□] 최대화 · [×] 닫기 (2026-10-31, 배율 버튼은 뺐다).
+//   최소화: 내용 · 아래 줄을 숨기고 머리 줄만 화면 오른쪽 아래에 둔다(뒤 화면을 보고 누를 수 있게). 다시 누르면 돌아온다.
+//   최대화: 창을 화면 가득 넓힌다. 다시 누르면 처음 크기.
+const WIN_ICON = {
+  min: '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 7h10" stroke="currentColor" stroke-width="1.2"/></svg>',
+  max: '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="2.5" y="2.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+  restore: '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="2.5" y="4.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 4.5V2.5h7v7h-2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
+  close: '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 2.5l9 9M11.5 2.5l-9 9" stroke="currentColor" stroke-width="1.2"/></svg>',
+};
+export function previewControls(frame, box, close) {
+  const back = box.parentElement;
+  const head = box.querySelector('.modal-head');
+  const parts = [box.querySelector('.modal-body'), box.querySelector('.modal-foot')].filter(Boolean);
+  // 높이를 쥔 것이 iframe 자신(height)이거나 감싼 상자(flex)다
   const tall = frame.style.height ? frame : frame.parentElement;
   const orig = { width: box.style.width, height: tall.style.height };
-  let wide = false;
-  const wideBtn = h('button', { class: 'btn' }, '창 크게');
-  wideBtn.onclick = () => {
-    wide = !wide;
-    box.style.width = wide ? '96vw' : orig.width;
-    box.style.maxWidth = wide ? '96vw' : '';
-    tall.style.height = wide ? 'calc(100vh - 190px)' : orig.height; // 머리 · 아래 줄이 화면 안에 남게
-    wideBtn.textContent = wide ? '창 작게' : '창 크게';
-  };
-  apply();
-  return h('span', { style: 'display:inline-flex;gap:4px;align-items:center;margin-right:auto' },
-    h('button', { class: 'btn', title: '축소', onclick: () => set(zoom - 0.1) }, '−'), pct,
-    h('button', { class: 'btn', title: '확대', onclick: () => set(zoom + 0.1) }, '+'), wideBtn);
+  let max = false;
+  let min = false;
+  const btn = (title, icon, onclick) => h('button', { type: 'button', title, 'aria-label': title, html: icon, onclick,
+    style: 'width:40px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;background:none;color:var(--ss-ink-2,#475569);cursor:pointer;border-radius:4px',
+    onmouseenter: (e) => { e.currentTarget.style.background = title === '닫기' ? '#E81123' : '#EEF2F6'; if (title === '닫기') e.currentTarget.style.color = '#fff'; },
+    onmouseleave: (e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--ss-ink-2,#475569)'; } });
+  const minBtn = btn('최소화', WIN_ICON.min, () => {
+    min = !min;
+    parts.forEach((el) => { el.style.display = min ? 'none' : ''; });
+    back.style.background = min ? 'transparent' : '';
+    back.style.pointerEvents = min ? 'none' : '';
+    back.style.alignItems = min ? 'flex-end' : '';
+    back.style.justifyContent = min ? 'flex-end' : '';
+    back.style.padding = min ? '0 24px 24px 0' : '';
+    box.style.pointerEvents = 'auto';
+    box.style.width = min ? '420px' : (max ? '96vw' : orig.width);
+    minBtn.title = min ? '원래 크기' : '최소화';
+  });
+  const maxBtn = btn('최대화', WIN_ICON.max, () => {
+    if (min) minBtn.click();
+    max = !max;
+    box.style.width = max ? '96vw' : orig.width;
+    box.style.maxWidth = max ? '96vw' : '';
+    tall.style.height = max ? 'calc(100vh - 190px)' : orig.height; // 머리 · 아래 줄이 화면 안에 남게
+    maxBtn.innerHTML = max ? WIN_ICON.restore : WIN_ICON.max;
+    maxBtn.title = max ? '이전 크기' : '최대화';
+  });
+  head.style.display = 'flex';
+  head.style.alignItems = 'center';
+  head.style.paddingRight = '8px';
+  head.appendChild(h('span', { style: 'display:inline-flex;gap:2px;margin-left:auto' }, minBtn, maxBtn, btn('닫기', WIN_ICON.close, close)));
 }
 
 export function loading(text = '불러오는 중...') {

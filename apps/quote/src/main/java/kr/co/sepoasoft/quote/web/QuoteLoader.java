@@ -43,6 +43,7 @@ public class QuoteLoader {
         Object qid = quote.get("id");
         quote.put("conditions", db.safeJson(quote.get("conditions")));
         quote.put("pay_plan", db.safeJson(quote.get("pay_plan"))); // 견적별 결제 방안(V6) — 없으면 null
+        if (quote.containsKey("source_mail")) quote.put("source_mail", db.safeJson(quote.get("source_mail"))); // 근거 메일(V14)
         List<Map<String, Object>> sections = db.query(
                 "SELECT * FROM sq_quote_sections WHERE quote_id = ? ORDER BY sort, id", qid);
         if (!sections.isEmpty()) {

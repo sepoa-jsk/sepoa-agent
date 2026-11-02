@@ -93,7 +93,9 @@ public class QuoteController {
         List<Map<String, Object>> rows = db.query(
                 "SELECT q.*, u.name AS created_by_name"
                         + " FROM sq_quotes q LEFT JOIN sq_users u ON u.id = q.created_by "
-                        + where + " ORDER BY q.id DESC LIMIT ? OFFSET ?",
+                        // 차수(V11)가 있으면 같은 건(1차 · 2차 …)끼리 붙여서, 높은 차수가 위로
+                        + where + (hasRevision() ? " ORDER BY COALESCE(q.base_quote_id, q.id) DESC, q.revision DESC" : " ORDER BY q.id DESC")
+                        + " LIMIT ? OFFSET ?",
                 pageParams.toArray());
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("total", cnt);
@@ -200,6 +202,72 @@ public class QuoteController {
     public ResponseEntity<Map<String, Object>> copy(@PathVariable String id, HttpServletRequest req) {
         Map<String, Object> q = loader.load(Js.number(id));
         if (q == null) throw ApiException.notFound();
+        Map<String, Object> b = copyBody(q);
+        Map<String, Object> result = calcFor(b, true);
+        long newId = writer.create(b, result, true, AccessInterceptor.currentUser(req).id());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("quote", loader.load(newId)));
+    }
+
+    /**
+     * 차수 추가(V11) — 네고 요청이 오면 고른 견적의 내용으로 다음 차수를 만든다.
+     * 번호는 1차 번호 + '-차수'(QT20261031_001-2), 작성중 · 견적일 오늘 · 유효일 +30일. 내용 복사 규칙은 복사와 같다.
+     * 어느 차수에서 만들든 그 건의 마지막 차수 + 1 이 된다.
+     * 본문 {@code reason} — 차수 추가 사유(필수, 500자까지, V13 revision_reason).
+     */
+    @PostMapping("/{id}/revise")
+    public ResponseEntity<Map<String, Object>> revise(@PathVariable String id,
+            @RequestBody(required = false) Map<String, Object> body, HttpServletRequest req) {
+        if (!hasRevision()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_NOT_READY", "DB 변경(V11 — 견적 차수 칸)이 아직 적용되지 않았습니다.");
+        }
+        if (!hasColumn("revision_reason")) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_NOT_READY", "DB 변경(V13 — 차수 추가 사유 칸)이 아직 적용되지 않았습니다.");
+        }
+        String reason = body == null || body.get("reason") == null ? "" : String.valueOf(body.get("reason")).strip();
+        if (reason.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_REQUIRED", "차수 추가 사유를 넣으세요.");
+        if (reason.length() > 500) throw new ApiException(HttpStatus.BAD_REQUEST, "REASON_TOO_LONG", "차수 추가 사유는 500자까지입니다.");
+        Map<String, Object> q = loader.load(Js.number(id));
+        if (q == null) throw ApiException.notFound();
+        long baseId = ((Number) (Rows.truthy(q.get("base_quote_id")) ? q.get("base_quote_id") : q.get("id"))).longValue();
+        Map<String, Object> base = db.first("SELECT quote_no FROM sq_quotes WHERE id = ?", baseId);
+        // 1차를 지웠으면 지금 견적 번호에서 '-차수' 를 떼어 1차 번호로 쓴다
+        String baseNo = base != null ? String.valueOf(base.get("quote_no"))
+                : String.valueOf(q.get("quote_no")).replaceFirst("-\\d+$", "");
+        Object max = db.first("SELECT MAX(revision) AS m FROM sq_quotes WHERE id = ? OR base_quote_id = ?", baseId, baseId).get("m");
+        int rev = (max == null ? 1 : ((Number) max).intValue()) + 1;
+        Map<String, Object> b = copyBody(q);
+        Map<String, Object> result = calcFor(b, true);
+        long newId = writer.createRevision(b, result, baseNo + "-" + rev, rev, baseId, reason, AccessInterceptor.currentUser(req).id());
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("quote", loader.load(newId)));
+    }
+
+    // sq_quotes 에 칸이 있는지 — 있으면 기억한다(V13 사유 칸 등. 없을 때는 매번 다시 본다)
+    private final java.util.Set<String> knownColumns = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private boolean hasColumn(String column) {
+        if (knownColumns.contains(column)) return true;
+        Map<String, Object> r = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'sq_quotes' AND column_name = ?", column);
+        boolean ok = r != null && r.get("n") instanceof Number n && n.longValue() > 0;
+        if (ok) knownColumns.add(column);
+        return ok;
+    }
+
+    // 차수 칸(V11)이 있는지 — 한 번 있으면 기억한다(없을 때는 매번 다시 본다: 적용하면 재시작 없이 켜진다)
+    private volatile boolean revisionReady;
+    private boolean hasRevision() {
+        if (revisionReady) return true;
+        try {
+            Map<String, Object> r = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                    + " AND table_name = 'sq_quotes' AND column_name = 'base_quote_id'");
+            revisionReady = r != null && ((Number) r.get("n")).longValue() > 0;
+        } catch (RuntimeException e) {
+            return false;
+        }
+        return revisionReady;
+    }
+
+    /** 복사 · 차수 추가 공통 — 저장된 견적을 새 견적 요청 본문으로 바꾼다(단가는 스냅샷 그대로) */
+    private Map<String, Object> copyBody(Map<String, Object> q) {
         List<Map<String, Object>> blocks = maps(q.get("blocks"));
         if (blocks.isEmpty()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "LEGACY_QUOTE", "구 견적(섹션형)은 복사할 수 없습니다.");
@@ -207,6 +275,7 @@ public class QuoteController {
         Map<String, Object> b = new LinkedHashMap<>();
         for (String k : List.of("quote_type", "deployment", "template_code", "solution", "brand",
                 "customer_name", "customer_contact", "memo", "conditions", "pay_plan")) b.put(k, q.get(k));
+        if (q.get("source_mail") != null) b.put("source_mail", q.get("source_mail")); // 근거 메일(V14)도 다음 차수로
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         b.put("quote_date", today.toString());
         b.put("valid_until", today.plusDays(30).toString());
@@ -242,9 +311,7 @@ public class QuoteController {
         b.put("discount", dc(q.get("discount_type"), q.get("discount_value")));
         b.put("monthly_discount", dc(q.get("monthly_discount_type"), q.get("monthly_discount_value")));
         b.put("round_unit", q.get("round_unit"));
-        Map<String, Object> result = calcFor(b, true);
-        long newId = writer.create(b, result, true, AccessInterceptor.currentUser(req).id());
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("quote", loader.load(newId)));
+        return b;
     }
 
     /** 저장된 특별DC → 계산 입력. 할인 없음은 type 이 null 로 남는다 */

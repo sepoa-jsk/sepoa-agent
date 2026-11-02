@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="ko" data-ss-theme="legacy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>견적 구성 개선안 v2</title>
+<style>
+/* SingleSuite 공통 스타일 — 실측 토큰 기반
+   2026-10-28 갱신: toray 적용 화면 실측 반영 — 그리드 상자 테두리 · 본문 하단 16px ·
+   툴바 우측 도구 묶음 · 건수 위치(명세바) · 탭 상자 · 본문 머리 · GNB 아이콘
+   2026-10-28 운영 화면 캡처(구매요청접수 · 구매요청생성) 반영 — 좌우 16px · 툴바 좌측 도구(필터·상태·기간) ·
+   상태별 건수 줄 · 접수/반려 버튼 · 4열 폼 · 편집 셀 · 레일 탭 · 탭바 활성색
+   2026-10-28 운영 화면 캡처(공통코드) 반영 — 코드 목록 레일(d형) · 본문 제목 줄 · 머리 폼 + 저장 · 편집 그리드
+   2026-10-28 마스터 관리 화면 확정 — 칸 너비 조절 · 머리 칸 정렬 · 줄인 표 끝선 (assets/grid-behaviors.js)
+   테마: <html data-ss-theme="legacy"> (기본) | "new"
+   이 파일 하나로 L1/L2/M1 골격이 모두 렌더된다. */
+
+:root,
+[data-ss-theme="legacy"] {
+  --ss-font: Roboto, "Noto Sans KR", -apple-system, sans-serif;
+  --ss-gnb-h: 58px;
+}
+[data-ss-theme="new"] {
+  --ss-font: Pretendard, -apple-system, sans-serif;
+  --ss-gnb-h: 56px;
+}
+
+:root {
+  --ss-primary: #0747A6;
+  --ss-primary-soft: #F0F5FF;
+  --ss-link: #1879B9;
+  --ss-emphasis: #FF5252;
+  --ss-date: #0AB169;
+  --ss-danger-bd: #FDA4AF;
+  --ss-danger-fg: #BE123C;
+
+  --ss-head-bg: #F8FAFC;
+  --ss-bd: #CBD5E1;
+  --ss-bd-soft: #DDDDDD;
+  --ss-bd-input: #E3E3E3;
+  --ss-fieldset-bg: #FDFDFD;
+  --ss-fieldset-bd: #DFDFDF;
+  --ss-gridrow-bg: #F1F5F9;
+  --ss-gridrow-bd: #D1D5DB;
+  --ss-box-bd: #E5E5E5;       /* 탭 상자 테두리 */
+  --ss-tabstrip-bg: #F7F7F7;  /* 탭 상자 탭줄 배경 */
+  --ss-tab-active: #3A87E8;   /* 탭 상자 · 레일 탭 · 하단 탭바 활성 */
+  --ss-ok-bg: #E7F7EE; --ss-ok-bd: #A7E3C1; --ss-ok-fg: #0A9F5C;  /* 긍정 처리 버튼 (접수·승인) */
+  --ss-ng-bg: #FDECEE; --ss-ng-bd: #F6C1C8; --ss-ng-fg: #E5484D;  /* 부정 처리 버튼 (반려) */
+  --ss-cell-edit: #EBF5FE;    /* 그리드 편집 가능 셀 */
+
+  --ss-ink: #222222;
+  --ss-ink-2: #404040;
+  --ss-ink-3: #334155;
+
+  --ss-pad-x: 16px;   /* 2026-10-28 운영 화면 캡처: 본문·제목·GNB 좌우 16px */
+  --ss-title-h: 41px;
+  --ss-row-h: 39px;
+  --ss-head-h: 41px;
+  --ss-ctrl-h: 32px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--ss-font);
+  color: var(--ss-ink-2);
+  background: #FFFFFF;
+}
+
+/* ── 셸 ─────────────────────────────────────────── */
+
+.ss-app { display: flex; flex-direction: column; height: 100vh; }
+
+.ss-gnb {
+  flex: 0 0 var(--ss-gnb-h);
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 var(--ss-pad-x);
+  border-bottom: 1px solid var(--ss-bd-soft);
+  background: #FFFFFF;
+}
+.ss-gnb__logo { font-size: 19px; font-weight: 700; color: var(--ss-primary); letter-spacing: -.2px; }
+.ss-gnb__icon { width: 20px; height: 20px; color: var(--ss-ink-2); cursor: pointer; }
+.ss-gnb__icon--sm { width: 17px; height: 17px; }  /* 도움말·로그아웃 */
+.ss-gnb__home { display: inline-flex; color: inherit; }
+.ss-gnb__home:hover .ss-gnb__icon, .ss-gnb__icon:hover { color: var(--ss-primary); }
+.ss-gnb__spacer { flex: 1; }
+.ss-gnb__right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: var(--ss-ink-3); }
+
+.ss-title {
+  flex: 0 0 var(--ss-title-h);
+  display: flex; align-items: center;
+  padding: 0 var(--ss-pad-x);
+  border-bottom: 1px solid var(--ss-bd-soft);
+  font-size: 16px; font-weight: 500; color: var(--ss-ink);
+  background: #FFFFFF;
+}
+
+.ss-main { flex: 1; display: flex; min-height: 0; }
+
+.ss-body {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding: 16px var(--ss-pad-x);   /* 하단도 16px — 그리드 상자가 탭바에 붙지 않는다 */
+  overflow: auto;
+}
+
+.ss-tabbar {
+  flex: 0 0 34px;
+  display: flex; align-items: stretch;
+  background: var(--ss-tabstrip-bg);
+  font-size: 13px;
+}
+.ss-tabbar__tab {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 20px;
+  color: var(--ss-ink);
+  white-space: nowrap;
+}
+.ss-tabbar__tab--active { background: var(--ss-tab-active); color: #FFFFFF; font-weight: 500; }
+.ss-tabbar__close { opacity: .7; }
+
+/* ── 툴바 ───────────────────────────────────────── */
+
+.ss-toolbar { display: flex; align-items: center; gap: 10px; height: var(--ss-ctrl-h); }
+.ss-toolbar__spacer { flex: 1; }
+/* 툴바 도구 묶음 — Search 바로 오른쪽(좌측)에 필터 · 상태 · 기간. 우측에는 액션만 (2026-10-28 운영 화면 캡처) */
+.ss-toolbar__tools { display: flex; align-items: center; gap: 6px; }
+
+.ss-search { display: flex; width: 510px; height: var(--ss-ctrl-h); }
+.ss-search input {
+  flex: 1; min-width: 0; height: 100%;
+  border: 1px solid var(--ss-bd-input); border-right: 0;
+  border-radius: 4px 0 0 4px;
+  padding: 0 10px; font: inherit; font-size: 14px;
+}
+.ss-search__btn {
+  width: 28px; height: 100%;
+  border: 1px solid var(--ss-bd-input); border-radius: 0 4px 4px 0;
+  background: #FFFFFF; color: #9AA3AF;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* 필터 · 상태 버튼 — 입력칸과 같은 높이·테두리의 상자 (2026-10-28 갱신: 테두리 없는 글자 버튼 아님) */
+.ss-tbtn {
+  display: flex; align-items: center; gap: 4px;
+  height: var(--ss-ctrl-h); padding: 0 10px;
+  font: inherit; font-size: 13px; color: var(--ss-ink);
+  background: #FFFFFF; border: 1px solid var(--ss-bd-input); border-radius: 4px;
+  cursor: pointer; white-space: nowrap;
+}
+.ss-tbtn:hover { background: var(--ss-head-bg); }
+.ss-tbtn__ico--filter { color: var(--ss-emphasis); }
+.ss-tbtn__ico--status { color: var(--ss-primary); }
+
+/* 기간 — 상자 안 우측에 구분선으로 나뉜 빨간 달력 칸 */
+.ss-daterange {
+  display: flex; align-items: center; gap: 10px;
+  height: var(--ss-ctrl-h); padding: 0 0 0 10px;
+  border: 1px solid var(--ss-bd-input); border-radius: 4px; background: #FFFFFF;
+  font-size: 14px; color: var(--ss-ink); white-space: nowrap;
+}
+.ss-daterange__ico {
+  align-self: stretch; display: flex; align-items: center; padding: 0 8px;
+  border-left: 1px solid var(--ss-bd-input); color: var(--ss-emphasis); cursor: pointer;
+}
+
+/* 필터칩 / 요약 카운트 */
+.ss-chips { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--ss-ink-3); }
+.ss-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 10px;
+  background: var(--ss-head-bg); border: 1px solid #E7EAF0; border-radius: 12px;
+}
+.ss-summary { margin-top: 10px; font-size: 12px; color: var(--ss-ink-3); display: flex; gap: 24px; }
+.ss-summary b { color: var(--ss-primary); font-weight: 600; }
+
+/* 상태별 건수 줄 — 툴바 아래. 좌: `전체 9  접수대기 0 …` (누르면 그 상태로 거른다) / 우: 보조 버튼
+   (2026-10-28 운영 화면 캡처: 구매요청접수). 이 줄이 있으면 명세바 건수는 두지 않는다 */
+.ss-statusbar { display: flex; align-items: center; gap: 8px; min-height: var(--ss-ctrl-h); margin-top: 16px; }
+.ss-statusbar__items { display: flex; align-items: center; gap: 44px; padding-left: 24px; }
+.ss-statusbar__item {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font-family: inherit; font-size: 13px; color: var(--ss-link);
+}
+.ss-statusbar__item b { font-size: 16px; font-weight: 700; }
+.ss-statusbar__item.is-active { text-decoration: underline; text-underline-offset: 5px; }
+.ss-statusbar__spacer { flex: 1; }
+
+/* ── 버튼 ───────────────────────────────────────── */
+
+.ss-btn {
+  height: var(--ss-ctrl-h); padding: 0 19px;
+  border-radius: 4px; border: 1px solid transparent;
+  font-family: inherit; font-size: 12px; line-height: 1;
+  cursor: pointer; white-space: nowrap;
+}
+.ss-btn--save      { background: var(--ss-primary);      border-color: var(--ss-primary); color: #FFFFFF; }
+.ss-btn--secondary { background: var(--ss-primary-soft); border-color: var(--ss-primary); color: var(--ss-primary); }
+.ss-btn--default   { background: #FFFFFF;                border-color: var(--ss-bd);      color: var(--ss-ink-3); }
+.ss-btn--ok        { background: var(--ss-ok-bg);        border-color: var(--ss-ok-bd);   color: var(--ss-ok-fg); }   /* 접수 · 승인 */
+.ss-btn--ng        { background: var(--ss-ng-bg);        border-color: var(--ss-ng-bd);   color: var(--ss-ng-fg); }   /* 반려 */
+.ss-btn--icon      { display: inline-flex; align-items: center; justify-content: center; width: 60px; padding: 0;
+                     background: #FFFFFF; border-color: var(--ss-bd); color: var(--ss-ink-2); }          /* 업로드 · 다운로드 */
+.ss-btn--delete    { background: #FFFFFF;                border-color: var(--ss-danger-bd); color: var(--ss-danger-fg); }
+.ss-btn--gridrow   { background: var(--ss-gridrow-bg);   border-color: var(--ss-gridrow-bd); color: var(--ss-ink-3); }
+
+.ss-actions { display: flex; gap: 4px; }   /* 버튼 사이 4px (운영 화면 캡처) */
+
+/* ── 그리드 ─────────────────────────────────────── */
+
+/* 그리드는 사방 테두리 상자에 담는다. --fill 이면 상자가 남은 높이 끝(탭바 위 16px)까지 내려간다 */
+.ss-gridwrap { margin-top: 17px; flex: 0 0 auto; overflow: auto; border: 1px solid var(--ss-bd); }
+/* L1처럼 그리드가 남은 높이를 다 쓰는 화면에만 붙인다 */
+.ss-gridwrap--fill { flex: 1 1 auto; min-height: 0; }
+.ss-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ss-grid th {
+  height: var(--ss-head-h);
+  background: var(--ss-head-bg);
+  font-size: 12px; font-weight: 400; color: var(--ss-ink);
+  border: 1px solid #E7EAF0; border-top: 0;
+  padding: 0 4px;
+}
+.ss-grid td {
+  height: var(--ss-row-h);
+  font-size: 12px; font-weight: 500; color: var(--ss-ink-2);
+  border: 1px solid #EEF1F5;
+  padding: 4px; text-align: center;
+  background: #FFFFFF;
+}
+.ss-grid th.req::after { content: " *"; color: var(--ss-emphasis); }
+.ss-grid td.ss-cell--link { color: var(--ss-link); font-weight: 600; }
+.ss-grid td.ss-cell--emphasis { color: var(--ss-emphasis); }
+.ss-grid td.ss-cell--amount { color: var(--ss-emphasis); text-align: right; }
+.ss-grid td.ss-cell--date { color: var(--ss-date); font-size: 13px; font-weight: 600; }
+.ss-grid td.ss-cell--edit { background: var(--ss-cell-edit); }   /* 입력할 수 있는 셀 */
+.ss-grid td.ss-cell--left { text-align: left; }
+.ss-grid td.ss-cell--right { text-align: right; }
+.ss-grid tfoot td { background: var(--ss-head-bg); font-weight: 600; }
+/* 상자 테두리와 겹치지 않게 바깥 셀의 좌우선은 지운다 */
+.ss-grid tr > :first-child { border-left: 0; }
+.ss-grid tr > :last-child { border-right: 0; }
+/* 스크롤해도 머리행이 남는다 */
+.ss-grid thead th { position: sticky; top: 0; z-index: 1; }
+
+/* ── 폼 ─────────────────────────────────────────── */
+
+.ss-formhead { display: flex; justify-content: flex-end; margin-top: 16px; }
+.ss-form { width: 100%; max-width: 1445px; margin: 0 auto; }
+/* 4열 폼 — 섹션(fieldset) 없이 필드만 가운데 944px 에 4칸 격자로 (운영 화면 캡처: 구매요청생성) */
+.ss-form--cols4 { max-width: 944px; }
+.ss-form--cols4 .ss-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding-top: 0; }
+.ss-form--cols4 .ss-field { width: auto; }
+.ss-form--cols4 .ss-field--w2 { grid-column: span 2; }
+.ss-form--cols4 .ss-field--w3 { grid-column: span 3; }
+.ss-form--cols4 .ss-field--full { grid-column: 1 / -1; }
+
+.ss-section {
+  margin: 25px 0 0;
+  padding: 5px 16px 16px;
+  border: 1px solid var(--ss-fieldset-bd); border-radius: 10px;
+  background: var(--ss-fieldset-bg);
+}
+.ss-section > legend {
+  margin-left: 5px; padding: 0 4px 1px;
+  font-size: 15px; font-weight: 500; color: var(--ss-ink-2);
+}
+
+.ss-fields { display: flex; flex-wrap: wrap; gap: 16px 20px; padding-top: 8px; }
+.ss-field { display: flex; flex-direction: column; gap: 6px; }
+.ss-field--w1 { width: 180px; }
+.ss-field--w2 { width: 380px; }
+.ss-field--w3 { width: 580px; }
+.ss-field--full { width: 100%; }
+.ss-field > label { font-size: 14px; color: var(--ss-ink-2); }
+.ss-field > label .req { color: var(--ss-emphasis); }
+
+.ss-input, .ss-select {
+  height: var(--ss-ctrl-h);
+  border: 1px solid var(--ss-bd-input); border-radius: 4px;
+  padding: 0 10px; font: inherit; font-size: 14px; color: var(--ss-ink-2);
+  background: #FFFFFF;
+}
+.ss-input:disabled, .ss-input[readonly] { background: #F7F8FA; border-color: #EEF0F3; color: #8A8A8A; }
+.ss-input--amount { text-align: right; }
+.ss-inputgroup { display: flex; }
+.ss-inputgroup .ss-input { flex: 1; min-width: 0; border-radius: 4px 0 0 4px; }
+.ss-inputgroup__btn {
+  width: 30px; border: 1px solid var(--ss-bd-input); border-left: 0; border-radius: 0 4px 4px 0;
+  background: #FFFFFF; color: #9AA3AF; cursor: pointer;
+}
+
+/* 명세 그리드 머리 */
+.ss-detailbar { display: flex; align-items: center; gap: 8px; margin-top: 24px; }
+/* L1: 툴바 바로 아래, 그리드 위 — 건수를 우측에 텍스트로 (toray 실측) */
+.ss-toolbar + .ss-detailbar, .ss-chips + .ss-detailbar { margin-top: 16px; }
+.ss-detailbar + .ss-gridwrap { margin-top: 8px; }
+.ss-detailbar__note { font-size: 12px; color: var(--ss-ink-3); }
+.ss-detailbar__spacer { flex: 1; }
+.ss-detailbar__count { font-size: 12px; color: var(--ss-ink-3); }
+.ss-detailbar__count b { color: var(--ss-primary); }
+
+/* 첨부 영역 */
+.ss-attach { margin-top: 24px; border: 1px solid var(--ss-bd-input); border-radius: 4px; }
+.ss-attach__bar { display: flex; align-items: center; gap: 8px; padding: 8px; border-bottom: 1px solid var(--ss-bd-input); }
+.ss-attach__drop { height: 120px; }
+
+/* 결재선 · 처리 이력 (선택) */
+.ss-approval { display: flex; gap: 12px; padding-top: 8px; flex-wrap: wrap; }
+.ss-approval__step {
+  width: 150px; padding: 10px;
+  border: 1px solid var(--ss-fieldset-bd); border-radius: 6px; background: #FFFFFF;
+  font-size: 12px; text-align: center;
+}
+.ss-approval__role { color: var(--ss-ink-3); }
+.ss-approval__name { font-weight: 600; color: var(--ss-ink); margin-top: 4px; }
+.ss-approval__state { color: var(--ss-primary); margin-top: 6px; }
+.ss-approval__at { color: #8A8A8A; margin-top: 2px; }
+
+/* ── M1 좌측 레일 ──────────────────────────────── */
+
+.ss-rail {
+  flex: 0 0 var(--ss-rail-w, 264px);
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--ss-bd-soft);
+  background: #FFFFFF; overflow: auto;
+}
+.ss-rail--narrow { --ss-rail-w: 150px; }
+.ss-rail--wide { --ss-rail-w: 405px; }   /* b형 선택 목록 (구매요청생성) */
+.ss-rail__head {
+  height: var(--ss-title-h);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; border-bottom: 1px solid var(--ss-bd-soft);
+  font-size: 14px; font-weight: 500; color: var(--ss-ink);
+}
+/* b형: 레일 머리가 화면 제목을 맡는다(16px) + 접기 ‹ 버튼 */
+.ss-rail__head--title { font-size: 16px; }
+.ss-rail__collapse { display: inline-flex; padding: 4px; border: 0; background: none; color: var(--ss-ink); cursor: pointer; }
+.ss-rail__group {
+  display: flex; align-items: center; gap: 6px;
+  height: 40px; padding: 0 16px;
+  background: var(--ss-head-bg);
+  font-size: 14px; font-weight: 500; color: var(--ss-ink);
+}
+.ss-rail__item {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 42px; padding: 0 16px 0 24px;
+  border-bottom: 1px solid #F2F2F2;
+  font-size: 13px; color: var(--ss-ink-2); cursor: pointer;
+}
+.ss-rail__item--active { border-left: 3px solid var(--ss-emphasis); padding-left: 21px; }
+.ss-rail__count { font-size: 12px; color: var(--ss-ink-3); }
+.ss-rail__count--num { color: var(--ss-primary); }  /* 결재함처럼 건수를 보여줄 때만 */
+/* 레일 탭 — 회색 탭줄 + 활성 채움 (탭 상자와 같은 모양, 운영 화면 캡처) */
+.ss-rail__tabs { display: flex; background: var(--ss-tabstrip-bg); }
+.ss-rail__tab { height: 34px; padding: 0 22px; display: flex; align-items: center; font-size: 13px; font-weight: 500; color: #333333; cursor: pointer; }
+.ss-rail__tab--active { background: var(--ss-tab-active); color: #FFFFFF; }
+.ss-rail__toolbar { display: flex; align-items: center; gap: 6px; padding: 16px 20px; }
+.ss-rail__toolbar--line { border-bottom: 1px solid var(--ss-bd-soft); }
+.ss-rail__toolbar .ss-search { width: auto; flex: 1; }
+
+/* d형 코드 목록 레일 — 좌: 코드(빨강) / 우: 이름(굵게, 우측 정렬, 줄바꿈 허용).
+   고른 항목은 회색 배경 + 오른쪽 빨간 막대 (운영 화면 캡처: 공통코드) */
+.ss-rail--code { --ss-rail-w: 400px; }
+.ss-rail__search { padding: 16px; border-bottom: 1px solid var(--ss-bd-soft); }
+.ss-rail__search .ss-search { width: 100%; }
+.ss-rail__code {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  min-height: 53px; padding: 8px 24px 8px 22px;
+  border-bottom: 1px solid #EEEEEE; cursor: pointer;
+}
+.ss-rail__code:hover { background: #F8FAFC; }
+.ss-rail__code-key { font-size: 14px; color: var(--ss-emphasis); word-break: break-all; }
+.ss-rail__code-name { font-size: 14px; font-weight: 500; color: var(--ss-ink); text-align: right; }
+.ss-rail__code--active { background: #F3F3F3; box-shadow: inset -3px 0 0 var(--ss-emphasis); }
+
+/* 레일 옆 본문 제목 줄 — 고른 대상 이름 `공통코드(CODE)`. 셸 제목 바와 같은 41px · 하단선 */
+.ss-subtitle {
+  flex: 0 0 var(--ss-title-h); display: flex; align-items: center;
+  margin: -16px calc(-1 * var(--ss-pad-x)) 16px; padding: 0 calc(var(--ss-pad-x) + 8px);
+  border-bottom: 1px solid var(--ss-bd-soft);
+  font-size: 16px; font-weight: 500; color: var(--ss-ink);
+}
+
+/* 머리 폼 + 저장 — 좌: 작은 필드(152px, 좌측 정렬, 2열 줄바꿈) / 우: 저장. 편집 그리드 위에 둔다 */
+.ss-edithead { display: flex; align-items: flex-start; gap: 16px; }
+.ss-edithead__fields { flex: 1; display: grid; grid-template-columns: repeat(2, 152px); gap: 12px 16px; }
+.ss-edithead__fields .ss-field > label { font-size: 13px; }
+.ss-edithead__fields .ss-input, .ss-edithead__fields .ss-select { width: 100%; font-size: 13px; }
+
+/* 편집 그리드 — 셀 안 입력칸은 테두리 없이 글자처럼 보이다가, 올리거나 누르면 테두리가 생긴다.
+   체크박스(사용·기본값·필수)는 가운데. 머리행 2단(TEXT1 → 한국어/English)은 colspan/rowspan 으로 */
+.ss-grid td.ss-cell--input { padding: 2px 4px; }
+.ss-cellinput {
+  width: 100%; height: 30px; padding: 0 6px;
+  border: 1px solid transparent; border-radius: 3px; background: transparent;
+  font: inherit; font-size: 12px; color: var(--ss-ink-2); text-align: inherit;
+}
+.ss-cellinput:hover { border-color: var(--ss-bd-input); }
+.ss-cellinput:focus { outline: 0; border-color: var(--ss-link); background: #FFFFFF; }
+.ss-cellinput:disabled { color: #8A8A8A; }
+.ss-cellinput[readonly] { color: #8A8A8A; }
+select.ss-cellinput { cursor: pointer; }
+.ss-grid input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--ss-ink-3); cursor: pointer; }
+.ss-grid tr.is-new td { background: #FFFDF2; }   /* 저장 전 새 행 */
+
+/* ── 그리드 동작 (assets/grid-behaviors.js, 2026-10-28 마스터 관리 화면 확정) ── */
+/* 칸 너비 조절 손잡이 — 머리 칸 오른쪽 끝 (머리 칸이 sticky 라 손잡이 위치의 기준이 된다) */
+.ss-colgrip { position: absolute; top: 0; right: -3px; z-index: 2; width: 7px; height: 100%; cursor: col-resize; }
+.ss-colgrip:hover { background: var(--ss-link); opacity: .35; }
+body.is-colresizing, body.is-colresizing * { cursor: col-resize !important; user-select: none; }
+/* 칸 너비대로 만든 표(--sized) · 너비를 줄인 표 — 상자보다 좁아도 마지막 칸 오른쪽 선이 보이게 */
+.ss-grid--sized thead tr > th:last-child, .ss-grid.is-resized thead tr > th:last-child { border-right: 1px solid #E7EAF0; }
+.ss-grid--sized tbody tr > td:last-child, .ss-grid.is-resized tbody tr > td:last-child { border-right: 1px solid #EEF1F5; }
+/* 머리 칸 정렬 — 오름 ▲ → 내림 ▼ → 원래 순서 */
+.ss-grid th.is-sortable { cursor: pointer; user-select: none; }
+.ss-grid th.is-sortable:hover { background: #EEF2F7; }
+.ss-sortmark { margin-left: 3px; font-size: 8px; color: var(--ss-primary); }
+.ss-sortmark:empty { display: none; }
+
+/* ── 화면 내 탭 ────────────────────────────────── */
+
+.ss-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--ss-bd-soft); margin-top: 8px; }
+.ss-tabs__tab { height: 34px; padding: 0 18px; display: flex; align-items: center; font-size: 13px; color: var(--ss-ink-3); }
+.ss-tabs__tab--active { background: var(--ss-primary); color: #FFFFFF; border-radius: 4px 4px 0 0; }
+
+/* 탭 상자 — 탭줄 + 내용을 한 상자에 담는다. 그리드가 여러 장인 화면에 쓴다 (toray 실측) */
+.ss-tabbox {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column;
+  margin-top: 12px; border: 1px solid var(--ss-box-bd); background: #FFFFFF; overflow: auto;
+}
+.ss-tabbox > .ss-tabs { margin-top: 0; gap: 0; background: var(--ss-tabstrip-bg); border-bottom: 0; position: sticky; top: 0; z-index: 2; }
+.ss-tabbox .ss-tabs__tab { height: 32px; padding: 0 20px; font-size: 13px; font-weight: 500; color: #333333; border-radius: 0; cursor: pointer; }
+.ss-tabbox .ss-tabs__tab--active { background: var(--ss-tab-active); color: #FFFFFF; border-radius: 0; }
+.ss-tabbox .ss-tabs__tab:not(.ss-tabs__tab--active):hover { background: #ECECEC; border-radius: 0; }
+.ss-tabbox__pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 16px; }
+.ss-tabbox__pane[hidden] { display: none; }
+
+/* 본문 머리 — 레일에서 고른 대상의 이름·요약(좌) + 도구(우). M1 화면의 본문 첫 줄 (toray 실측) */
+.ss-head { display: flex; align-items: center; gap: 16px; }
+.ss-head__info { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ss-head__name { font-size: 16px; font-weight: 600; color: var(--ss-ink); }
+.ss-head__meta { font-size: 13px; color: var(--ss-ink-3); }
+.ss-head__tools { display: flex; align-items: center; gap: 8px; }
+
+/* ── 상세 검색 팝오버 ──────────────────────────── */
+
+.ss-popover { position: absolute; width: 430px; background: #FFFFFF; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.ss-popover__head {
+  height: 34px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px; background: #0F172A; color: #FFFFFF; font-size: 13px;
+}
+.ss-popover__body { padding: 32px; }
+.ss-popover__actions { display: flex; justify-content: center; gap: 8px; margin-bottom: 24px; }
+.ss-popover__row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.ss-popover__row > label { width: 100px; text-align: right; font-size: 14px; color: var(--ss-ink-2); }
+.ss-popover__row > .ss-input { flex: 1; }
+
+/* ── 상호작용 상태 ─────────────────────────────
+   정적 시안에는 안 보이지만, 눌러보는 목업·프로토타입에는 반드시 필요하다.
+   실제 제품에도 있는 동작이므로 목업 전용(mock.css)이 아니라 여기에 둔다. */
+
+/* 그리드 행 */
+.ss-grid tbody tr:hover td { background: #F8FAFC; }
+.ss-grid tbody tr.is-selected td { background: var(--ss-primary-soft); }
+
+/* 정렬 가능한 헤더 */
+.ss-grid th[data-sort] { cursor: pointer; user-select: none; }
+.ss-grid th[data-sort]:hover { background: #EEF2F7; }
+.ss-grid th[data-sort="asc"]::after  { content: " \25B2"; font-size: 8px; color: var(--ss-primary); }
+.ss-grid th[data-sort="desc"]::after { content: " \25BC"; font-size: 8px; color: var(--ss-primary); }
+
+/* 빈 상태 */
+.ss-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 160px; font-size: 13px; color: #94A3B8;
+}
+
+/* 입력 오류 */
+.ss-input.is-invalid, .ss-select.is-invalid {
+  border-color: var(--ss-danger-bd); background: #FFF5F6;
+}
+.ss-field__error { font-size: 11px; color: var(--ss-danger-fg); }
+
+/* 버튼 */
+.ss-btn { transition: filter .12s; }
+.ss-btn:hover:not(:disabled) { filter: brightness(.96); }
+.ss-btn:disabled { opacity: .45; cursor: default; }
+
+/* 툴바 버튼 활성 (필터·상태가 걸려 있을 때) */
+.ss-tbtn.is-active { color: var(--ss-primary); font-weight: 600; border-color: var(--ss-primary); }
+
+/* 좌측 레일 */
+.ss-rail__item:hover { background: #F8FAFC; }
+
+/* 화면 내 탭 */
+.ss-tabs__tab:not(.ss-tabs__tab--active):hover { background: #F1F5F9; border-radius: 4px 4px 0 0; }
+
+
+/* ── 개선안 v2 — 견적 라인 편집기형(CPQ) ─────────────────────────── */
+.mk-steps, .mk-info, .mk-layout, .mk-review, .ss-formhead { flex-shrink: 0; }
+.mk-steps { display: flex; height: 40px; border: 1px solid var(--ss-bd); border-radius: 4px; overflow: hidden; margin-top: 12px; background: #FFFFFF; }
+.mk-step { flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 13px; color: #94A3B8; border-right: 1px solid var(--ss-bd); position: relative; }
+.mk-step:last-child { border-right: 0; }
+.mk-step__n { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: #EEF1F5; color: #94A3B8; }
+.mk-step--done { color: var(--ss-ink-3); }
+.mk-step--done .mk-step__n { background: var(--ss-ok-bg); color: var(--ss-ok-fg); }
+.mk-step--on { color: var(--ss-primary); font-weight: 600; background: var(--ss-primary-soft); }
+.mk-step--on .mk-step__n { background: var(--ss-primary); color: #FFFFFF; }
+.mk-step--on::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--ss-primary); }
+
+.mk-info { display: flex; align-items: center; gap: 24px; margin-top: 12px; padding: 0 2px; font-size: 13px; }
+.mk-info__item { display: flex; align-items: center; gap: 8px; }
+.mk-info__item label { color: #64748B; white-space: nowrap; }
+.mk-info__item .ss-input, .mk-info__item .ss-select { height: 30px; font-size: 13px; }
+.mk-info__item .req { color: var(--ss-emphasis); }
+.mk-rev { font-size: 12px; padding: 3px 8px; border-radius: 3px; background: #EEF1F5; color: var(--ss-ink-3); }
+
+.mk-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; margin-top: 16px; align-items: start; }
+
+.mk-card { border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; margin-bottom: 16px; }
+.mk-card__head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px 0 14px; border-bottom: 1px solid var(--ss-bd); }
+.mk-card__title { font-size: 15px; font-weight: 600; color: var(--ss-ink); }
+.mk-card__note { font-size: 12px; color: #64748B; }
+.mk-card__body { padding: 12px 14px; }
+.mk-sp { flex: 1; }
+
+/* ① 구성 질문 — 답하면 아래 라인이 채워진다 */
+.mk-q { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+.mk-q__item label { display: block; font-size: 12px; color: #64748B; margin-bottom: 4px; }
+.mk-q__item .ss-select, .mk-q__item .ss-input { height: 30px; font-size: 13px; width: 100%; }
+.mk-q__row { display: flex; gap: 4px; }
+.mk-checks { display: flex; gap: 12px; height: 30px; align-items: center; font-size: 13px; }
+.mk-checks label { display: inline-flex; align-items: center; gap: 4px; margin: 0; color: var(--ss-ink-2); font-size: 13px; }
+
+/* ② 라인 편집기 — 표 하나, 블록은 묶음 행 */
+.mk-grid { width: 100%; table-layout: fixed; }
+.mk-grid td { vertical-align: middle; }
+.mk-grid tr.mk-group td { background: #F3F6FA; height: 44px; border-top: 2px solid var(--ss-bd); }
+.mk-group__cell { text-align: left !important; padding: 0 10px !important; }
+.mk-group__wrap { display: flex; align-items: center; gap: 8px; }
+.mk-caret { width: 22px; height: 22px; border: 0; background: none; cursor: pointer; color: #64748B; display: inline-flex; align-items: center; justify-content: center; transition: transform .15s; }
+tr.mk-group[data-closed] .mk-caret { transform: rotate(-90deg); }
+.mk-group__no { width: 22px; height: 22px; border-radius: 4px; background: var(--ss-primary); color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.mk-group__name { font-size: 14px; font-weight: 600; color: var(--ss-ink); }
+.mk-tag { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; background: #FFF4D6; color: #9A6700; }
+.mk-group__sum { margin-left: auto; font-size: 12px; color: #64748B; margin-right: 10px; }
+.mk-group__sum b { font-size: 14px; color: var(--ss-emphasis); margin-left: 6px; }
+.mk-group__tools { display: flex; gap: 4px; align-items: center; }
+.mk-group__tools .ss-btn { height: 28px; padding: 0 12px; }
+.mk-move button { width: 24px; height: 24px; border: 1px solid transparent; background: none; color: #64748B; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.mk-move button:hover:not(:disabled) { background: #E6EBF2; }
+.mk-move button:disabled { color: #CBD5E1; }
+
+.mk-grid td.mk-mod { text-align: left; padding-left: 10px; }
+.mk-mod__name { font-size: 13px; font-weight: 600; color: var(--ss-ink); }
+.mk-mod__code { font-size: 11px; color: var(--ss-link); margin-top: 2px; }
+.mk-grid td.mk-spec { text-align: left; padding: 6px 10px; white-space: pre-line; line-height: 1.55; }
+.mk-grid td.mk-edit { background: var(--ss-cell-edit); }
+.mk-grid td.mk-num { text-align: right; padding-right: 10px; font-variant-numeric: tabular-nums; }
+.mk-grid td.mk-amt { text-align: right; padding-right: 10px; font-weight: 700; color: var(--ss-emphasis); font-variant-numeric: tabular-nums; }
+.mk-grid td.mk-empty, .mk-grid td .mk-empty { color: #A3AEBD; font-weight: 400; }
+.mk-grid tr.mk-row--zero td { color: #94A3B8; }
+.mk-grid tr.mk-row--zero .mk-mod__name { color: #64748B; font-weight: 500; }
+.mk-cat { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--ss-bd); color: var(--ss-ink-3); background: #FFFFFF; }
+.mk-cat--base { border-color: #BFD3F2; color: var(--ss-primary); background: var(--ss-primary-soft); }
+.mk-dc { font-size: 12px; font-weight: 600; color: var(--ss-ok-fg); }
+.mk-band { display: inline-flex; align-items: center; gap: 4px; }
+.mk-band__kind { font-size: 11px; padding: 1px 5px; border-radius: 3px; background: #EEF1F5; color: var(--ss-ink-3); }
+
+/* ③ 문서 영역 — 결제 방안 · 견적조건은 접힌 요약 줄 */
+.mk-doc { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #EEF1F5; cursor: pointer; font-size: 13px; }
+.mk-doc:last-child { border-bottom: 0; }
+.mk-doc__name { font-weight: 600; color: var(--ss-ink); width: 90px; }
+.mk-doc__sum { color: #64748B; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mk-doc__open { color: var(--ss-link); font-size: 12px; }
+
+/* ④ 오른쪽 요약 — 읽기만. 고정 */
+.mk-side { position: sticky; top: 0; }
+.mk-sum { border: 1px solid var(--ss-bd); border-radius: 4px; background: #FFFFFF; }
+.mk-sum__head { height: 40px; display: flex; align-items: center; padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--ss-ink); border-bottom: 1px solid var(--ss-bd); background: var(--ss-head-bg); }
+.mk-sum__row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px; font-size: 13px; color: #64748B; }
+.mk-sum__row b { font-size: 16px; color: var(--ss-ink); font-variant-numeric: tabular-nums; }
+.mk-sum__row--main b { font-size: 20px; color: var(--ss-emphasis); }
+.mk-sum__line { border-top: 1px solid #EEF1F5; margin: 4px 12px; }
+.mk-sum__meta { padding: 4px 12px 10px; font-size: 12px; color: #64748B; line-height: 1.8; }
+.mk-check { margin-top: 12px; border: 1px solid #FFE380; border-radius: 4px; background: #FFFBEB; }
+.mk-check__head { padding: 8px 12px; font-size: 13px; font-weight: 600; color: #9A6700; border-bottom: 1px solid #FFE380; }
+.mk-check ul { margin: 0; padding: 8px 12px 10px 28px; font-size: 12.5px; color: #78350F; line-height: 1.8; }
+
+/* 검토용 표시 — 실제 화면에는 없다 */
+.mk-review { margin-top: 12px; border: 1px dashed #A78BFA; border-radius: 4px; background: #FAF8FF; font-size: 12.5px; color: #4C1D95; }
+.mk-review__head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+.mk-review__head span { margin-left: auto; font-weight: 400; color: #7C3AED; }
+.mk-review__body { padding: 0 16px 12px; line-height: 1.75; }
+.mk-review__body h4 { margin: 8px 0 2px; font-size: 12.5px; }
+.mk-review__body ol, .mk-review__body ul { margin: 0; padding-left: 20px; }
+.mk-review[data-closed] .mk-review__body { display: none; }
+.mk-pin { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #7C3AED; color: #FFFFFF; font-size: 11px; font-weight: 700; vertical-align: middle; margin-left: 4px; flex: 0 0 auto; }
+.mk-new { font-size: 10.5px; font-weight: 700; color: #7C3AED; border: 1px solid #C4B5FD; border-radius: 3px; padding: 0 4px; margin-left: 6px; }
+body[data-hide-pins] .mk-pin, body[data-hide-pins] .mk-new { display: none; }
+</style>
+</head>
+<body>
+<div class="ss-app">
+
+  <header class="ss-gnb">
+    <span class="ss-gnb__logo">SepoaSoft Single Suite</span>
+    <a class="ss-gnb__home" href="#" title="홈"><svg class="ss-gnb__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></a>
+    <svg class="ss-gnb__icon" aria-label="전체 메뉴" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+    <span class="ss-gnb__spacer"></span>
+    <div class="ss-gnb__right">
+      <span>English</span>
+      <svg class="ss-gnb__icon ss-gnb__icon--sm" aria-label="도움말" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      <span>전선경 ( jsk )</span>
+      <svg class="ss-gnb__icon ss-gnb__icon--sm" aria-label="로그아웃" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg>
+    </div>
+  </header>
+
+  <div class="ss-title">견적 수정</div>
+
+  <div class="ss-main">
+    <div class="ss-body" style="overflow:auto">
+
+      <div class="mk-review" id="review">
+        <div class="mk-review__head" onclick="toggleReview()">검토용 메모 — v2: 잘 만든 견적 자동화(CPQ) 구조로 다시 짠 안 (실제 화면에는 없음)<span id="reviewHint">접기 · 번호 숨기기</span></div>
+        <div class="mk-review__body">
+          <h4>참고한 제품들의 공통 구조 (Salesforce CPQ · DealHub · PandaDoc · HubSpot)</h4>
+          <ul>
+            <li><b>구성 질문(Guided selling)</b> — 영업이 몇 가지 질문에 답하면 맞는 품목 · 수량 · 가격이 규칙대로 채워진다. 표를 직접 만지는 일이 줄어든다.</li>
+            <li><b>라인 편집기 한 장</b> — 품목은 블록(그룹)별로 묶은 <b>표 하나</b>에서 고친다. 그룹 머리에 소계, 위에는 견적 전체에 걸리는 값.</li>
+            <li><b>정가 → 제안가 → 할인율</b>을 한 줄에서 보인다 — 네고(차수)할 때 무엇을 얼마나 깎았는지가 바로 보인다.</li>
+            <li><b>늘 보이는 요약과 확인 목록</b> — 합계와 "보내기 전에 확인할 것"(가드레일)을 옆에 고정.</li>
+            <li><b>문서 부분은 따로</b> — 결제 조건 · 약관 같은 문서 문구는 라인과 섞지 않고 접힌 요약으로, 미리보기에서 완성본을 본다.</li>
+          </ul>
+          <h4>이 안에서 바꾼 점 (번호)</h4>
+          <ol>
+            <li><b>구성 질문</b> 카드 <span class="mk-new">새 기능 제안</span> — 서비스 · 인원/건수 · 독립인프라 · 내부 연계를 고르면 아래 라인이 채워진다(지금은 템플릿 + 직접 입력).</li>
+            <li><b>표 하나</b>에 블록을 묶음 행으로 — 블록마다 따로 있던 표 머리 · 버튼 줄이 하나로 줄어든다. 묶음 행은 접을 수 있다(▾ 누르기).</li>
+            <li><b>할인율 칸</b> <span class="mk-new">새 칸 제안</span> — 기준단가 대비 제안단가. 네고 차수에서 얼마 깎았는지 보인다(계산만, 입력 없음).</li>
+            <li>결제 방안 · 견적조건은 <b>접힌 요약 줄</b> — 누르면 펼쳐서 고친다. 라인 편집과 문서 문구를 나눈다.</li>
+            <li>오른쪽 <b>견적 요약</b>(읽기만) — 일시불 · 월 금액, 차수, 가격정책 버전. 지난번 뺀 합계 표(DC · 절사 입력)는 되살리지 않았다.</li>
+            <li><b>확인 필요</b> 목록 <span class="mk-new">새 기능 제안</span> — 금액 없는 행, 견적용도 빈칸처럼 발행 전에 볼 것을 모아 보인다.</li>
+          </ol>
+          <div style="margin-top:6px">버튼은 지금 화면의 것만 두었습니다. 보라색 <b>새 기능 제안</b> 표시는 승인 전에는 만들지 않을 부분입니다.</div>
+        </div>
+      </div>
+
+      <div class="ss-formhead" style="margin-top:12px">
+        <div class="ss-actions">
+          <button class="ss-btn ss-btn--default">취소</button>
+          <button class="ss-btn ss-btn--default">미리보기</button>
+          <button class="ss-btn ss-btn--default">임시저장</button>
+          <button class="ss-btn ss-btn--default">이전</button>
+          <button class="ss-btn ss-btn--save">다음</button>
+        </div>
+      </div>
+
+      <div class="mk-steps">
+        <div class="mk-step mk-step--done"><span class="mk-step__n">✓</span>유형 선택</div>
+        <div class="mk-step mk-step--done"><span class="mk-step__n">✓</span>기본정보</div>
+        <div class="mk-step mk-step--on"><span class="mk-step__n">3</span>구성</div>
+        <div class="mk-step"><span class="mk-step__n">4</span>인건비</div>
+        <div class="mk-step"><span class="mk-step__n">5</span>검토·발행</div>
+      </div>
+
+      <div class="mk-info">
+        <div class="mk-info__item"><label>수신처<span class="req"> *</span></label><input class="ss-input" value="창성" style="width:200px"></div>
+        <div class="mk-info__item"><label>담당자</label><input class="ss-input" value="전선경" style="width:140px"></div>
+        <div class="mk-info__item"><label>견적용도</label><input class="ss-input" placeholder="예) 전자구매시스템 구축 견적 (SaaS)" style="width:320px"></div>
+        <div class="mk-info__item"><label>상태</label><select class="ss-select" style="width:100px"><option>작성중</option></select></div>
+        <span class="mk-rev">QT20261031_002-2 · 2차</span>
+      </div>
+
+      <div class="mk-layout">
+        <div>
+
+          <!-- ① 구성 질문 -->
+          <section class="mk-card">
+            <div class="mk-card__head"><span class="mk-card__title">구성 질문</span><span class="mk-pin">1</span><span class="mk-new">새 기능 제안</span>
+              <span class="mk-card__note" style="margin-left:8px">답하면 아래 품목이 채워집니다. 표에서 직접 고친 값은 그대로 둡니다.</span></div>
+            <div class="mk-card__body">
+              <div class="mk-q">
+                <div class="mk-q__item"><label>서비스</label><select class="ss-select"><option>S2C — 견적/입찰/계약관리</option><option>S2P — 구매 전체</option></select></div>
+                <div class="mk-q__item"><label>요금 기준</label><div class="mk-q__row"><select class="ss-select" style="width:90px"><option>건수</option><option>인원</option></select><input class="ss-input" value="300" style="text-align:right"><span style="align-self:center;font-size:13px">건</span></div></div>
+                <div class="mk-q__item"><label>독립인프라</label><select class="ss-select"><option>사용</option><option>사용 안 함</option></select></div>
+                <div class="mk-q__item"><label>내부 연계</label><div class="mk-checks"><label><input type="checkbox" checked>ERP</label><label><input type="checkbox" checked>그룹웨어</label><label><input type="checkbox" checked>인사</label></div></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ② 라인 편집기 -->
+          <section class="mk-card">
+            <div class="mk-card__head"><span class="mk-card__title">견적 품목</span><span class="mk-pin">2</span>
+              <span class="mk-sp"></span>
+              <select class="ss-select" style="width:200px;height:30px"><option>솔루션 견적</option><option>라이선스비용</option><option>시스템 구축 견적</option></select>
+              <button class="ss-btn ss-btn--save" style="height:30px">블록 추가</button>
+            </div>
+            <div class="mk-card__body" style="padding:0">
+              <table class="ss-grid mk-grid" style="border:0">
+                <colgroup><col style="width:52px"><col style="width:70px"><col style="width:180px"><col><col style="width:120px"><col style="width:90px"><col style="width:110px"><col style="width:70px"><col style="width:120px"><col style="width:120px"></colgroup>
+                <thead><tr><th>선택</th><th>구분</th><th>모듈</th><th>세부기능</th><th>인원·건수</th><th>수량</th><th>기준단가</th><th>할인율 <span class="mk-pin">3</span></th><th>제안단가</th><th>제안금액</th></tr></thead>
+
+                <!-- 1. 셋업비용 -->
+                <tbody>
+                  <tr class="mk-group" data-g="g1"><td colspan="10" class="mk-group__cell"><div class="mk-group__wrap">
+                    <button class="mk-caret" onclick="toggleGroup(this)" title="접기 · 펴기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button>
+                    <span class="mk-group__no">1</span><span class="mk-group__name">셋업비용</span>
+                    <span class="mk-move"><button disabled title="위로"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 15 6-6 6 6"/></svg></button><button title="아래로"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button></span>
+                    <span class="mk-group__sum">소계<b>3,000,000</b></span>
+                    <span class="mk-group__tools"><button class="ss-btn ss-btn--gridrow">행추가</button><button class="ss-btn ss-btn--gridrow">행삭제</button><button class="ss-btn ss-btn--delete">블록 빼기</button></span>
+                  </div></td></tr>
+                </tbody>
+                <tbody data-of="g1">
+                  <tr>
+                    <td><input type="checkbox"></td><td><span class="mk-cat">부가</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">기본 셋업비</div><div class="mk-mod__code">PRO_SAAS_SETUP</div></td>
+                    <td class="mk-spec mk-edit">초기 환경설정</td>
+                    <td></td><td class="mk-num mk-edit">1 식</td>
+                    <td class="mk-num">3,000,000</td><td class="mk-num"><span class="mk-empty">-</span></td>
+                    <td class="mk-num mk-edit" style="font-weight:600;color:var(--ss-primary)">3,000,000</td>
+                    <td class="mk-amt">3,000,000</td>
+                  </tr>
+                  <tr class="mk-row--zero">
+                    <td><input type="checkbox"></td><td><span class="mk-cat">부가</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">내부시스템 연계</div><div class="mk-mod__code">PRO_SAAS_IF</div></td>
+                    <td class="mk-spec mk-edit">ERP(오라클) · 그룹웨어 · 인사시스템 — 질문 답에서 채움</td>
+                    <td></td><td class="mk-num mk-edit">0 MM</td>
+                    <td class="mk-num mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                    <td class="mk-num mk-edit mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                  </tr>
+                  <tr class="mk-row--zero">
+                    <td><input type="checkbox"></td><td><span class="mk-cat">부가</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">커스터마이징</div><div class="mk-mod__code">PRO_SAAS_CUSTOM</div></td>
+                    <td class="mk-spec mk-edit">현재 업무요건 기준 — 상세 협의 후 추가 제안</td>
+                    <td></td><td class="mk-num mk-edit">0 M/M</td>
+                    <td class="mk-num mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                    <td class="mk-num mk-edit mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                  </tr>
+                </tbody>
+
+                <!-- 2. 서비스 이용료(월) -->
+                <tbody>
+                  <tr class="mk-group" data-g="g2"><td colspan="10" class="mk-group__cell"><div class="mk-group__wrap">
+                    <button class="mk-caret" onclick="toggleGroup(this)" title="접기 · 펴기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button>
+                    <span class="mk-group__no">2</span><span class="mk-group__name">서비스 이용료(월)</span><span class="mk-tag">월정액</span>
+                    <span class="mk-move"><button title="위로"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 15 6-6 6 6"/></svg></button><button disabled title="아래로"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></button></span>
+                    <span class="mk-group__sum">월 소계<b>1,080,000</b></span>
+                    <span class="mk-group__tools"><button class="ss-btn ss-btn--gridrow">행추가</button><button class="ss-btn ss-btn--gridrow">행삭제</button><button class="ss-btn ss-btn--delete">블록 빼기</button></span>
+                  </div></td></tr>
+                </tbody>
+                <tbody data-of="g2">
+                  <tr>
+                    <td><input type="checkbox"></td><td><span class="mk-cat mk-cat--base">기본</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">서비스 이용료</div><div class="mk-mod__code">PRO_SAAS_S2C</div></td>
+                    <td class="mk-spec mk-edit">견적/입찰/계약관리</td>
+                    <td class="mk-num mk-edit"><span class="mk-band"><span class="mk-band__kind">건수</span><b>300</b> 건</span></td>
+                    <td class="mk-num mk-edit">1 건</td>
+                    <td class="mk-num">1,200,000</td><td class="mk-num"><span class="mk-dc">10%</span></td>
+                    <td class="mk-num mk-edit" style="font-weight:600;color:var(--ss-primary)">1,080,000</td>
+                    <td class="mk-amt">1,080,000</td>
+                  </tr>
+                  <tr class="mk-row--zero">
+                    <td><input type="checkbox"></td><td><span class="mk-cat">부가</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">Poa-BiA 비용</div><div class="mk-mod__code">PRO_SAAS_BIA</div></td>
+                    <td class="mk-spec mk-edit">인터페이스 모듈</td>
+                    <td></td><td class="mk-num mk-edit">1 월</td>
+                    <td class="mk-num mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                    <td class="mk-num mk-edit mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                  </tr>
+                  <tr class="mk-row--zero">
+                    <td><input type="checkbox"></td><td><span class="mk-cat">부가</span></td>
+                    <td class="mk-mod"><div class="mk-mod__name">독립인프라(S2C)</div><div class="mk-mod__code">PRO_SAAS_INFRA_S2C</div></td>
+                    <td class="mk-spec mk-edit">서버/DBMS</td>
+                    <td></td><td class="mk-num mk-edit">1 월</td>
+                    <td class="mk-num mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                    <td class="mk-num mk-edit mk-empty">-</td><td class="mk-num mk-empty">-</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- ③ 문서 부분 -->
+          <section class="mk-card">
+            <div class="mk-card__head"><span class="mk-card__title">견적서 문구</span><span class="mk-pin">4</span><span class="mk-card__note" style="margin-left:8px">누르면 펼쳐서 고칩니다</span></div>
+            <div class="mk-doc"><span class="mk-doc__name">결제 방안</span><span class="mk-doc__sum">셋업비용 일시불 — 계약체결 후 50% / 구축완료 후 50% · 월 사용료 매월 말</span><span class="mk-doc__open">펼치기 ▾</span></div>
+            <div class="mk-doc"><span class="mk-doc__name">견적조건</span><span class="mk-doc__sum">3문장 — 서비스 이용료에는 유지보수, 인프라이용료 등이 포함되어 있습니다. …</span><span class="mk-doc__open">펼치기 ▾</span></div>
+          </section>
+        </div>
+
+        <!-- ④ 오른쪽 요약 -->
+        <aside class="mk-side">
+          <div class="mk-sum">
+            <div class="mk-sum__head">견적 요약<span class="mk-pin">5</span></div>
+            <div class="mk-sum__row mk-sum__row--main">일시불<b>3,000,000</b></div>
+            <div class="mk-sum__row">월 사용료<b>1,080,000</b></div>
+            <div class="mk-sum__line"></div>
+            <div class="mk-sum__meta">
+              부가세 별도 · 십만원 미만 절사<br>
+              차수 2차 — 사유: 고객 네고 요청<br>
+              가격정책 전자구매 SaaS v1.8<br>
+              1차 대비 월 -120,000 (-10%)
+            </div>
+          </div>
+          <div class="mk-check">
+            <div class="mk-check__head">발행 전 확인 <span class="mk-pin">6</span><span class="mk-new">새 기능 제안</span></div>
+            <ul>
+              <li>금액 없는 행 4건 (연계 · 커스터마이징 · BiA · 인프라)</li>
+              <li>견적용도가 비어 있습니다</li>
+              <li>할인율 10% — 승인 기준 이내</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+
+    </div>
+  </div>
+
+  <nav class="ss-tabbar">
+    <div class="ss-tabbar__tab">SUMMARY</div>
+    <div class="ss-tabbar__tab ss-tabbar__tab--active">견적 작성 <span class="ss-tabbar__close">&times;</span></div>
+  </nav>
+
+</div>
+<script>
+  function toggleGroup(btn) {
+    var tr = btn.closest('tr');
+    var g = tr.getAttribute('data-g');
+    var closed = tr.hasAttribute('data-closed');
+    if (closed) tr.removeAttribute('data-closed'); else tr.setAttribute('data-closed', '');
+    document.querySelector('tbody[data-of="' + g + '"]').style.display = closed ? '' : 'none';
+  }
+  function toggleReview() {
+    var r = document.getElementById('review');
+    var closed = r.hasAttribute('data-closed');
+    if (closed) { r.removeAttribute('data-closed'); document.body.removeAttribute('data-hide-pins'); document.getElementById('reviewHint').textContent = '접기 · 번호 숨기기'; }
+    else { r.setAttribute('data-closed', ''); document.body.setAttribute('data-hide-pins', ''); document.getElementById('reviewHint').textContent = '펼치기 · 번호 보이기'; }
+  }
+</script>
+</body>
+</html>

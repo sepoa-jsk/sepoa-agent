@@ -1,127 +1,150 @@
 import { api } from '../api.js';
-import { h, toast, clear, confirmModal, resizableColumns } from '../ui.js';
+import { store } from '../app.js';
+import { h, toast, clear, confirmModal, openModal, debounce, resizableColumns } from '../ui.js';
 
-// 고객사 = sq_mst_customer (V4, 2026-10-29). 수신처는 고객사명으로 쓴다.
-// L1 인라인 편집형 — 머리(검색 · 기업구분 · 채널, 라벨 글자 없이) + 행추가/행삭제/저장 + 편집 그리드.
-// 동작은 가격정책·마스터 관리와 같다(선택 60px · 칸 너비 고정·조절 · 머리 정렬 · 사용 중지 행 숨김).
-const CHANNELS = [['DIRECT', '직거래'], ['AGENCY', '에이전시']];
+// 고객사관리 = sq_mst_customer (V4, 2026-10-29). 수신처는 고객사명으로 쓴다.
+// L1 조회형(인라인 편집) — 2026-10-31 공통 패턴으로 다시 맞춤:
+//   툴바 좌: Search(고객사명 · 코드, 입력하면 바로 걸린다) → 필터(솔루션 · 기업구분 · 채널) 상자 / 우: 행추가 · 행삭제 · 저장
+//   걸린 조건은 필터칩 줄, 건수는 명세바 오른쪽. 거르기만 하므로 고치던 값은 조건을 바꿔도 남는다.
+// 코드는 자동 채번(서버 — 새 행을 저장할 때 C0001 …). 기업구분코드 · 정렬 칸은 뺐다(목록은 고객사명 순).
+// 사용 솔루션(V12) — 한 고객사가 여러 솔루션을 쓸 수 있다. 칸을 누르면 체크로 고른다. V12 전 DB 에서는 칸이 보이지 않는다.
+// 채널 — 고객사와 바로 하는지, 컨설팅펌 · SI 업체 등을 끼고 하는지(2026-11-02 사용자 요청으로 이름만 바꿈, 코드는 그대로)
+export const CHANNELS = [['DIRECT', '직접 (고객사)'], ['AGENCY', '간접 (컨설팅펌 · SI 경유)']];
 
 const FIELDS = [
-  { key: 'code', label: '코드', type: 'text', mono: true, required: true, width: 130 },
+  { key: 'code', label: '코드', type: 'auto', width: 100 },
   { key: 'name', label: '고객사명', type: 'text', required: true, width: 200 },
-  { key: '_company_code', label: '기업구분코드', type: 'codeview', of: 'company_key', width: 110 },
-  { key: 'company_key', label: '기업구분', type: 'preset', options: 'company', width: 150 },
+  { key: 'solutions', label: '사용 솔루션', type: 'multi', width: 200, v12: true },
+  { key: 'company_key', label: '기업구분', type: 'preset', options: 'company', width: 140 },
   { key: 'channel', label: '채널', type: 'preset', options: CHANNELS, width: 110 },
   { key: 'contact_name', label: '담당자', type: 'text', width: 110 },
   { key: 'contact_phone', label: '연락처', type: 'text', width: 130 },
-  { key: 'contact_email', label: '이메일', type: 'text', width: 180 },
+  { key: 'contact_email', label: '이메일', type: 'text', width: 200 },
   { key: 'payment_terms', label: '결제조건', type: 'text', width: 200 },
   { key: 'note', label: '비고', type: 'text', width: 240 },
-  { key: 'sort', label: '정렬', type: 'number', width: 70 },
 ];
-const DATA = FIELDS.filter((f) => f.type !== 'codeview'); // 저장하는 칸
 
 const icon = {
   search: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  filter: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18l-7 8v7l-4 2v-9z"/></svg>',
 };
+const splitSol = (v) => String(v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 export async function renderCustomers(root) {
-  const filter = { q: '', company: '', channel: '' };
+  const filter = { q: '', solution: '', company: '', channel: '' };
   let companyOpts = [];
-  let rows = [];     // [{ orig, form, isNew, checked, seq }] — 지금 그리드에 있는 행(검색 조건에 맞는 것)
+  const solutionOpts = (store.master?.solutions || []).map((s) => [s.code, s.name]);
+  let hasSol = false; // V12 칸이 있는가(서버가 has_solutions 로 알려 준다)
+  let rows = [];     // [{ orig, form, isNew, checked, seq }] — 사용 중인 고객사 전부. 화면에는 조건에 맞는 것만 그린다
   let deleted = [];
   let sort = { key: null, dir: null };
   let seq = 0;
-  let headCells = [];
 
+  const fields = () => FIELDS.filter((f) => !f.v12 || hasSol);
   const optionsOf = (f) => (f.options === 'company' ? companyOpts : f.options);
-  const isDirty = () => deleted.length > 0 || rows.some((r) => r.isNew || changed(r));
-  const blockIfDirty = () => {
-    if (!isDirty()) return false;
-    toast('저장하지 않은 변경이 있습니다. 먼저 저장하세요.', 'err');
-    return true;
-  };
+  const solName = (code) => (solutionOpts.find(([c]) => c === code) || [])[1] || code;
+  const nameOf = (opts, v) => (opts.find(([k]) => k === v) || [])[1] || v;
 
-  // ── 머리: 검색 · 기업구분 · 채널 | 행추가 · 행삭제 · 저장 ──
-  const qInput = h('input', { placeholder: '고객사명 · 코드', 'aria-label': '검색',
-    onkeydown: (e) => { if (e.key === 'Enter') search(); } });
-  const companySel = h('select', { class: 'ss-select', 'aria-label': '기업구분', onchange: () => search() });
-  const channelSel = h('select', { class: 'ss-select', 'aria-label': '채널', onchange: () => search() },
-    h('option', { value: '' }, '채널 전체'), ...CHANNELS.map(([v, t]) => h('option', { value: v }, t)));
-  root.appendChild(h('div', { class: 'ss-edithead' },
-    h('div', { class: 'ss-edithead__fields', style: 'grid-template-columns:220px 152px 152px' },
-      h('div', { class: 'ss-search' }, qInput,
-        h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search, onclick: () => search() })),
-      h('div', { class: 'ss-field' }, companySel),
-      h('div', { class: 'ss-field' }, channelSel)),
+  // ── 툴바 좌: Search ──
+  const applyQ = () => { filter.q = qInput.value.trim().toLowerCase(); paintRows(); };
+  const qInput = h('input', { placeholder: 'Search', 'aria-label': '고객사명 · 코드 검색', oninput: debounce(applyQ, 250) });
+  const search = h('div', { class: 'ss-search' }, qInput,
+    h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search, onclick: applyQ }));
+
+  // ── 필터: 상세 검색 팝오버 (솔루션 · 기업구분 · 채널) ──
+  const solSel = h('select', { class: 'ss-select' }, h('option', { value: '' }, '전체'), ...solutionOpts.map(([v, t]) => h('option', { value: v }, t)));
+  const companySel = h('select', { class: 'ss-select' });
+  const channelSel = h('select', { class: 'ss-select' }, h('option', { value: '' }, '전체'), ...CHANNELS.map(([v, t]) => h('option', { value: v }, t)));
+  const solRow = h('div', { class: 'ss-popover__row' }, h('label', {}, '솔루션'), solSel);
+  const popover = h('div', { class: 'ss-popover', hidden: true },
+    h('div', { class: 'ss-popover__head' }, '상세 검색',
+      h('button', { class: 'ss-popover__close', 'aria-label': '닫기', html: '&times;', onclick: () => { popover.hidden = true; } })),
+    h('div', { class: 'ss-popover__body' },
+      h('div', { class: 'ss-popover__actions' },
+        h('button', { class: 'ss-btn ss-btn--save', onclick: () => {
+          filter.solution = solSel.value; filter.company = companySel.value; filter.channel = channelSel.value;
+          popover.hidden = true;
+          paintRows();
+        } }, '조회'),
+        h('button', { class: 'ss-btn ss-btn--default', onclick: () => {
+          solSel.value = ''; companySel.value = ''; channelSel.value = '';
+          filter.solution = ''; filter.company = ''; filter.channel = '';
+          paintRows();
+        } }, '초기화')),
+      solRow,
+      h('div', { class: 'ss-popover__row' }, h('label', {}, '기업구분'), companySel),
+      h('div', { class: 'ss-popover__row' }, h('label', {}, '채널'), channelSel)));
+  const filterBtn = h('button', { class: 'ss-tbtn', onclick: (e) => { e.stopPropagation(); popover.hidden = !popover.hidden; } },
+    h('span', { class: 'ss-tbtn__ico--filter', html: icon.filter }), ' 필터');
+
+  const outside = (e) => {
+    if (!root.isConnected) { document.removeEventListener('click', outside); return; }
+    if (!popover.contains(e.target)) popover.hidden = true;
+  };
+  document.addEventListener('click', outside);
+
+  root.appendChild(h('div', { class: 'ss-toolbar' },
+    search,
+    h('div', { class: 'ss-toolbar__tools' }, h('div', { class: 'ss-dropdown' }, filterBtn, popover)),
+    h('div', { class: 'ss-toolbar__spacer' }),
     h('div', { class: 'ss-actions' },
       h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
       h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: save }, '저장'))));
 
-  // 검색 조건을 바꿀 때 저장 안 한 변경이 있으면 조건을 되돌린다
-  function search() {
-    if (blockIfDirty()) {
-      qInput.value = filter.q; companySel.value = filter.company; channelSel.value = filter.channel;
-      return;
-    }
-    filter.q = qInput.value.trim(); filter.company = companySel.value; filter.channel = channelSel.value;
-    load();
-  }
+  const chips = h('div', { class: 'ss-chips', hidden: true });
+  root.appendChild(chips);
+  const note = h('div', { class: 'ss-detailbar' });
+  root.appendChild(note);
+  const gridBox = h('div', { class: 'ss-gridwrap ss-gridwrap--fill', style: 'margin-top:8px' });
+  root.appendChild(gridBox);
 
-  // ── 편집 그리드: 칸마다 정한 너비 그대로 (한 칸만 길어지지 않게) ──
-  const widths = [60, ...FIELDS.map((f) => f.width)];
-  const tbody = h('tbody');
-  const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((s, w) => s + w, 0)}px` },
-    h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
-    h('thead', {}, h('tr', {},
-      h('th', { 'data-fixed': '' }, '선택'),
-      ...(headCells = FIELDS.map((f) => h('th', {
-        class: 'is-sortable' + (f.required ? ' req' : ''), title: '눌러서 정렬', onclick: () => toggleSort(f),
-      }, f.label, h('span', { class: 'ss-sortmark' })))))),
-    tbody);
-  root.appendChild(h('div', { class: 'ss-gridwrap ss-gridwrap--fill', style: 'margin-top:12px' }, table));
-  resizableColumns(table, 'quote2:customer-cols');
-
-  const emptyRow = (text) => h('tr', {}, h('td', { colspan: FIELDS.length + 1, class: 'ss-cell--empty' }, text));
-  const toForm = (row) => Object.fromEntries(DATA.map((f) => [f.key, row[f.key]]));
+  const toForm = (row) => Object.fromEntries(FIELDS.map((f) => [f.key, row[f.key]]));
 
   async function loadCompanies() {
     try {
       const { rows: cc } = await api.masterList('company_classes');
-      companyOpts = (cc || []).filter((r) => r.active).sort((a, b) => a.sort - b.sort).map((r) => [r.key, r.label]);
+      // 기업구분은 솔루션 · 구축형태마다 행이 있다 — key 로 한 번만
+      const seen = new Map();
+      for (const r of (cc || []).filter((x) => x.active).sort((a, b) => a.sort - b.sort)) if (!seen.has(r.key)) seen.set(r.key, r.label);
+      companyOpts = [...seen];
     } catch { companyOpts = []; }
-    clear(companySel).append(h('option', { value: '' }, '기업구분 전체'),
-      ...companyOpts.map(([v, t]) => h('option', { value: v }, t)));
+    clear(companySel).append(h('option', { value: '' }, '전체'), ...companyOpts.map(([v, t]) => h('option', { value: v }, t)));
   }
 
   async function load() {
     rows = []; deleted = [];
-    clear(tbody).appendChild(emptyRow('불러오는 중...'));
+    clear(gridBox).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
     try {
-      const { rows: list } = await api.masterList('customers');
-      const q = filter.q.toLowerCase();
-      const data = (list || []).filter((r) => r.active
-        && (!q || String(r.name || '').toLowerCase().includes(q) || String(r.code || '').toLowerCase().includes(q))
-        && (!filter.company || r.company_key === filter.company)
-        && (!filter.channel || r.channel === filter.channel));
-      rows = data.map((r) => ({ orig: r, form: toForm(r), isNew: false, checked: false, seq: seq++ }));
-      applySort();
+      const { rows: list, has_solutions: hs } = await api.masterList('customers');
+      hasSol = !!hs;
+      solRow.hidden = !hasSol;
+      rows = (list || []).filter((r) => r.active)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'))
+        .map((r) => ({ orig: r, form: toForm(r), isNew: false, checked: false, seq: seq++ }));
       paintRows();
     } catch (err) {
-      clear(tbody).appendChild(emptyRow(err.message));
+      clear(gridBox).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, err.message));
     }
   }
 
-  // 새 행은 머리에서 고른 기업구분 · 채널로 시작한다
+  const visible = () => {
+    const q = filter.q;
+    return rows.filter((r) => r.isNew || ((!q || String(r.form.name || '').toLowerCase().includes(q) || String(r.form.code || '').toLowerCase().includes(q))
+      && (!filter.solution || splitSol(r.form.solutions).includes(filter.solution))
+      && (!filter.company || r.form.company_key === filter.company)
+      && (!filter.channel || r.form.channel === filter.channel)));
+  };
+
+  // 새 행은 필터에서 고른 솔루션 · 기업구분 · 채널로 시작한다
   function addRow() {
-    const form = Object.fromEntries(DATA.map((f) => [f.key, null]));
+    const form = Object.fromEntries(FIELDS.map((f) => [f.key, null]));
+    form.solutions = filter.solution || null;
     form.company_key = filter.company || null;
     form.channel = filter.channel || null;
-    form.sort = rows.length + 1;
     rows.push({ orig: null, form, isNew: true, checked: false, seq: seq++ });
     paintRows();
-    tbody.lastElementChild?.querySelector('input.ss-cellinput')?.focus();
+    gridBox.querySelector('tbody tr:last-child input.ss-cellinput')?.focus();
   }
 
   function removeRows() {
@@ -136,73 +159,131 @@ export async function renderCustomers(root) {
   function toggleSort(f) {
     const next = sort.key !== f.key ? 'asc' : sort.dir === 'asc' ? 'desc' : null;
     sort = { key: next ? f.key : null, dir: next };
-    headCells.forEach((th, i) => {
-      const on = FIELDS[i].key === sort.key;
-      th.querySelector('.ss-sortmark').textContent = on ? (sort.dir === 'asc' ? '▲' : '▼') : '';
-      th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
-    });
-    applySort();
     paintRows();
   }
 
-  function applySort() {
+  function sorted(list) {
     const f = sort.key && FIELDS.find((x) => x.key === sort.key);
-    if (!f) { rows.sort((a, b) => a.seq - b.seq); return; }
-    const num = f.type === 'number';
+    if (!f) return [...list].sort((a, b) => a.seq - b.seq);
     const val = (r) => {
-      const v = f.type === 'codeview' ? r.form[f.of]
-        : f.type === 'preset' ? ((optionsOf(f).find(([k]) => k === r.form[f.key]) || [])[1] ?? r.form[f.key])
-          : r.form[f.key];
-      return v == null || v === '' ? null : num ? Number(v) : String(v);
+      const v = f.type === 'preset' ? nameOf(optionsOf(f), r.form[f.key])
+        : f.type === 'multi' ? splitSol(r.form[f.key]).map(solName).join(', ') : r.form[f.key];
+      return v == null || v === '' ? null : String(v);
     };
     const dir = sort.dir === 'asc' ? 1 : -1;
-    rows.sort((a, b) => {
+    return [...list].sort((a, b) => {
       const x = val(a), y = val(b);
       if (x == null || y == null) return x == null && y == null ? a.seq - b.seq : x == null ? 1 : -1;
-      const c = num ? x - y : x.localeCompare(y, 'ko', { numeric: true });
+      const c = x.localeCompare(y, 'ko', { numeric: true });
       return c ? c * dir : a.seq - b.seq;
     });
   }
 
-  function paintRows() {
-    clear(tbody);
-    if (!rows.length) { tbody.appendChild(emptyRow('데이터가 없습니다. 행추가로 등록하세요.')); return; }
-    rows.forEach((r) => tbody.appendChild(rowEl(r)));
+  function paintChips() {
+    clear(chips);
+    const list = [];
+    if (filter.q) list.push(['검색어 ' + filter.q, () => { filter.q = ''; qInput.value = ''; }]);
+    if (filter.solution) list.push(['솔루션 ' + solName(filter.solution), () => { filter.solution = ''; solSel.value = ''; }]);
+    if (filter.company) list.push(['기업구분 ' + nameOf(companyOpts, filter.company), () => { filter.company = ''; companySel.value = ''; }]);
+    if (filter.channel) list.push(['채널 ' + nameOf(CHANNELS, filter.channel), () => { filter.channel = ''; channelSel.value = ''; }]);
+    chips.hidden = !list.length;
+    filterBtn.classList.toggle('is-active', !!(filter.solution || filter.company || filter.channel));
+    if (!list.length) return;
+    chips.appendChild(h('span', {}, '필터 조건'));
+    for (const [label, off] of list) {
+      chips.appendChild(h('span', { class: 'ss-chip' }, label,
+        h('span', { style: 'cursor:pointer', title: '제거', html: '&times;', onclick: () => { off(); paintRows(); } })));
+    }
+    chips.appendChild(h('span', { style: 'cursor:pointer', title: '전체 지우기', html: '&#9003;', onclick: () => {
+      Object.assign(filter, { q: '', solution: '', company: '', channel: '' });
+      qInput.value = ''; solSel.value = ''; companySel.value = ''; channelSel.value = '';
+      paintRows();
+    } }));
   }
 
-  function rowEl(r) {
+  function paintRows() {
+    paintChips();
+    const fs = fields();
+    const list = sorted(visible());
+    const widths = [60, ...fs.map((f) => f.width)];
+    const tbody = h('tbody');
+    if (!list.length) tbody.appendChild(h('tr', {}, h('td', { colspan: fs.length + 1, class: 'ss-cell--empty' }, rows.length ? '조건에 맞는 고객사가 없습니다.' : '데이터가 없습니다. 행추가로 등록하세요.')));
+    list.forEach((r) => tbody.appendChild(rowEl(r, fs)));
+    const table = h('table', { class: 'ss-grid ss-grid--sized', style: `width:${widths.reduce((s, w) => s + w, 0)}px` },
+      h('colgroup', {}, ...widths.map((w) => h('col', { style: `width:${w}px` }))),
+      h('thead', {}, h('tr', {},
+        h('th', { 'data-fixed': '' }, '선택'),
+        ...fs.map((f) => {
+          const on = sort.key === f.key;
+          return h('th', { class: 'is-sortable' + (f.required ? ' req' : ''), title: '눌러서 정렬', onclick: () => toggleSort(f),
+            'aria-sort': on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none' },
+          f.label, h('span', { class: 'ss-sortmark' }, on ? (sort.dir === 'asc' ? '▲' : '▼') : ''));
+        }))),
+      tbody);
+    clear(gridBox).appendChild(table);
+    resizableColumns(table, `quote2:customer-cols2:${hasSol ? 'sol' : 'base'}`);
+    clear(note).append(h('span', { class: 'ss-detailbar__note' }, '코드는 저장할 때 자동으로 붙습니다. 행삭제한 고객사는 사용 중지됩니다.'),
+      h('div', { class: 'ss-detailbar__spacer' }),
+      h('span', { class: 'ss-detailbar__count' }, h('b', {}, String(list.length)), ' 건'));
+  }
+
+  function rowEl(r, fs) {
     const tr = h('tr', { class: r.isNew ? 'is-new' : null },
       h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } })));
-    FIELDS.forEach((f) => tr.appendChild(cellEl(f, r, () => tr.replaceWith(rowEl(r)))));
+    fs.forEach((f) => tr.appendChild(cellEl(f, r, () => tr.replaceWith(rowEl(r, fs)))));
     return tr;
   }
 
   function cellEl(f, r, repaint) {
     const form = r.form;
-    if (f.type === 'codeview') return h('td', { class: 'ss-cell--link' }, form[f.of] || '');
+    if (f.type === 'auto') {
+      return h('td', { class: 'ss-cell--link', style: 'text-align:center' }, form.code || h('span', { style: 'color:var(--ss-ink-3);font-weight:400' }, '자동'));
+    }
+    if (f.type === 'multi') {
+      const names = splitSol(form[f.key]).map(solName).join(', ');
+      return h('td', { class: 'ss-cell--input' }, h('button', { type: 'button', class: 'ss-cellinput', title: '눌러서 고르기',
+        style: 'text-align:left;cursor:pointer;background:none;border:0;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
+        onclick: () => pickSolutions(form[f.key], (v) => { form[f.key] = v; repaint(); }) },
+      names || h('span', { style: 'color:var(--ss-ink-3)' }, '선택')));
+    }
     if (f.type === 'preset') {
       return h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': f.label,
-        onchange: (e) => { form[f.key] = e.target.value || null; repaint(); } }, // 코드 보기 칸을 다시 그린다
+        onchange: (e) => { form[f.key] = e.target.value || null; } },
       h('option', { value: '', selected: !form[f.key] }, '선택'),
       ...optionsOf(f).map(([v, t]) => h('option', { value: v, selected: v === form[f.key] }, t))));
     }
-    const attrs = { class: 'ss-cellinput', 'aria-label': f.label,
-      style: f.key === 'sort' || f.mono ? 'text-align:center' : null };
-    const inp = h('input', { ...attrs, type: 'text', inputMode: f.type === 'number' ? 'numeric' : null, value: form[f.key] ?? '',
-      oninput: (e) => {
-        if (f.type === 'number') e.target.value = e.target.value.replace(/[^\d-]/g, '');
-        form[f.key] = e.target.value;
-      } });
-    return h('td', { class: 'ss-cell--input' + (f.mono ? ' ss-cell--link' : '') }, inp);
+    return h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', 'aria-label': f.label, type: 'text', value: form[f.key] ?? '',
+      oninput: (e) => { form[f.key] = e.target.value; } }));
+  }
+
+  // 사용 솔루션 고르기 — 체크(여러 개). 솔루션 마스터 순서대로 'PROCURE,SEAL' 로 담는다
+  function pickSolutions(value, onDone) {
+    const cur = new Set(splitSol(value));
+    const boxes = solutionOpts.map(([code, name]) => {
+      const cb = h('input', { type: 'checkbox', checked: cur.has(code), value: code });
+      return h('label', { style: 'display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;cursor:pointer' }, cb, name, h('span', { style: 'color:var(--ss-ink-3);font-size:11px' }, code));
+    });
+    const m = openModal({
+      title: '사용 솔루션',
+      body: h('div', {}, ...boxes),
+      footer: [h('button', { class: 'btn', onclick: () => m.close() }, '취소'),
+        h('button', { class: 'btn btn-primary', onclick: () => {
+          const v = boxes.map((b) => b.querySelector('input')).filter((cb) => cb.checked).map((cb) => cb.value).join(',');
+          m.close();
+          onDone(v || null);
+        } }, '확인')],
+    });
+    m.back.querySelector('.modal').style.width = '320px';
   }
 
   function payloadOf(form, isNew) {
     const payload = {};
     let missing = null;
-    DATA.forEach((f) => {
+    FIELDS.forEach((f) => {
+      if (f.type === 'auto') return; // 코드는 서버가 붙인다(새 행) · 바꾸지 않는다(기존 행)
+      if (f.v12 && !hasSol) return;
       let v = form[f.key];
-      if (f.type === 'number') v = v === '' || v == null ? 0 : Number(v);
-      else if (f.type === 'preset') v = v || null;
+      if (f.type === 'preset' || f.type === 'multi') v = v || null;
       else v = v == null || String(v).trim() === '' ? null : String(v).trim();
       if (f.required && v == null) missing = missing || f.label;
       payload[f.key] = v;
@@ -224,9 +305,6 @@ export async function renderCustomers(root) {
       const { missing } = payloadOf(r.form, r.isNew);
       if (missing) return toast(`필수 항목을 확인하세요: ${missing}`, 'err');
     }
-    const codes = rows.map((r) => String(r.form.code ?? '').trim()).filter(Boolean);
-    const dup = codes.find((v, i) => codes.indexOf(v) !== i);
-    if (dup) return toast(`코드가 겹칩니다: ${dup}`, 'err');
     if (deleted.length && !(await confirmModal({
       title: '사용 중지',
       message: `행삭제한 ${deleted.length}건은 사용 중지됩니다. 저장하시겠습니까?`,
@@ -239,8 +317,7 @@ export async function renderCustomers(root) {
       for (const r of updates) { await api.masterUpdate('customers', r.orig.id, payloadOf(r.form, false).payload); done++; }
       toast(`저장되었습니다. (${done}건)`, 'ok');
     } catch (err) {
-      // 화면에 안 보이는(검색에서 빠졌거나 사용 중지한) 고객사와 코드가 겹치면 서버가 막는다
-      toast(`${done}건 저장 후 실패: ${err.status === 409 || /중복/.test(err.message) ? '이미 있는 코드입니다.' : err.message}`, 'err');
+      toast(`${done}건 저장 후 실패: ${err.message}`, 'err');
     }
     load();
   }

@@ -4,8 +4,15 @@ import { api as http } from '../../../api.js';
 import { h, won, toast } from '../../../ui.js';
 import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload } from './step3-config.js';
 import { downloadQuote } from '../quote-actions.js';
+import { store } from '../../../app.js';
 
 const num = (v) => Number(v) || 0;
+// 코드 대신 이름으로 보인다(2026-11-02 사용자 요청) — 유형은 구 상세 화면(detail.js)과 같은 이름
+const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
+// 유형 — SaaS 는 '서비스', 그 밖(구축형 · Private Cloud)은 '구축'(2026-11-02 사용자 요청). 유지보수 · 추가개발은 그 이름
+const typeLabel = (t) => (t.quote_type && t.quote_type !== 'BUILD' ? TYPE_LABEL[t.quote_type] || t.quote_type : t.deployment === 'SAAS' ? '서비스' : '구축');
+const ymd = (d) => (d ? String(d).slice(0, 10) : '-');
+const DEP_LABEL = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', ONPREM: '구축형', SAAS: 'SaaS', PCLOUD: 'Private Cloud' };
 
 // 저장 페이로드 — 발행과 임시저장이 같은 모양을 쓴다
 export function quotePayload(s) {
@@ -16,6 +23,8 @@ export function quotePayload(s) {
     monthly_discount: monthlyDiscountPayload(s),
     round_unit: num(s.round_unit ?? 100000),
     status: s.status || undefined,
+    // 근거 메일(V14) — 둘 다 비면 {} (서버가 NULL 로 지운다)
+    source_mail: s.basic.mail_url || s.basic.mail_text ? { url: s.basic.mail_url || '', text: s.basic.mail_text || '' } : {},
   };
 }
 
@@ -67,6 +76,7 @@ export function renderStep5(root, state, wiz) {
     h('span', { style: 'color:var(--text-2)' }, k),
     h('span', { class: 'num', style: strong ? 'font-weight:700' : '' }, v));
 
+  const hasMonthly = !!calc.monthly || (state.blocks || []).some((b) => b.recurring);
   const outBox = h('span', { style: 'display:contents' });
   // 내려받기는 서버에 저장된 견적 기준이다 — 저장 전 견적은 끄고, 저장된 견적은 고친 내용을 저장해야 반영된다고 버튼 풍선말로 알린다
   const savedNote = state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 발행(저장) 후 반영됩니다.' : '발행(저장) 후 내려받을 수 있습니다.';
@@ -75,18 +85,25 @@ export function renderStep5(root, state, wiz) {
     h('div', { class: 'card-b' },
       row('수신처', state.basic.customer_name || '-'),
       row('견적용도', state.basic.purpose || '-'),
-      row('유형 / 구축형태', `${state.type.quote_type} / ${state.type.deployment || '-'}`),
-      row('템플릿', state.type.template_code || '-'),
-      row('견적일 / 유효일', `${state.basic.quote_date} ~ ${state.basic.valid_until}`),
+      row('솔루션', (state.applied && state.applied.solution && store.solutionName(state.applied.solution)) || '-'),
+      row('유형 / 구축형태', `${typeLabel(state.type)} / ${DEP_LABEL[state.type.deployment] || store.deploymentName(state.type.deployment) || '-'}`),
+      row('템플릿', state.type.template_code ? (state.applied && state.applied.name ? `${state.applied.name} (${state.type.template_code})` : state.type.template_code)
+        : state.type.manual ? '직접 작성' : '-'),
+      // 두 날짜 사이는 ' / ' — 칸 이름(견적일 / 유효일)과 같은 구분(2026-11-02 사용자 요청)
+      row('견적일 / 유효일', `${ymd(state.basic.quote_date)} / ${ymd(state.basic.valid_until)}`),
       h('hr', { style: 'border:0;border-top:1px solid var(--line-2);margin:8px 0' }),
       row('일시불 소계 (원)', won(calc.onetime)),
       row('특별 DC (원)', calc.dcAmt ? '-' + won(calc.dcAmt) : '0'),
       row('절사액 (원)', calc.trunc ? '-' + won(calc.trunc) : '0'),
       row('최종견적금액 (원)', won(calc.final), true),
       row('부가세 (원, 별도 10%)', won(calc.vat)),
-      calc.monthly && calc.mdcAmt ? row('월 사용료 소계 (원)', won(calc.monthly)) : null,
-      calc.monthly && calc.mdcAmt ? row('월 특별 DC (원)', '-' + won(calc.mdcAmt)) : null,
-      calc.monthly ? row('월 사용료 (원)', won(calc.monthlyFinal), true) : null)));
+      // 월 사용료 — 월정액 블록이 있으면 금액이 0 이어도 늘 보인다
+      ...(hasMonthly ? [
+        h('hr', { style: 'border:0;border-top:1px solid var(--line-2);margin:8px 0' }),
+        row('월 사용료 소계 (원)', won(calc.monthly)),
+        row('월 특별 DC (원)', calc.mdcAmt ? '-' + won(calc.mdcAmt) : '0'),
+        row('월 사용료 (원, 부가세 별도)', won(calc.monthlyFinal), true),
+      ] : []))));
 
   // 맨 위 액션 줄과 같은 모양(ss-btn)으로 만든다
   const publishBtn = h('button', { class: 'ss-btn ss-btn--save' }, '발행 (저장)');

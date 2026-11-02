@@ -225,7 +225,12 @@ function setupLoginMode(authMode) {
 }
 
 async function afterLogin() {
-  try { store.perms = (await api.myMenus()).perms || null; } catch { store.perms = null; }
+  // 메뉴 권한 + 내 정보(견적 작성 담당자 기본값)
+  try {
+    const mine = await api.myMenus();
+    store.perms = mine.perms || null;
+    store.profile = mine.profile || null;
+  } catch { store.perms = null; store.profile = null; }
   showApp();
   await store.getMaster();
   if (!location.hash || location.hash === '#/') location.hash = '#/quotes';

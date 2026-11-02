@@ -105,8 +105,10 @@ export async function renderStep2(root, state, wiz) {
   const svcCard = dep === 'SAAS' ? await serviceCard(state, root, wiz, sol) : null;
   root.replaceChildren();
   let no = 0;
-  const card = (title, sub, body, extra = []) => h('div', { class: 'card', style: 'margin-bottom:14px' },
-    h('div', { class: 'card-h' }, h('h2', {}, `${++no}. ${title}`), h('span', { class: 'sub' }, sub), h('span', { class: 'sp' }), ...extra), body);
+  // 필수 카드(솔루션 · 구축형태 · 템플릿 선택)는 제목 뒤 빨간 * — 고르지 않으면 다음 단계로 갈 수 없다(validateStep2)
+  const card = (title, sub, body, extra = [], req = true) => h('div', { class: 'card', style: 'margin-bottom:14px' },
+    h('div', { class: 'card-h' }, h('h2', {}, `${++no}. ${title}`, req ? h('span', { class: 'req-mark' }, '*') : null),
+      h('span', { class: 'sub' }, sub), h('span', { class: 'sp' }), ...extra), body);
 
   // 1. 솔루션 — 바꾸면 템플릿과 구성을 비운다
   root.appendChild(card('솔루션', '견적할 솔루션을 고르세요',

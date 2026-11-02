@@ -1,10 +1,12 @@
 // 견적 목록 — SingleSuite L1 조회형 (툴바 + 명세바 + 그리드 상자). toray 적용 화면 기준.
 //   툴바 좌: Search (입력하면 바로 걸린다) → 필터(상세 검색) · 상태 — 상자 버튼
-//   툴바 우: 신규 · 수정 · 삭제 — 수정은 선택 1건, 삭제는 선택한 견적 전부(확인 후)
+//   툴바 우: 신규 · 수정 · 차수 추가 · 삭제 — 수정 · 차수 추가는 선택 1건, 삭제는 선택한 견적 전부(확인 후)
+//   차수(V11): 같은 건(1차 · 2차 …)은 붙어서 나온다(서버 정렬). 차수 칸이 없는 DB 에서는 모두 1차
 //   건수: 툴바 아래 상태별 건수 줄 (전체 n  작성중 n …)
 //   기간 선택기는 두지 않는다 — 목록 API 에 기간 조건이 없다
 import { api } from '../api.js';
 import { h, won, toast, clear, debounce, resizableColumns, confirmModal } from '../ui.js';
+import { reviseQuote } from './quote/quote-actions.js';
 
 const STATUS = { DRAFT: '작성중', SENT: '발송', WON: '수주', LOST: '실주' };
 const STATUS_OPTS = [['', '전체'], ...Object.entries(STATUS)];
@@ -13,8 +15,8 @@ const DEP = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분
 const purposeOf = (memo) => (String(memo || '').match(/\[견적용도\]\s*(.+)/) || [])[1] || '';
 // 칸 너비 고정 — 한 칸(고객사)이 남는 폭을 다 먹지 않게. 선택 칸 60px
 const COLS = [
-  ['선택', 60], ['견적번호', 150], ['견적일자', 100], ['고객사', 200], ['견적용도', 340], ['구축형태', 120],
-  ['공급가액', 130], ['합계금액', 130], ['상태', 80], ['작성자', 90],
+  ['선택', 60], ['고객사', 200], ['견적용도', 340], ['견적일자', 100], ['견적번호', 160], ['차수', 60], ['구축형태', 120],
+  ['공급가액', 130], ['부가세', 110], ['합계금액', 130], ['월사용료', 120], ['상태', 80], ['작성자', 90],
 ];
 const PAGE_SIZE = 100; // API 최대치. 넘칠 때만 아래에 페이지 이동이 나온다
 
@@ -105,6 +107,7 @@ export async function renderList(root) {
     h('div', { class: 'ss-actions' },
       h('button', { class: 'ss-btn ss-btn--save', onclick: () => { location.hash = '#/quotes/new'; } }, '신규'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: onEdit }, '수정'),
+      h('button', { class: 'ss-btn ss-btn--save', onclick: onRevise }, '차수 추가'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: onDelete }, '삭제'))));
 
   // ── 필터칩: 걸려 있는 조건이 있을 때만 ──
@@ -187,13 +190,18 @@ export async function renderList(root) {
           // 선택 칸은 눌러도 상세로 가지 않는다
           h('td', { onclick: (e) => e.stopPropagation() }, h('input', { type: 'checkbox', 'data-pick': '', 'aria-label': '선택',
             onchange: (e) => { if (e.target.checked) picked.add(q.id); else picked.delete(q.id); allBox.checked = picked.size === quotes.length; } })),
-          h('td', { class: 'ss-cell--link' }, h('a', { href: `#/quotes/${q.id}` }, q.quote_no)),
-          h('td', { class: 'ss-cell--date' }, ymd(q.quote_date)),
+          // 칸 순서 — 고객 · 견적용도 · 견적일자 · 견적번호 · 차수(2026-11-02 사용자 요청)
           h('td', { class: 'ss-cell--left', title: q.customer_name || '' }, q.customer_name || '-'),
           h('td', { class: 'ss-cell--left', title: purpose }, purpose),
+          h('td', { class: 'ss-cell--date' }, ymd(q.quote_date)),
+          h('td', { class: 'ss-cell--link' }, h('a', { href: `#/quotes/${q.id}` }, q.quote_no)),
+          h('td', {}, `${q.revision || 1}차`),
           h('td', {}, DEP[q.deployment] || q.deployment || ''),
           h('td', { class: 'ss-cell--amount' }, won(q.supply_amount)),
+          h('td', { class: 'ss-cell--amount' }, won(q.vat_amount)),
           h('td', { class: 'ss-cell--amount' }, won(q.total_amount)),
+          // 월사용료 — 월정액(SaaS 등)이 없는 견적은 '-'
+          h('td', { class: 'ss-cell--amount' }, Number(q.monthly_total) ? won(q.monthly_total) : '-'),
           h('td', { class: 'ss-cell--emphasis' }, STATUS[q.status] || q.status),
           h('td', {}, q.created_by_name || '-')));
       }
@@ -225,6 +233,13 @@ export async function renderList(root) {
   function onEdit() {
     if (picked.size !== 1) return toast(picked.size ? '수정은 한 건만 선택하세요.' : '수정할 견적을 선택하세요.', 'err');
     location.hash = `#/quotes/${[...picked][0]}/edit`;
+  }
+
+  // 차수 추가 — 1건만. 네고 요청이 오면 고른 견적의 내용으로 다음 차수를 만든다
+  function onRevise() {
+    if (picked.size !== 1) return toast(picked.size ? '차수 추가는 한 건만 선택하세요.' : '차수를 추가할 견적을 선택하세요.', 'err');
+    const q = quotes.find((x) => x.id === [...picked][0]);
+    if (q) reviseQuote(q);
   }
 
   async function onDelete() {
