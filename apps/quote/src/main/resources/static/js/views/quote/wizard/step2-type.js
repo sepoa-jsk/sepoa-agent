@@ -1,7 +1,7 @@
-// STEP① 유형 선택 — 솔루션 → 구축형태 → (SaaS) 서비스 → 템플릿 순서로 고른다.
+// STEP① 유형 선택 — 견적 종류(신규 구축 · 유지보수) → 솔루션 → 구축형태(신규 구축) → (SaaS) 서비스 → 템플릿 순서로 고른다.
 import { api as http } from '../../../api.js';
 import { store } from '../../../app.js';
-import { h } from '../../../ui.js';
+import { h, confirmModal } from '../../../ui.js';
 import { kindBadge, openTemplatePicker } from './template-picker.js';
 import { loadSaasCatalog, quoteService } from './step3-config.js';
 
@@ -9,6 +9,10 @@ const DEP_LABEL = {
   ONPREM_LUMP: '온프레미스 일시불', ONPREM_INSTALL: '온프레미스 분납',
   SAAS: 'SaaS', PCLOUD: 'Private Cloud',
 };
+// 견적 종류(2026-11-07 사용자 요청) — 유지보수 견적도 같은 견적 작성 화면에서 만든다. 템플릿을 종류로 거른다
+const QUOTE_TYPES = [['BUILD', '신규 구축'], ['MAINT', '유지보수']];
+// 유지보수는 구축형태를 고르지 않는다 — 유지보수 품목(솔루션 · 운영 유지보수)이 있는 온프레미스로 둔다
+const MAINT_DEP = 'ONPREM_LUMP';
 const DEP_DESC = {
   ONPREM_LUMP: '솔루션 + 개발인건비. 특별DC 후 일시납',
   ONPREM_INSTALL: '솔루션 무상 + 인건비 + 월사용료 분납',
@@ -83,7 +87,7 @@ function startManual(state, wiz, sol) {
   const on = !!state.type.manual;
   const changed = !on || (state.applied && state.applied.solution) !== sol;
   wiz.patch({
-    type: { quote_type: 'BUILD', deployment: dep, template_code: null, manual: true, solution: sol },
+    type: { quote_type: state.type.quote_type || 'BUILD', deployment: dep, template_code: null, manual: true, solution: sol },
     applied: { solution: sol, brand: '', has_pay_plan: false },
     hasLaborPlan: false,
     ...(changed ? { blocks: [], conds: [] } : {}),
@@ -97,9 +101,12 @@ function startManual(state, wiz, sol) {
 export async function renderStep2(root, state, wiz) {
   const loaded = await loadTemplates();
   const sols = ((await store.getMaster()) || {}).solutions || [];
-  // 고른 솔루션 — 저장값 → 적용된 템플릿 → 첫 솔루션. 템플릿 · 구축형태 카드는 이 솔루션 것만
-  const sol = state.type.solution || (state.applied && state.applied.solution) || (sols[0] && sols[0].code) || null;
-  const all = sol ? loaded.filter((t) => t.solution === sol) : loaded;
+  // 고른 솔루션 — 저장값 → 적용된 템플릿 → 내 담당 솔루션의 첫 번째(사용자관리, 2026-11-03) → 첫 솔루션. 템플릿 · 구축형태 카드는 이 솔루션 것만
+  const mySol = String((store.profile && store.profile.solutions) || '').split(',').map((s) => s.trim())
+    .find((c) => sols.some((x) => x.code === c));
+  const sol = state.type.solution || (state.applied && state.applied.solution) || mySol || (sols[0] && sols[0].code) || null;
+  const qt = state.type.quote_type || 'BUILD';
+  const all = loaded.filter((t) => (!sol || t.solution === sol) && (t.quote_type || 'BUILD') === qt);
   const solName = (sols.find((x) => x.code === sol) || {}).name || sol || '';
   const dep = state.type.deployment;
   const svcCard = dep === 'SAAS' ? await serviceCard(state, root, wiz, sol) : null;
@@ -110,7 +117,18 @@ export async function renderStep2(root, state, wiz) {
     h('div', { class: 'card-h' }, h('h2', {}, `${++no}. ${title}`, req ? h('span', { class: 'req-mark' }, '*') : null),
       h('span', { class: 'sub' }, sub), h('span', { class: 'sp' }), ...extra), body);
 
-  // 1. 솔루션 — 바꾸면 템플릿과 구성을 비운다
+  // 견적 종류 — 바꾸면 구축형태 · 템플릿 · 구성을 비운다(유지보수는 구축형태를 온프레미스로 정해 둔다)
+  root.appendChild(card('견적 종류', '',
+    h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
+      ...QUOTE_TYPES.map(([k, label]) => h('button', { class: 'btn' + (k === qt ? ' btn-primary' : ''), style: 'min-width:120px',
+        onclick: () => {
+          if (wiz.readOnly || k === qt) return;
+          wiz.patch({ type: { quote_type: k, deployment: k === 'MAINT' ? MAINT_DEP : null, template_code: null, manual: false, service: null },
+            blocks: [], applied: null, conds: [], pay_plan: null });
+          renderStep2(root, wiz.get(), wiz);
+        } }, label)))));
+
+  // 솔루션 — 바꾸면 템플릿과 구성을 비운다
   root.appendChild(card('솔루션', '견적할 솔루션을 고르세요',
     h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
       ...sols.map((x) => h('button', { class: 'btn' + (x.code === sol ? ' btn-primary' : ''), style: 'min-width:120px',
@@ -120,11 +138,12 @@ export async function renderStep2(root, state, wiz) {
           renderStep2(root, wiz.get(), wiz);
         } }, x.name || x.code)))));
 
-  // 2. 구축형태
-  root.appendChild(card('구축형태', `${solName} — 템플릿이 없는 형태는 직접 작성으로 시작합니다`,
-    h('div', { class: 'card-b', style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px' },
-      ...deploymentCards(all, state, root, wiz)),
-    [h('span', { class: 'badge badge-gray' }, '유지보수·추가개발은 Phase 6')]));
+  // 구축형태 — 신규 구축만
+  if (qt !== 'MAINT') {
+    root.appendChild(card('구축형태', `${solName} — 템플릿이 없는 형태는 직접 작성으로 시작합니다`,
+      h('div', { class: 'card-b', style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px' },
+        ...deploymentCards(all, state, root, wiz))));
+  }
 
   // 3. SaaS 서비스 (SaaS 일 때)
   if (svcCard) { svcCard.querySelector('h2').textContent = `${++no}. SaaS 서비스`; root.appendChild(svcCard); }
@@ -133,10 +152,11 @@ export async function renderStep2(root, state, wiz) {
   // 견적서 불러오기 창과 같은 구조(2026-10-30 사용자 요청). 직접 작성 · 견적서 불러오기도 여기서
   const list = dep ? all.filter((x) => x.deployment === dep) : [];
   const curTpl = list.find((x) => x.code === state.type.template_code);
+  const kindLabel = qt === 'MAINT' ? '유지보수' : DEP_LABEL[dep] || dep;
   const pickTpl = () => openTemplatePicker({ state: wiz.get(), list, currentCode: state.type.template_code,
-    title: `템플릿 불러오기 — ${solName} · ${DEP_LABEL[dep] || dep}`, onStart: (tpl) => startTemplate(tpl, wiz) });
+    title: `템플릿 불러오기 — ${solName} · ${kindLabel}`, onStart: (tpl) => startTemplate(tpl, wiz) });
   root.appendChild(card('템플릿 선택',
-    dep ? `${solName} · ${DEP_LABEL[dep] || dep} · ${list.length}종` : '구축형태를 먼저 고르세요',
+    dep ? `${solName} · ${kindLabel} · ${list.length}종` : '구축형태를 먼저 고르세요',
     h('div', { class: 'card-b', style: 'display:flex;flex-direction:column;gap:7px' },
       !dep ? h('div', { class: 'empty' }, '위에서 구축형태를 고르면 템플릿을 불러올 수 있습니다.')
         : !list.length ? h('div', { class: 'empty' }, '이 솔루션 · 구축형태로 등록된 템플릿이 없습니다. [직접 작성으로 시작] 을 쓰세요.')
@@ -164,14 +184,32 @@ export async function renderStep2(root, state, wiz) {
 async function serviceCard(state, root, wiz, sol) {
   const { services } = await loadSaasCatalog(sol);
   if (!services.length) return null;
-  const cur = quoteService(state, services);
+  let cur = quoteService(state, services);
+  // 서비스가 하나뿐이면 고를 것이 없다 — 자동으로 고른다(2026-11-04 사용자 요청: 경비관리 EasyExpense · 전자인장)
+  if (!cur && services.length === 1 && !wiz.readOnly) {
+    cur = services[0].code;
+    wiz.patch({ type: { service: cur } });
+  }
   return h('div', { class: 'card', style: 'margin-bottom:14px' },
     h('div', { class: 'card-h' }, h('h2', {}, 'SaaS 서비스'),
       h('span', { class: 'sub' }, '고른 서비스로 구성(서비스 이용료 · 독립인프라 등)과 가격이 맞춰집니다')),
     h('div', { class: 'card-b', style: 'display:flex;gap:8px;flex-wrap:wrap' },
       ...services.map((x) => h('button', {
         class: 'btn' + (x.code === cur ? ' btn-primary' : ''), style: 'min-width:110px', title: String(x.item.spec || ''),
-        onclick: () => { if (wiz.readOnly) return; wiz.patch({ type: { service: x.code } }); renderStep2(root, wiz.get(), wiz); },
+        onclick: async () => {
+          if (wiz.readOnly || x.code === cur) return;
+          // 템플릿으로 구성을 이미 만든 뒤 서비스를 바꾸면 구성(서비스 이용료 · 독립인프라 · 모듈)도 바꿀지 묻는다(2026-11-04 사용자 요청).
+          //   [변경] — 서비스를 바꾸고 3단계에서 새 서비스 기준으로 맞춘다 / [취소] — 서비스도 구성도 그대로
+          if (cur && (wiz.get().blocks || []).length && !(await confirmModal({
+            title: 'SaaS 서비스 변경',
+            message: h('div', { style: 'line-height:1.7' },
+              `서비스를 ${(services.find((y) => y.code === cur) || {}).label || cur} → ${x.label}(으)로 바꿉니다.`, h('br'),
+              `견적 구성(서비스 이용료 · 독립인프라 · 모듈 체크)도 ${x.label} 기준으로 바꿀까요?`),
+            okLabel: '변경',
+          }))) return;
+          wiz.patch({ type: { service: x.code } });
+          renderStep2(root, wiz.get(), wiz);
+        },
       }, x.label)),
       cur ? null : h('span', { style: 'font-size:12px;color:var(--ss-red, #FF5252);align-self:center' }, '서비스를 고르세요')));
 }

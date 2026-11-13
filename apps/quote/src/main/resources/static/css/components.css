@@ -49,6 +49,9 @@ table.grid tfoot td{background:#FAFBFC;border-top:1px solid var(--line);border-b
 .req-note{font-size:11.5px;color:var(--text-3)}
 .req-note b{color:#FF5252}
 .fld input.is-req-empty{border-color:#FF5252;background:#FFF5F5}
+.ss-cellinput.is-req-empty{outline:1px solid #FF5252;outline-offset:-1px;background:#FFF5F5 !important}
+.ss-cellinput.is-req-empty::placeholder{color:#FF5252}
+.qz-q .is-req-empty{border-color:#FF5252 !important;background:#FFF5F5 !important}
 .fld input[readonly]{background:#EBECF0;color:var(--text-2)}
 
 /* ── 스텝 인디케이터 ── */

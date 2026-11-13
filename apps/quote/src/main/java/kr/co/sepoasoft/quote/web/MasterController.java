@@ -68,9 +68,9 @@ public class MasterController {
                 List.of("year", "role_code", "role_name", "daily_rate", "work_days", "overhead_rate", "tech_rate",
                         "sort")));
         // 고객사는 V4 에서 새로 만든 표다 (Node 에는 없다 — API-spec 3절 J ④)
-        // solutions(사용 솔루션, V12)는 보낸 경우에만 쓴다 — V12 전 DB 에서는 화면이 보내지 않는다
+        // solutions(사용 솔루션, V12) · kind · via_code(종류 · 경유 업체, V15)는 보낸 경우에만 쓴다 — 칸이 없는 DB 에서는 화면이 보내지 않는다
         TABLES.put("customers", new Meta("sq_mst_customer", "id", "sort, name",
-                List.of("code", "name", "solutions", "company_key", "channel", "contact_name", "contact_phone", "contact_email",
+                List.of("code", "name", "kind", "solutions", "company_key", "channel", "via_code", "contact_name", "contact_phone", "contact_email",
                         "payment_terms", "note", "active", "sort")));
     }
 
@@ -115,6 +115,10 @@ public class MasterController {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("rows", rows);
         out.put("has_solutions", c != null && c.get("n") instanceof Number n && n.longValue() > 0);
+        // 종류 · 경유 업체 칸(V15)
+        Map<String, Object> k = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'sq_mst_customer' AND column_name = 'via_code'");
+        out.put("has_partner", k != null && k.get("n") instanceof Number n2 && n2.longValue() > 0);
         return out;
     }
 

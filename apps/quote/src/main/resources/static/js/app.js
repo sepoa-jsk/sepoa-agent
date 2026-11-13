@@ -1,7 +1,7 @@
 const API_BASE = '/quote/api';
 
 import { api } from './api.js';
-import { toast, clear } from './ui.js';
+import { toast, clear, enableGridKeys } from './ui.js';
 import { renderList } from './views/list.js';
 import { renderEditor } from './views/editor.js';
 import { renderDetail } from './views/detail.js';
@@ -16,12 +16,13 @@ import { renderRisk } from './views/risk.js';
 import { renderTco } from './views/tco.js';
 import { renderDispatch } from './views/dispatch.js';
 import { renderUsers } from './views/users.js';
-import { renderDepts } from './views/depts.js';
+import { renderOrg } from './views/org.js'; // 조직 = 회사정보 | 부서정보(2026-11-03)
 import { renderRoles } from './views/roles.js';
 import { renderWizard } from './views/quote/wizard/index.js';
 import { renderSidebar, setActiveNav, canOpen } from './layout/sidebar.js';
 import { setPage, setUser, PAGE_META } from './layout/gnb.js';
 import { openTab, resetTabs } from './layout/tabbar.js';
+import { mountChat } from './layout/chat.js';
 
 export const store = {
   user: null,
@@ -71,7 +72,7 @@ const routes = [
   { re: /^#\/tco$/, view: () => renderTco(viewEl()) },
   { re: /^#\/dispatch$/, view: () => renderDispatch(viewEl()) },
   { re: /^#\/users$/, admin: true, view: () => renderUsers(viewEl()) },
-  { re: /^#\/depts$/, admin: true, view: () => renderDepts(viewEl()) },
+  { re: /^#\/depts$/, admin: true, view: () => renderOrg(viewEl()) },
   { re: /^#\/roles$/, admin: true, view: () => renderRoles(viewEl()) },
   { re: /^#\/settings$/, admin: true, view: () => renderSettings(viewEl()) },
 ];
@@ -144,6 +145,7 @@ async function router() {
         clear(viewEl());
         // 레일 머리가 화면 제목을 맡는 화면(마스터 관리)이 숨긴 셸 제목 바를 되돌린다
         document.querySelector('.ss-app')?.classList.remove('ss-app--railtitle');
+        viewEl().classList.remove('qz-wiz'); // 견적 작성 화면 전용 모양(wizard/index.js 가 붙인다)
         await r.view(m);
       } catch (err) {
         if (err.status === 401) return showLogin();
@@ -169,18 +171,22 @@ function showLogin(errorMsg) {
 function showApp() {
   document.getElementById('login-gate').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
+  mountChat(document.getElementById('app-shell')); // AI 도우미 — 로그인한 화면에만(로그아웃하면 화면과 함께 숨는다)
   const u = store.user;
   renderSidebar(null, { isAdmin: u.role === 'ADMIN', perms: store.perms });
   setUser(u);
 }
 
 async function bootstrap() {
+  enableGridKeys(); // 편집 그리드 — Tab · 화살표로 칸 이동
   // 로그아웃
   document.getElementById('logout-btn').onclick = async () => {
     await api.logout();
     store.user = null; store.master = null; store.perms = null;
     resetTabs();
     location.hash = '';
+    // 로그인한 채로 열었으면 로그인 칸(dev 이메일 · Google)이 아직 그려지지 않았다 — 처음 열 때처럼 방식을 물어 그린다(2026-11-03)
+    try { setupLoginMode((await api.get('/api/health')).authMode); } catch { setupLoginMode('dev'); }
     showLogin();
   };
 

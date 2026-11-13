@@ -72,6 +72,7 @@ public class QuoteHtml {
         if (yr != null) {
             m.put("laborRateYear", yr.get("year"));
             m.put("laborRateSource", yr.get("source"));
+            m.put("laborWorkDays", yr.get("work_days"));
             m.put("laborRates", db.query("SELECT role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note"
                     + " FROM sq_labor_rate_lines WHERE year_id = ? ORDER BY sort, id", yr.get("id")));
         }
@@ -94,7 +95,16 @@ public class QuoteHtml {
         }
         // 템플릿 설정 — 견적조건 세트 · 결제 방안 포함
         Map<String, Object> tpl = Rows.truthy(quote.get("template_code"))
-                ? db.first("SELECT condition_set, has_pay_plan FROM sq_quote_templates WHERE code = ?", quote.get("template_code")) : null;
+                ? db.first("SELECT condition_set, has_pay_plan, brand FROM sq_quote_templates WHERE code = ?", quote.get("template_code")) : null;
+        // SaaS 서비스 비용 모듈 묶음(2026-11-04) — 구분 칸은 템플릿 브랜드, 기준단가는 서비스 품목의 1계정(1건) 단가
+        if (tpl != null && Rows.truthy(tpl.get("brand"))) m.put("brand", tpl.get("brand"));
+        if ("SAAS".equals(str(quote.get("deployment"))) && Rows.truthy(quote.get("solution"))) {
+            Map<String, Object> unitBase = new LinkedHashMap<>();
+            for (Map<String, Object> p : db.query("SELECT code, base_price FROM sq_price_items WHERE solution = ? AND deployment = 'SAAS' AND pricing_type = 'BAND'",
+                    quote.get("solution"))) unitBase.put(str(p.get("code")), p.get("base_price"));
+            m.put("saasUnitBase", unitBase);
+            m.put("solution", quote.get("solution"));
+        }
         m.put("payPlan", payPlan != null ? Rows.truthy(payPlan) : tpl != null && Rows.truthy(tpl.get("has_pay_plan")));
         // 견적조건 — 저장된 conditions 가 없을 때 쓴다
         Object set = conditionSet;
@@ -141,7 +151,7 @@ public class QuoteHtml {
         if (payTerms.isEmpty()) payTerms = "고객사 결제조건";
 
         String logo = dataUri("logo.png"), bandTop = dataUri("band_top.png"), bandBot = dataUri("band_bottom.png");
-        String supplier = or(settings.get("supplier_name"), "㈜세포아소프트");
+        String supplier = or(settings.get("supplier_name"), "(주)세포아소프트");
         String ceo = or(settings.get("supplier_ceo"), "이 희 림");
         String addr = or(settings.get("supplier_addr"), "서울시 구로구 디지털로31길 62, 아티스포럼 714~717호");
         String tel = or(settings.get("supplier_tel"), "02-6242-3094");
@@ -186,7 +196,7 @@ public class QuoteHtml {
                 if (onetimeSub - onetimeTotal > 0) extra.add(sumRow("제안금액(특별 DC 적용)", "", freeText(onetimeTotal)));
             }
             if (i == lastMonthly && monthlySub - monthlyTotal > 0) extra.add(sumRow("월 사용료(특별 DC 적용)", "", won(monthlyTotal)));
-            body.append(blockTable(b, blockDefs, mark, extra)).append('\n');
+            body.append(blockTable(b, blockDefs, mark, extra, masters)).append('\n');
         }
 
         // 클라우드서비스 결제 방안 — 견적에서 넣기로 했거나(견적별 설정) 템플릿에서 켠 견적 (실측 SaaS · Private Cloud 하단)
@@ -233,7 +243,7 @@ public class QuoteHtml {
                 + "\n\n<div class=\"page\"><div class=\"frame\">"
                 + "\n  <div class=\"top\">" + (logo != null ? "<img src=\"" + logo + "\">" : "<b>" + esc(supplier) + "</b>")
                 + "<div class=\"addr\">" + esc(addr) + " ☎:" + esc(tel) + "</div></div>"
-                + "\n  <h2 class=\"qt\">Quotation</h2>"
+                + "\n  <h2 class=\"qt\"><span>Quotation</span></h2>"
                 + "\n  <div class=\"hdr\">"
                 + "\n    <table class=\"hbox hl\">"
                 + "<tr><td class=\"lbl\">수 신</td><td colspan=\"2\">" + (customer.isEmpty() ? "" : "<b>" + esc(customer) + "</b> 귀중") + "</td></tr>"
@@ -266,7 +276,7 @@ public class QuoteHtml {
     }
 
     /** 블록 1개 — 같은 '구분'(category) 이 연속되는 행은 rowspan 으로 묶는다. {@code extra} 는 표 끝에 붙는 합계 행 */
-    private String blockTable(Map<String, Object> b, Map<String, Object> blockDefs, String mark, List<String> extra) {
+    private String blockTable(Map<String, Object> b, Map<String, Object> blockDefs, String mark, List<String> extra, Map<String, Object> masters) {
         String code = str(b.get("block_code"));
         Map<?, ?> def = blockDefs.get(code) instanceof Map<?, ?> d ? d : Map.of();
         boolean isLabor = "LABOR".equals(code);
@@ -302,12 +312,56 @@ public class QuoteHtml {
             mmSum += num(l.get("mm"));
             rows.add(r);
         }
+        // SaaS 서비스 비용 모듈 묶음(2026-11-04 사용자 요청 — 실측 양식) — 서비스 이용료 행(구간형, note 'BAND:USER:10') 바로 뒤에
+        // 모듈 행(코드 …_SAAS_M01, 수량 0)이 이어지면 서비스 이용료 행은 찍지 않고, 그 수량 · 단가 · 금액을 모듈 행들에 한 칸으로 합쳐 싣는다.
+        //   수량 '10 계정'(건수면 '10 건') · 기준단가 = 서비스 품목 1계정 단가 · 제안단가 = 금액 ÷ 수량 · 구분은 블록 전체를 템플릿 브랜드로
+        List<Map<String, Object>> src = maps(b.get("items"));
+        String bundleTitle = null;
+        for (int i = 0; !isLabor && i < src.size() && i < rows.size(); i++) {
+            String note = str(src.get(i).get("note"));
+            if (!note.startsWith("BAND:")) continue;
+            int n = 0;
+            while (i + 1 + n < src.size() && str(src.get(i + 1 + n).get("item_code")).matches(".*_SAAS_M\\d+$") && num(src.get(i + 1 + n).get("qty")) == 0) n++;
+            if (n == 0) continue;
+            String[] parts = note.split(":");
+            boolean count = parts.length > 1 && "COUNT".equals(parts[1]);
+            double bq = parts.length > 2 ? num(parts[2]) : 0;
+            Map<String, Object> svc = rows.get(i);
+            double amount = (double) svc.get("amount");
+            Object unitBase = masters.get("saasUnitBase") instanceof Map<?, ?> ub ? ub.get(str(src.get(i).get("item_code"))) : null;
+            Map<String, Object> first = rows.get(i + 1);
+            first.put("bundleSpan", n);
+            first.put("bundleQty", bq > 0 ? numText(bq) + (count ? " 건" : " 계정") : qtyText((double) svc.get("qty"), (String) svc.get("unit"), false));
+            first.put("bundleBase", unitBase != null && num(unitBase) > 0 ? won(num(unitBase)) : "");
+            first.put("bundleProposed", bq > 0 ? won(Math.round(amount / bq)) : won(num(svc.get("proposed"))));
+            first.put("bundleAmount", won(amount));
+            for (int k = 2; k <= n; k++) rows.get(i + k).put("bundled", true);
+            rows.remove(i);
+            src = new ArrayList<>(src);
+            src.remove(i);
+            String brand = str(masters.get("brand"));
+            if (!brand.isEmpty()) for (Map<String, Object> r : rows) r.put("gubun", brand);
+            if (bq > 0) bundleTitle = count ? "월 " + numText(bq) + "건 이하"
+                    : ("PROCURE".equals(str(masters.get("solution"))) ? "구매담당자 " : "사용자 ") + numText(bq) + "계정 이하";
+            break;
+        }
         int[] spans = new int[rows.size()];
         for (int i = 0; i < rows.size(); ) {
             int j = i;
             while (j + 1 < rows.size() && rows.get(j + 1).get("gubun").equals(rows.get(i).get("gubun"))) j++;
             spans[i] = j - i + 1;
             i = j + 1;
+        }
+        // 금액 0 행 합치기(2026-11-07 사용자 요청) — 금액 있는 행 뒤로 같은 구분의 금액 0 행이 이어지면 기준단가 · 제안단가 · 제안금액 칸을 위 행과 한 칸으로
+        if (!isLabor && bundleTitle == null) {
+            List<Double> amounts = new ArrayList<>(), qtys = new ArrayList<>();
+            List<Object> gubuns = new ArrayList<>();
+            for (Map<String, Object> r : rows) { amounts.add((double) r.get("amount")); qtys.add((double) r.get("qty")); gubuns.add(r.get("gubun")); }
+            int[] zs = zeroSpans(gubuns, amounts, qtys);
+            for (int i = 0; i < rows.size(); i++) {
+                if (zs[i] > 1) rows.get(i).put("zeroSpan", zs[i]);
+                else if (zs[i] == 0) rows.get(i).put("zeroMerged", true);
+            }
         }
         StringBuilder body = new StringBuilder();
         if (rows.isEmpty()) body.append("<tr><td colspan=\"7\" class=\"c muted\">(항목 없음)</td></tr>");
@@ -318,25 +372,40 @@ public class QuoteHtml {
             body.append("<tr>");
             if (spans[i] > 0) body.append("<td class=\"gubun\" rowspan=\"").append(spans[i]).append("\">").append(esc(r.get("gubun"))).append("</td>");
             body.append("<td class=\"c\">").append(esc(r.get("name"))).append("</td><td class=\"spec\">").append(esc(r.get("spec"))).append("</td>");
+            if (r.containsKey("bundleSpan")) {
+                String rs = " rowspan=\"" + r.get("bundleSpan") + "\"";
+                body.append("<td class=\"c\"").append(rs).append(">").append(esc(r.get("bundleQty"))).append("</td>")
+                        .append("<td class=\"r\"").append(rs).append(">").append(r.get("bundleBase")).append("</td>")
+                        .append("<td class=\"r\"").append(rs).append(">").append(r.get("bundleProposed")).append("</td>")
+                        .append("<td class=\"r\"").append(rs).append(">").append(r.get("bundleAmount")).append("</td></tr>");
+                continue;
+            }
+            if (r.containsKey("bundled")) { body.append("</tr>"); continue; }
+            if (r.containsKey("zeroMerged")) { // 위 행과 합친 금액 칸 — 수량만
+                body.append("<td class=\"c\">").append(qty == 0 ? "" : qtyText(qty, (String) r.get("unit"), labor)).append("</td></tr>");
+                continue;
+            }
             // 수량 0 은 묶음에 포함된 참고 행이다 — 수량·단가·금액 칸을 비운다 (실측: Poa Ordering™ · Poa EV™)
             if (qty == 0) {
                 body.append("<td></td><td></td><td></td><td></td></tr>");
                 continue;
             }
             Object base = r.get("base");
+            String zr = r.containsKey("zeroSpan") ? " rowspan=\"" + r.get("zeroSpan") + "\"" : "";
             body.append("<td class=\"c\">").append(qtyText(qty, (String) r.get("unit"), labor)).append("</td>")
-                    .append("<td class=\"r\">").append(base != null && num(base) > 0 ? won(num(base)) : "").append("</td>")
-                    .append("<td class=\"r\">").append(won(num(r.get("proposed")))).append("</td>")
-                    .append("<td class=\"r\">").append(won((double) r.get("amount"))).append("</td></tr>");
+                    .append("<td class=\"r\"").append(zr).append(">").append(base != null && num(base) > 0 ? won(num(base)) : "").append("</td>")
+                    .append("<td class=\"r\"").append(zr).append(">").append(won(num(r.get("proposed")))).append("</td>")
+                    .append("<td class=\"r\"").append(zr).append(">").append(won((double) r.get("amount"))).append("</td></tr>");
         }
-        String subLabel = isLabor ? "인건비 소계" : title.endsWith("소계") ? title : title + " 소계";
+        String subLabel = isLabor ? "인건비 소계" : bundleTitle != null ? "서비스 사용료 소계" : title.endsWith("소계") ? title : title + " 소계";
         body.append(sumRow(subLabel + (mark.isEmpty() ? "" : "(" + mark + ")"), isLabor ? fixed1(mmSum) : "", won(num(b.get("subtotal")))));
         for (String e : extra) body.append(e);
 
         String col2 = isLabor ? "역할" : recurring ? "시스템" : "모듈";
         String col3 = isLabor ? "세부내역" : "세부기능";
         String col4 = isLabor ? "공수(MM)" : "수량";
-        return "<div class=\"sec\">▣ " + esc(title) + "<span class=\"u\">(단위 : 원)</span></div>"
+        String head = bundleTitle != null ? "서비스 비용 <span style=\"color:#E53935\">(" + esc(bundleTitle) + ")</span>" : esc(title);
+        return "<div class=\"sec\">▣ " + head + "<span class=\"u\">(단위 : 원)</span></div>"
                 + "<table class=\"grid\"><colgroup><col style=\"width:13%\"><col style=\"width:15%\"><col style=\"width:27%\"><col style=\"width:9%\">"
                 + "<col style=\"width:12%\"><col style=\"width:12%\"><col style=\"width:12%\"></colgroup>"
                 + "<tr><th>구분</th><th>" + col2 + "</th><th>" + col3 + "</th><th>" + col4 + "</th><th>기준단가</th>"
@@ -431,7 +500,16 @@ public class QuoteHtml {
                     : Double.compare(Js.number(a.substring(1)), Js.number(b.substring(1))) != 0
                             ? Double.compare(Js.number(a.substring(1)), Js.number(b.substring(1))) : a.compareTo(b));
             for (Map<String, Object> l : planRows) for (Object k : ((Map<?, ?>) l.get("month_alloc")).keySet()) keySet.add(String.valueOf(k));
-            List<String> keys = new ArrayList<>(keySet);
+            // 빈 달도 칸을 둔다 — M1 ~ Mn 전부(n = 메모 [투입개월] 과 배분된 마지막 달 중 큰 값). 옛 'M' 칸은 값이 있을 때만 앞에(2026-11-03)
+            String memo = str(quote.get("memo"));
+            int n = (int) Js.number(tag(memo, "투입개월"));
+            for (String k : keySet) if (!k.equals("M")) n = Math.max(n, (int) Js.number(k.substring(1)));
+            List<String> keys = new ArrayList<>();
+            if (keySet.contains("M")) keys.add("M");
+            for (int i = 1; i <= n; i++) keys.add("M" + i);
+            // 실제 투입월(선택) — 메모 [투입시작] 2026-11 이 있으면 Mk 아래 줄에 26.11 · 26.12 …
+            Matcher sm = Pattern.compile("(\\d{4})-(\\d{2})").matcher(tag(memo, "투입시작"));
+            int startYm = sm.find() ? Integer.parseInt(sm.group(1)) * 12 + Integer.parseInt(sm.group(2)) - 1 : -1;
             // 등급 칸 = 노임단가표의 직무명(IT PM · 응용소프트웨어 개발자). 저장된 행에 이름이 없으면 직무코드로 찾는다
             Map<String, Object> roleNames = new LinkedHashMap<>();
             for (Map<String, Object> r : maps(masters.get("laborRates"))) roleNames.put(str(r.get("role_code")), r.get("role_name"));
@@ -447,26 +525,39 @@ public class QuoteHtml {
                 for (String k : keys) {
                     double v = num(alloc.get(k));
                     colTotal.put(k, colTotal.get(k) + v);
-                    cells.append("<td class=\"r\">").append(v != 0 ? fixed1(v) : "").append("</td>");
+                    cells.append("<td class=\"r pm\">").append(v != 0 ? fixed1(v) : "").append("</td>");
                 }
                 body.append("<tr><td class=\"c\">").append(esc(firstNonEmpty(l.get("role_label"), l.get("role_name"), l.get("role_code"))))
                         .append("</td><td class=\"c\">").append(esc(firstNonEmpty(l.get("role_name"), roleNames.get(str(l.get("role_code")))))).append("</td><td>").append(esc(str(l.get("task"))))
                         .append("</td>").append(cells).append("<td class=\"r\">").append(fixed1(mm)).append("</td></tr>");
             }
-            StringBuilder head = new StringBuilder(), foot = new StringBuilder();
+            // 칸 너비 — 역할 8% · 등급 11% · 내역 20% · 합계 5% 를 먼저 잡고, 남은 56% 를 달 칸이 똑같이 나눈다.
+            // table-layout:fixed 라 달이 많아도 내역 칸이 세로로 찌그러지지 않는다(2026-11-03 미리보기 깨짐)
+            String mw = String.format("%.2f%%", 56.0 / Math.max(1, keys.size()));
+            boolean dates = startYm >= 0;
+            StringBuilder head = new StringBuilder(), dateRow = new StringBuilder(), foot = new StringBuilder();
             for (String k : keys) {
-                head.append("<th style=\"width:7%\">").append(esc(k)).append("</th>");
-                foot.append("<td class=\"r\">").append(fixed1(colTotal.get(k))).append("</td>");
+                head.append("<th class=\"pm\" style=\"width:").append(mw).append("\">").append(esc(k)).append("</th>");
+                if (dates) {
+                    int idx = k.equals("M") ? 0 : (int) Js.number(k.substring(1));
+                    int ym = startYm + idx - 1;
+                    dateRow.append("<th class=\"pm pd\">").append(idx < 1 ? "" : String.format("%02d.%02d", (ym / 12) % 100, ym % 12 + 1)).append("</th>");
+                }
+                foot.append("<td class=\"r pm\">").append(fixed1(colTotal.get(k))).append("</td>");
             }
+            String rs = dates ? " rowspan=\"2\"" : "";
             parts.add("<div class=\"page-break\"></div>\n<div class=\"apx\">#. 인력투입계획" + (depLabel.isEmpty() ? "" : " (" + esc(depLabel) + ")") + "</div>"
-                    + "\n<table class=\"grid\"><tr><th style=\"width:10%\">역할</th><th style=\"width:18%\">등급</th><th>내역</th>" + head
-                    + "<th style=\"width:8%\">합계</th></tr>\n" + body
+                    + "\n<table class=\"grid plan\"><tr><th" + rs + " style=\"width:8%\">역할</th><th" + rs + " style=\"width:11%\">등급</th><th" + rs + " style=\"width:20%\">내역</th>" + head
+                    + "<th" + rs + " style=\"width:5%\">합계</th></tr>\n" + (dates ? "<tr>" + dateRow + "</tr>\n" : "") + body
                     + "<tr class=\"sum\"><td colspan=\"3\" class=\"c\">합계(M/M)</td>" + foot + "<td class=\"r\">" + fixed1(grandMM) + "</td></tr></table>");
         }
 
         List<Map<String, Object>> rates = maps(masters.get("laborRates"));
         if (!rates.isEmpty() && !laborRows.isEmpty()) {
             String year = str(masters.get("laborRateYear"));
+            // 산정 근거표의 근무일 — 연도마다 다르다(2026년 20.5, 2025년 20.6)
+            String days = masters.get("laborWorkDays") == null ? "20.5"
+                    : new java.math.BigDecimal(str(masters.get("laborWorkDays"))).stripTrailingZeros().toPlainString();
             Object prevYear = masters.get("prevRateYear");
             @SuppressWarnings("unchecked")
             Map<String, Object> prev = masters.get("prevRates") instanceof Map<?, ?> p ? (Map<String, Object>) p : Map.of();
@@ -491,7 +582,7 @@ public class QuoteHtml {
                         + "<col style=\"width:9%\"><col style=\"width:15%\"><col></colgroup>")
                         .append("<tr><td class=\"gubun g\" rowspan=\"5\">").append(esc(r.get("role_name"))).append("</td>")
                         .append("<th>항목</th><th>기준금액</th><th>요율</th><th>산정금액</th><th>산정근거</th></tr>")
-                        .append("<tr><td class=\"c\">평균임금(M/M)</td><td class=\"r\">").append(won(md)).append("</td><td class=\"c\">20.5</td><td class=\"r\">")
+                        .append("<tr><td class=\"c\">평균임금(M/M)</td><td class=\"r\">").append(won(md)).append("</td><td class=\"c\">").append(esc(days)).append("</td><td class=\"r\">")
                         .append(won(mm)).append("</td><td>평균임금(M/D)*근무일</td></tr>")
                         .append("<tr><td class=\"c\">제경비</td><td class=\"r\">").append(won(mm)).append("</td><td class=\"c\">1.1</td><td class=\"r\">")
                         .append(won(oh)).append("</td><td>평균임금(M/M)*110%</td></tr>")
@@ -559,6 +650,26 @@ public class QuoteHtml {
 
     static String freeText(double v) {
         return v == 0 ? "무상제공" : won(v);
+    }
+
+    /**
+     * 금액 0 행 합치기 — 행마다 1(따로), n&gt;1(금액 있는 행: 아래 n-1 행과 금액 칸을 합친다), 0(위 행에 합쳐짐).
+     * 금액 있는 행(수량 &gt; 0) 바로 뒤로 같은 구분의 금액 0 행이 이어질 때만 합친다. Excel 도 같은 규칙
+     */
+    static int[] zeroSpans(List<Object> gubun, List<Double> amount, List<Double> qty) {
+        int n = amount.size();
+        int[] out = new int[n];
+        java.util.Arrays.fill(out, 1);
+        for (int i = 0; i < n; i++) {
+            if (amount.get(i) == 0 || qty.get(i) == 0) continue;
+            int j = i;
+            while (j + 1 < n && amount.get(j + 1) == 0 && java.util.Objects.equals(gubun.get(j + 1), gubun.get(i))) j++;
+            if (j == i) continue;
+            out[i] = j - i + 1;
+            for (int k = i + 1; k <= j; k++) out[k] = 0;
+            i = j;
+        }
+        return out;
     }
 
     /** JS 숫자 → 문자열 (0.4, 1, 12) */
@@ -645,7 +756,9 @@ public class QuoteHtml {
             .top { display:flex; align-items:flex-end; gap:6px; }
             .top img { height:28px; }
             .top .addr { flex:1; text-align:right; font-size:10px; border-bottom:1.5px solid #5B9B2A; padding-bottom:3px; margin-bottom:6px; }
-            h2.qt { text-align:center; font-family:Calibri,'Malgun Gothic',sans-serif; font-size:44px; font-weight:700; text-decoration:underline; margin:8px 0 12px; }
+            h2.qt { text-align:center; font-family:Calibri,'Malgun Gothic',sans-serif; font-size:44px; font-weight:700; margin:8px 0 12px; line-height:1.25; }
+            /* 밑줄은 글자 아래 선으로 — text-decoration 밑줄은 PDF 에서 아래가 잘린다(2026-11-04) */
+            h2.qt span { display:inline-block; border-bottom:3px solid #000; line-height:1.1; padding-bottom:1px; }
             .hdr { display:flex; justify-content:space-between; align-items:flex-start; }
             .hbox td { border:1px solid #000; padding:3px 5px; height:22px; }
             .hbox.hl { width:62%; } .hbox.hr { width:30%; }
@@ -663,9 +776,17 @@ public class QuoteHtml {
             .gubun { text-align:center; }
             .spec { white-space:pre-line; }
             tr.sum td { background:#ADD505; font-weight:700; }
-            table.conds td { border:1px solid #000; padding:4px 6px; }
+            /* 견적조건 — 바깥 테두리만 실선, 줄마다 선은 긋지 않는다(2026-11-04 사용자 요청) */
+            table.conds { border:1px solid #000; }
+            table.conds td { border:0; padding:3px 8px; }
+            table.conds tr:first-child td { padding-top:6px; }
+            table.conds tr:last-child td { padding-bottom:6px; }
             /* 부록 */
             .apx { font-size:16px; font-weight:700; margin:6mm 0 4mm; }
+            table.plan { table-layout:fixed; width:100%; }
+            table.plan td { word-break:keep-all; overflow-wrap:anywhere; }
+            table.plan .pm { padding:3px 1px; font-size:9px; text-align:center; }
+            table.plan .pd { font-weight:400; font-size:8px; }
             .kosa { text-align:center; font-size:22px; font-weight:700; margin:4mm 0 5mm; }
             .formula { border:1px solid #000; border-radius:8px; padding:6px 10px; margin-bottom:6mm; font-size:10.5px; }
             .formula td { padding:1px 4px; }

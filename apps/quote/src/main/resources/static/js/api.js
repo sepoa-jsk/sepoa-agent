@@ -73,6 +73,20 @@ export const api = {
   previewQuote: (body) => req('POST', '/api/quotes/preview', body),
   createQuote: (payload) => req('POST', '/api/quotes', payload),
   listQuotes: (params) => req('GET', `/api/quotes${qs(params)}`),
+  quoteOwners: () => req('GET', '/api/quotes/owners'),
+  // 견적 첨부파일(V17) — 올리기는 FormData 라 req 대신 fetch(아래 uploadQuoteFile)
+  quoteFiles: (id, kind) => req('GET', `/api/quotes/${id}/files${kind ? '?kind=' + kind : ''}`), // kind(V18): ATTACH · CUSTOMER
+  deleteQuoteFile: (id, fid) => req('DELETE', `/api/quotes/${id}/files/${fid}`),
+  quoteFileUrl: (id, fid) => `${BASE}/api/quotes/${id}/files/${fid}`,
+  async uploadQuoteFile(id, file, kind) {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (kind) fd.append('kind', kind);
+    const res = await fetch(`${BASE}/api/quotes/${id}/files`, { method: 'POST', body: fd, credentials: 'same-origin' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || `파일 올리기 실패 (${res.status})`);
+    return data;
+  }, // 목록 필터의 담당자(작성자) 고르기
   getQuote: (id) => req('GET', `/api/quotes/${id}`),
   updateQuote: (id, payload) => req('PUT', `/api/quotes/${id}`, payload),
   setStatus: (id, status) => req('PATCH', `/api/quotes/${id}/status`, { status }),
@@ -80,6 +94,7 @@ export const api = {
   copyQuote: (id) => req('POST', `/api/quotes/${id}/copy`),
   reviseQuote: (id, reason) => req('POST', `/api/quotes/${id}/revise`, { reason }),
   quoteHtml: (id) => req('GET', `/api/quotes/${id}/html`),
+  chat: (messages, context) => req('POST', '/api/chat', { messages, context }), // AI 도우미(Claude CLI) — context.quote_id: 지금 보는 견적
   mailConfig: () => req('GET', '/api/quotes/mail-config'),
   mailQuote: (id, body) => req('POST', `/api/quotes/${id}/mail`, body),
   excelUrl: (id) => `${BASE}/api/quotes/${id}/excel`,

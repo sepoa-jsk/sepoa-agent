@@ -17,16 +17,8 @@ const CLASS_PRESET = [
   ['ENT', '대기업'], ['PUBLIC', '공공기관'], ['FINANCE', '금융'],
   ['MID', '중견기업'], ['SMALL', '중소기업'],
 ];
-const ONSITE_PRESET = [['ONSITE', '상주'], ['REMOTE', '비상주']];
+const ONSITE_PRESET = [['ONSITE', '상주'], ['REMOTE', '비상주'], ['PARTIAL', '부분상주']]; // 부분상주 — 견적 품목 상주 여부(2026-11-02)
 const NEGO_TARGETS = [['MODULE', '솔루션'], ['LABOR', '인건비']]; // 네고율 상단 선택 상자
-
-// SW협회 노임단가 → 기준단가 (lib/labor-standard.js 와 동일 로직).
-function calcStandardRate(std) {
-  const avgRaw = Number(std.daily_rate) * Number(std.work_days || 20.5);
-  const overhead = avgRaw * Number(std.overhead_rate || 1.1);
-  const tech = (avgRaw + overhead) * Number(std.tech_rate || 0.2);
-  return Math.round(avgRaw + overhead + tech);
-}
 
 // 협회직군(standard_role_code) 목록 — 인력구분 매핑 preset·표시에 공용.
 const STD_ROLES = [
@@ -142,7 +134,7 @@ const MASTERS = [
     // 한 줄 = 상주구분 · 기업구분 · 네고율 · 정렬 (사용자 지정). 새 행은 고른 구분으로 저장된다.
     // 고른 구분 안에서 상주구분 · 기업구분 조합은 겹칠 수 없다(uniqueCombo).
     // 기업구분 선택지는 기업구분 마스터의 사용 중인 행. 행삭제는 실제 삭제(사용 컬럼 없음).
-    type: 'nego_rates', label: '네고율', pk: 'id', scoped: false,
+    type: 'nego_rates', label: '기준단가 적용율', pk: 'id', scoped: false,
     filterTarget: NEGO_TARGETS,
     uniqueCombo: ['onsite_key', 'company_key'],
     list: ['onsite_key', 'company_key', 'rate', 'sort'],
@@ -152,7 +144,7 @@ const MASTERS = [
       { key: 'onsite_key', label: '상주구분', type: 'preset', required: true, options: ONSITE_PRESET, rerenders: true },
       { key: '_company_code', label: '기업구분코드', type: 'codeview', of: 'company_key' },
       { key: 'company_key', label: '기업구분', type: 'preset', required: true, options: 'company', rerenders: true },
-      { key: 'rate', label: '네고율 (%)', type: 'percent', required: true },
+      { key: 'rate', label: '기준단가 적용율 (%)', type: 'percent', required: true },
       { key: 'sort', label: '정렬', type: 'number' },
     ],
   },
@@ -186,29 +178,8 @@ const MASTERS = [
       { key: 'sort', label: '정렬', type: 'number' },
     ],
   },
-  {
-    // 협회노임단가: 연도별. 노임단가(M/D)만 넣으면 기준단가 자동 계산(읽기전용).
-    type: 'labor_standards', label: '협회노임단가', pk: 'id', scoped: false, filterYear: true,
-    preview: (form) => '기준단가 미리보기: ' + won(calcStandardRate(form)),
-    list: [
-      ['year', '연도', (v) => v + '년'],
-      ['role_name', '직군'],
-      ['daily_rate', '노임단가(M/D)', (v) => won(v)],
-      ['daily_rate', '기준단가', (v, row) => won(calcStandardRate(row))],
-      ['work_days', '근무일', (v) => v + '일'],
-    ],
-    fields: [
-      // 코드 · 이름을 맨 앞에 (다른 마스터와 같게). 연도는 그 뒤 — 위 연도 선택값이 새 행에 들어간다
-      { key: 'role_code', label: '코드', type: 'text', mono: true },
-      { key: 'role_name', label: '이름', type: 'text' },
-      { key: 'year', label: '연도', type: 'number', plain: true },
-      { key: 'daily_rate', label: '노임단가 (M/D, 원)', type: 'money' },
-      { key: 'work_days', label: '근무일 (M/M 환산)', type: 'number', step: '0.1', default: 20.5 },
-      { key: 'overhead_rate', label: '제경비율 (기본 1.1)', type: 'number', step: '0.001', default: 1.1 },
-      { key: 'tech_rate', label: '기술료율 (기본 0.2)', type: 'number', step: '0.001', default: 0.2 },
-      { key: 'sort', label: '정렬', type: 'number' },
-    ],
-  },
+  // 협회노임단가(sq_labor_standards)는 기준정보 > 협회노임단가(sq_labor_rate_lines)와 같은 내용이라 이 목록에서 뺐다(2026-11-10 사용자 요청).
+  // 표는 지우지 않았다 — 구 섹션형 편집 화면(editor.js)이 아직 읽는다.
 ];
 
 // ── 화면 배치 — SingleSuite M1 d형(코드 목록 레일) + 편집 그리드 ──

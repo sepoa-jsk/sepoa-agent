@@ -67,11 +67,17 @@ public class QuoteController {
         this.system = system;
     }
 
-    /** #27 목록 — 최신순, {@code size} 최대 100 */
+    /**
+     * #27 목록 — 최신순, {@code size} 최대 100.
+     * 2026-11-03 조건 추가 — {@code owner}(작성자 id) · {@code deployment}(구축형태, ONPREM 은 ONPREM_* 전부) · {@code from} / {@code to}(견적일)
+     */
     @GetMapping
     public Map<String, Object> list(@RequestParam(required = false) String status,
             @RequestParam(required = false) String customer,
             @RequestParam(name = "quote_no", required = false) String quoteNo,
+            @RequestParam(required = false) String owner,
+            @RequestParam(required = false) String deployment,
+            @RequestParam(required = false) String from, @RequestParam(required = false) String to,
             @RequestParam(required = false) String page, @RequestParam(required = false) String size) {
         double p = Js.number(page), s = Js.number(size);
         double pageN = Math.max(1, Js.truthy(p) ? p : 1);
@@ -85,6 +91,13 @@ public class QuoteController {
             String c = quoteNoSearchClause(quoteNo, params);
             if (c != null) conds.add(c);
         }
+        if (owner != null && owner.matches("[0-9]+")) { conds.add("created_by = ?"); params.add(Long.parseLong(owner)); }
+        if (deployment != null && deployment.matches("[A-Z_]+")) {
+            if ("ONPREM".equals(deployment)) conds.add("deployment LIKE 'ONPREM%'");
+            else { conds.add("deployment = ?"); params.add(deployment); }
+        }
+        if (from != null && from.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) { conds.add("quote_date >= ?"); params.add(from); }
+        if (to != null && to.matches("[0-9]{4}-[0-9]{2}-[0-9]{2}")) { conds.add("quote_date <= ?"); params.add(to); }
         String where = conds.isEmpty() ? "" : "WHERE " + String.join(" AND ", conds);
         Object cnt = db.first("SELECT COUNT(*) AS cnt FROM sq_quotes " + where, params.toArray()).get("cnt");
         List<Object> pageParams = new ArrayList<>(params);
@@ -92,6 +105,8 @@ public class QuoteController {
         pageParams.add(Js.json((pageN - 1) * sizeN));
         List<Map<String, Object>> rows = db.query(
                 "SELECT q.*, u.name AS created_by_name"
+                        // 솔루션 — 첫 섹션의 솔루션(목록 그리드 솔루션 칸, 2026-11-04 사용자 요청)
+                        + ", (SELECT s.solution FROM sq_quote_sections s WHERE s.quote_id = q.id ORDER BY s.sort, s.id LIMIT 1) AS solution"
                         + " FROM sq_quotes q LEFT JOIN sq_users u ON u.id = q.created_by "
                         // 차수(V11)가 있으면 같은 건(1차 · 2차 …)끼리 붙여서, 높은 차수가 위로
                         + where + (hasRevision() ? " ORDER BY COALESCE(q.base_quote_id, q.id) DESC, q.revision DESC" : " ORDER BY q.id DESC")
@@ -103,6 +118,13 @@ public class QuoteController {
         out.put("size", Js.json(sizeN));
         out.put("quotes", rows);
         return out;
+    }
+
+    /** 목록 담당자(작성자) 고르기 — 견적을 쓴 적이 있는 사람만. 관리자가 아니어도 쓴다(사용자 목록 API 는 관리자 전용) */
+    @GetMapping("/owners")
+    public Map<String, Object> owners() {
+        return Map.of("rows", db.query("SELECT u.id, u.name, u.email FROM sq_users u"
+                + " WHERE u.id IN (SELECT DISTINCT created_by FROM sq_quotes WHERE created_by IS NOT NULL) ORDER BY u.name"));
     }
 
     /** Node {@code numbering.js} {@code quoteNoSearchClause} — 입력 그대로 OR 접두어·구분자 뗀 숫자열 */
@@ -190,6 +212,9 @@ public class QuoteController {
         double n = Js.number(id);
         int r = Double.isNaN(n) ? 0 : db.update("DELETE FROM sq_quotes WHERE id = ?", Js.json(n));
         if (r == 0) throw ApiException.notFound();
+        // 첨부파일(V17)은 외래키가 없어 따로 지운다 — 표가 아직 없으면 건너뛴다
+        Map<String, Object> ft = db.first("SELECT COUNT(*) AS n FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'sq_quote_files'");
+        if (ft != null && ((Number) ft.get("n")).longValue() > 0) db.update("DELETE FROM sq_quote_files WHERE quote_id = ?", Js.json(n));
         return Map.of("ok", true);
     }
 

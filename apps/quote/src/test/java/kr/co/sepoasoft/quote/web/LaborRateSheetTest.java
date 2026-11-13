@@ -2,6 +2,7 @@ package kr.co.sepoasoft.quote.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.Test;
  */
 @DisplayName("노임단가표 읽기")
 class LaborRateSheetTest {
+
+    private static final BigDecimal D20_5 = new BigDecimal("20.5");
 
     private static final String SHEET = """
             한국SW산업협회 기준 SW기술자 평균임금
@@ -45,7 +48,7 @@ class LaborRateSheetTest {
     @Test
     @DisplayName("2026년 — 올해 칸 M/D 를 읽고 산정식 결과가 문서 계산표와 같다 (계산표 행은 건너뛴다)")
     void year2026() {
-        Map<String, Object> r = LaborRateSheet.parse(SHEET, 2026);
+        Map<String, Object> r = LaborRateSheet.parse(SHEET, 2026, D20_5);
         List<Map<String, Object>> rows = rows(r);
         assertThat(rows).extracting(m -> m.get("role_name")).containsExactly(
                 "IT 컨설턴트", "IT PM", "응용소프트웨어 개발자", "UI/UX 개발자", "IT 품질관리자", "IT 아키텍트", "정보시스템 운용자");
@@ -61,17 +64,31 @@ class LaborRateSheetTest {
     @Test
     @DisplayName("2025년 — 전년 칸을 읽는다")
     void year2025() {
-        assertThat(rows(LaborRateSheet.parse(SHEET, 2025))).extracting(m -> m.get("wage_md")).startsWith(471166L, 443955L);
+        assertThat(rows(LaborRateSheet.parse(SHEET, 2025, D20_5))).extracting(m -> m.get("wage_md")).startsWith(471166L, 443955L);
     }
 
     @Test
     @DisplayName("표에 없는 연도 — 가장 최근 칸을 읽고 경고한다. 표가 없으면 경고만")
     void mismatch() {
-        Map<String, Object> r = LaborRateSheet.parse(SHEET, 2027);
+        Map<String, Object> r = LaborRateSheet.parse(SHEET, 2027, D20_5);
         assertThat(rows(r)).extracting(m -> m.get("wage_md")).startsWith(522340L);
         assertThat((List<String>) r.get("warnings")).anyMatch(w -> w.contains("2027"));
-        Map<String, Object> empty = LaborRateSheet.parse("아무 표도 없는 문서", 2027);
+        Map<String, Object> empty = LaborRateSheet.parse("아무 표도 없는 문서", 2027, D20_5);
         assertThat(rows(empty)).isEmpty();
         assertThat((List<String>) empty.get("warnings")).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("근무일 — 협회 문서의 '월 임금 ÷ 20.5(일)' 문구에서 읽고, 없으면 null")
+    void workDays() {
+        assertThat(LaborRateSheet.workDays("※ 일 임금 = 월 임금 ÷ 20.5(일), 시간 임금 = 일 임금 ÷ 8(시간)")).isEqualByComparingTo("20.5");
+        assertThat(LaborRateSheet.workDays("일평균임금은 월평균임금 ÷ 20.6 (일)")).isEqualByComparingTo("20.6");
+        assertThat(LaborRateSheet.workDays("근무일 표기 없음")).isNull();
+    }
+
+    @Test
+    @DisplayName("2025년 근무일 20.6일 — 내부 도표양식의 계와 같다(IT PM 443,955 → 23,046,592)")
+    void computeWithWorkDays() {
+        assertThat(LaborRateSheet.compute(443955, new BigDecimal("20.6")).get("apply_price")).isEqualTo(23046592L);
     }
 }

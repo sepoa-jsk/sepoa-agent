@@ -6,7 +6,7 @@
 // [미리보기] — 고른 템플릿을 견적서 완성본(기본값 · 가격정책 기준단가)으로 큰 창에 그린다(2026-10-31 사용자 요청).
 import { api as http } from '../../../api.js';
 import { h, clear, won, openModal, previewControls } from '../../../ui.js';
-import { appliedPatch, bandLine, bandUnitOf, recalcBlocks, toBlocksPayload } from './step3-config.js';
+import { appliedPatch, bandLine, bandUnitOf, recalcBlocks, toBlocksPayload, usePolicyGroups } from './step3-config.js';
 
 // 템플릿 종류(서버가 내용으로 정한다) — 구조만: 블록 틀만 있고 모듈 · 인력은 비어 있다 / 데이터 포함: 기본 모듈 · 인력까지 채워져 있다
 export const KIND_LABEL = { STRUCT: '구조만', DATA: '데이터 포함' };
@@ -70,6 +70,7 @@ export function openTemplatePicker({ state, list: all, currentCode, title, onSta
     info.textContent = `${t.name} — 그리는 중...`;
     try {
       const d = applyCache[t.code] || (applyCache[t.code] = await http.applyTemplate(t.code));
+      if (d.template && d.template.deployment === 'SAAS') await usePolicyGroups(d.template.solution); // 구분(기본/부가)을 가격정책대로
       if (my !== seq) return;
       paintContent(d);
       const blocks = appliedPatch(d).blocks;

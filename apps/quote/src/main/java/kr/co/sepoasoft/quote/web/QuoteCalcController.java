@@ -82,17 +82,26 @@ public class QuoteCalcController {
         Map<Object, List<Map<String, Object>>> bandMap = new LinkedHashMap<>();
         List<Object> bandIds = priceMap.values().stream().filter(p -> "BAND".equals(p.get("pricing_type"))).map(p -> p.get("id")).toList();
         if (!bandIds.isEmpty()) {
-            for (Map<String, Object> v : db.query("SELECT item_id, `key`, min_qty, max_qty, price FROM sq_price_variants WHERE item_id IN ("
+            for (Map<String, Object> v : db.query("SELECT * FROM sq_price_variants WHERE item_id IN ("
                     + Rows.placeholders(bandIds.size()) + ") ORDER BY sort, id", bandIds.toArray())) {
                 bandMap.computeIfAbsent(v.get("item_id"), k -> new ArrayList<>()).add(v);
             }
         }
-        // 활성 연도 인건비 기준단가(apply_price)
+        // 고정가 품목의 제안단가 기본값 — variants key PROPOSED(예: 전자인장 SaaS 셋업 기준 10,000,000 / 제안 2,000,000, 2026-11-04 사용자 요청)
+        Map<Object, Object> proposedMap = new LinkedHashMap<>();
+        List<Object> fixedIds = priceMap.values().stream().filter(p -> !"BAND".equals(p.get("pricing_type"))).map(p -> p.get("id")).toList();
+        if (!fixedIds.isEmpty()) {
+            for (Map<String, Object> v : db.query("SELECT item_id, price FROM sq_price_variants WHERE `key` = 'PROPOSED' AND item_id IN ("
+                    + Rows.placeholders(fixedIds.size()) + ")", fixedIds.toArray())) {
+                proposedMap.put(v.get("item_id"), Js.json(Js.toNumber(v.get("price"))));
+            }
+        }
+        // 활성 연도 인건비 기준단가 — 회사 기준단가(company_price), 없으면 협회 기준단가(apply_price)
         Map<String, Object> ly = db.first("SELECT id, `year` FROM sq_labor_rate_years WHERE active = 1 LIMIT 1");
         Map<Object, Map<String, Object>> laborMap = new LinkedHashMap<>();
         if (ly != null) {
             for (Map<String, Object> r : db.query(
-                    "SELECT role_code, role_name, apply_price FROM sq_labor_rate_lines WHERE year_id = ?", ly.get("id"))) {
+                    "SELECT role_code, role_name, COALESCE(company_price, apply_price) AS apply_price FROM sq_labor_rate_lines WHERE year_id = ?", ly.get("id"))) {
                 laborMap.put(r.get("role_code"), r);
             }
         }
@@ -121,7 +130,7 @@ public class QuoteCalcController {
                 it.put("spec", or(p.get("spec"), null));
                 it.put("qty", t.get("qty_default") == null ? (Object) 1 : Js.json(Js.toNumber(t.get("qty_default"))));
                 it.put("base_price", p.get("base_price") != null ? Js.json(Js.toNumber(p.get("base_price"))) : null);
-                it.put("proposed_price", null);
+                it.put("proposed_price", proposedMap.get(p.get("id")));
                 it.put("amount", 0);
                 it.put("unit", or(p.get("unit"), null));
                 it.put("recurring", Rows.truthy(p.get("recurring")));
@@ -161,15 +170,7 @@ public class QuoteCalcController {
                 conditions.add(r.get("text"));
             }
         }
-        // SaaS 는 가격정책(SaaS) 현재 버전의 견적조건만 쓴다 — 문구 세트(COND_SAAS 등) 대신(2026-10-30 사용자 결정).
-        // 가격정책에 견적조건이 없으면 문구 세트 그대로
-        if ("SAAS".equals(tpl.get("deployment")) && Rows.truthy(tpl.get("condition_set"))) {
-            Map<String, Object> pv = db.first("SELECT content FROM sq_price_policy_versions WHERE solution = ? AND deployment = 'SAAS'"
-                    + " ORDER BY id DESC LIMIT 1", tpl.get("solution"));
-            // 가격정책이 고른 문구 세트(cond_set)의 지금 문장 — 예전 버전은 내용에 적힌 conds (2026-10-31 견적조건 문구 화면)
-            List<Object> policy = pv == null ? List.of() : ConditionController.policyConds(db, db.safeJson(pv.get("content")));
-            if (!policy.isEmpty()) { conditions.clear(); conditions.addAll(policy); }
-        }
+        // SaaS 도 템플릿의 견적조건 문구 세트를 그대로 쓴다 — 가격정책에는 견적조건을 두지 않는다(2026-11-04 사용자 요청, 이원화하지 않는다)
         Set<Object> unregistered = new LinkedHashSet<>();
         for (Map<String, Object> t : titems) if (!priceMap.containsKey(t.get("item_code"))) unregistered.add(t.get("item_code"));
 
@@ -280,16 +281,18 @@ public class QuoteCalcController {
      */
     private static void applyBand(Map<String, Object> it, Object bandKey, Object bandQty, List<Map<String, Object>> variants) {
         if (variants == null || variants.isEmpty()) return;
-        String band = "COUNT".equals(bandKey) ? "COUNT" : "USER";
+        String band = "COUNT".equals(bandKey) || "COMPANY".equals(bandKey) ? (String) bandKey : "USER"; // COMPANY — 회사 수(2026-11-04)
         double n = bandQty == null ? 1 : Js.toNumber(bandQty);
         it.put("band", band);
         it.put("band_qty", Js.json(n));
         Object price = null;
         for (Map<String, Object> v : variants) {
-            String k = "COUNT".equals(v.get("key")) ? "COUNT" : "USER";
+            String k = "COUNT".equals(v.get("key")) || "COMPANY".equals(v.get("key")) ? (String) v.get("key") : "USER";
             if (!k.equals(band) || n < Js.toNumber(v.get("min_qty"))) continue;
             if (v.get("max_qty") != null && n > Js.toNumber(v.get("max_qty"))) continue;
-            price = Js.json(Js.toNumber(v.get("price")));
+            // 추가 1단위당 금액(V20 step_price) — 끝 없는 구간에서 시작 수를 넘는 만큼 더한다
+            double step = v.get("step_price") == null ? 0 : Js.toNumber(v.get("step_price"));
+            price = Js.json(Js.toNumber(v.get("price")) + (step > 0 ? step * (n - Js.toNumber(v.get("min_qty"))) : 0));
             break;
         }
         it.put("base_price", price);

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
@@ -36,7 +37,7 @@ import kr.co.sepoasoft.quote.web.support.Rows;
 public class LaborRateController {
 
     private static final List<String> RATE_COLS = List.of(
-            "role_name", "grade", "wage_md", "wage_mm", "overhead", "tech_fee", "apply_price", "note");
+            "role_name", "grade", "wage_md", "wage_mm", "overhead", "tech_fee", "apply_price", "company_price", "note");
 
     private final Rows db;
 
@@ -79,6 +80,7 @@ public class LaborRateController {
         out.put("year_id", yearRow.get("id"));
         out.put("source", yearRow.get("source"));
         out.put("active", yearRow.get("active"));
+        out.put("work_days", yearRow.get("work_days"));
         out.put("rates", db.query("SELECT * FROM sq_labor_rate_lines WHERE year_id = ? ORDER BY sort, id", yearRow.get("id")));
         return out;
     }
@@ -99,15 +101,16 @@ public class LaborRateController {
         if (db.first("SELECT id FROM sq_labor_rate_years WHERE `year` = ?", y) != null) {
             throw new ApiException(HttpStatus.CONFLICT, "DUPLICATE_YEAR", y + "년은 이미 존재합니다.");
         }
-        long newId = db.insert("INSERT INTO sq_labor_rate_years (`year`, source, active) VALUES (?, ?, 0)", y, source);
+        // 복제하면 근무일도 따라온다
+        Map<String, Object> src = cloneFrom != null && Js.truthy(cloneFrom)
+                ? db.first("SELECT id, work_days FROM sq_labor_rate_years WHERE `year` = ?", Js.json(cloneFrom)) : null;
+        long newId = db.insert("INSERT INTO sq_labor_rate_years (`year`, source, work_days, active) VALUES (?, ?, ?, 0)", y, source,
+                src == null ? DEFAULT_DAYS : src.get("work_days"));
         int cloned = 0;
-        if (cloneFrom != null && Js.truthy(cloneFrom)) {
-            Map<String, Object> src = db.first("SELECT id FROM sq_labor_rate_years WHERE `year` = ?", Js.json(cloneFrom));
-            if (src != null) {
-                cloned = db.update("INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort)"
-                        + " SELECT ?, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort"
-                        + " FROM sq_labor_rate_lines WHERE year_id = ?", newId, src.get("id"));
-            }
+        if (src != null) {
+            cloned = db.update("INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, company_price, note, sort)"
+                    + " SELECT ?, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, company_price, note, sort"
+                    + " FROM sq_labor_rate_lines WHERE year_id = ?", newId, src.get("id"));
         }
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("id", newId);
@@ -152,15 +155,31 @@ public class LaborRateController {
     public Map<String, Object> parse(@RequestParam(required = false) MultipartFile file, @RequestParam(required = false) String year) {
         int y = validYear(year);
         if (file == null || file.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST, "NO_FILE", "단가표 파일을 선택하세요.");
-        String text;
+        // 협회 공표 엑셀(.xlsx) 또는 PDF. 엑셀은 첫 시트(결과 표)에서 직무를 읽고, 근무일은 모든 시트에서 찾는다(2026-11-10 사용자 요청)
+        String text, all;
         try {
-            text = LaborRateSheet.text(file.getBytes());
-        } catch (IOException e) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_FILE", "PDF 파일을 읽을 수 없습니다. 한국SW산업협회 단가표 PDF 인지 확인하세요.");
+            byte[] bytes = file.getBytes();
+            if (bytes.length > 1 && bytes[0] == 'P' && bytes[1] == 'K') {
+                List<String> sheets = LaborRateSheet.xlsxSheets(bytes);
+                text = sheets.isEmpty() ? "" : sheets.get(0);
+                all = String.join("\n", sheets);
+            } else {
+                text = all = LaborRateSheet.text(bytes);
+            }
+        } catch (IOException | RuntimeException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_FILE", "파일을 읽을 수 없습니다. 한국SW산업협회 SW기술자 평균임금 엑셀 · PDF 인지 확인하세요.");
         }
-        Map<String, Object> out = LaborRateSheet.parse(text, y);
-
         Map<String, Object> yr = db.first("SELECT * FROM sq_labor_rate_years WHERE `year` = ?", y);
+        BigDecimal found = LaborRateSheet.workDays(all);
+        BigDecimal days = found != null ? found
+                : yr != null && yr.get("work_days") != null ? new BigDecimal(String.valueOf(yr.get("work_days"))) : DEFAULT_DAYS;
+        Map<String, Object> out = LaborRateSheet.parse(text, y, days);
+        if (found == null) {
+            @SuppressWarnings("unchecked")
+            List<String> w = (List<String>) out.get("warnings");
+            w.add("문서에서 근무일을 찾지 못해 " + days.toPlainString() + "일로 계산했습니다.");
+        }
+
         Map<String, Object> base = yr != null && db.first("SELECT id FROM sq_labor_rate_lines WHERE year_id = ? LIMIT 1", yr.get("id")) != null ? yr
                 : db.first("SELECT y.* FROM sq_labor_rate_years y WHERE EXISTS (SELECT 1 FROM sq_labor_rate_lines l WHERE l.year_id = y.id) ORDER BY y.`year` DESC LIMIT 1");
         Map<String, Map<String, Object>> known = new LinkedHashMap<>();
@@ -174,6 +193,7 @@ public class LaborRateController {
         for (Map<String, Object> r : rows) {
             Map<String, Object> k = known.get(key(r.get("role_name")));
             r.put("role_code", k == null ? null : k.get("role_code"));
+            if (k != null) r.put("role_name", k.get("role_name")); // 협회 표기(응용SW개발자) 대신 회사에서 쓰는 이름
             r.put("grade", k == null ? null : k.get("grade"));
             r.put("note", k != null && QuoteCalc.truthy(k.get("note")) ? k.get("note") : r.get("doc_note"));
             r.put("sort", k == null ? null : k.get("sort"));
@@ -218,26 +238,36 @@ public class LaborRateController {
         boolean created = yr == null;
         Object source = QuoteCalc.truthy(b.get("source")) ? b.get("source") : "한국SW산업협회 " + y + "년 SW기술자 평균임금";
         Object yearId = created
-                ? db.insert("INSERT INTO sq_labor_rate_years (`year`, source, active) VALUES (?, ?, 0)", y, source)
+                ? db.insert("INSERT INTO sq_labor_rate_years (`year`, source, work_days, active) VALUES (?, ?, ?, 0)", y, source, DEFAULT_DAYS)
                 : yr.get("id");
-        if (!created) db.update("UPDATE sq_labor_rate_years SET source = ? WHERE id = ?", source, yearId);
+        // 근무일 — 읽기 결과(work_days)를 같이 보낸다. 없으면 그 연도 값, 그것도 없으면 20.5
+        BigDecimal days = workDaysOf(b.get("work_days"));
+        if (days == null) {
+            Map<String, Object> cur = db.first("SELECT work_days FROM sq_labor_rate_years WHERE id = ?", yearId);
+            days = cur != null && cur.get("work_days") != null ? new BigDecimal(String.valueOf(cur.get("work_days"))) : DEFAULT_DAYS;
+        }
+        db.update("UPDATE sq_labor_rate_years SET source = ?, work_days = ? WHERE id = ?", source, days, yearId);
         int inserted = 0, updated = 0;
         for (Object o : rows) {
             Map<?, ?> r = (Map<?, ?>) o;
             String code = String.valueOf(r.get("role_code")).trim();
-            Map<String, Object> v = LaborRateSheet.compute(Math.round(Js.toNumber(r.get("wage_md"))));
+            Map<String, Object> v = LaborRateSheet.compute(Math.round(Js.toNumber(r.get("wage_md"))), days);
             Object grade = blankToNull(r.get("grade")), note = blankToNull(r.get("note"));
-            Map<String, Object> ex = db.first("SELECT id FROM sq_labor_rate_lines WHERE year_id = ? AND role_code = ?", yearId, code);
+            Map<String, Object> ex = db.first("SELECT id, apply_price, company_price FROM sq_labor_rate_lines WHERE year_id = ? AND role_code = ?", yearId, code);
             if (ex != null) {
+                // 회사 기준단가는 자동값(옛 협회 기준단가의 절사값)이거나 비었을 때만 새로 절사한다 — 직접 고친 값은 둔다
+                Object company = ex.get("company_price") == null
+                        || (ex.get("apply_price") != null && Js.toNumber(ex.get("company_price")) == LaborRateSheet.floorMillion(Js.toNumber(ex.get("apply_price"))))
+                        ? v.get("company_price") : ex.get("company_price");
                 updated += db.update("UPDATE sq_labor_rate_lines SET role_name = ?, grade = ?, wage_md = ?, wage_mm = ?, overhead = ?,"
-                        + " tech_fee = ?, apply_price = ?, note = ? WHERE id = ?", r.get("role_name"), grade, v.get("wage_md"),
-                        v.get("wage_mm"), v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), note, ex.get("id"));
+                        + " tech_fee = ?, apply_price = ?, company_price = ?, note = ? WHERE id = ?", r.get("role_name"), grade, v.get("wage_md"),
+                        v.get("wage_mm"), v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), company, note, ex.get("id"));
             } else {
                 Object sort = r.get("sort") instanceof Number n ? n
                         : db.first("SELECT COALESCE(MAX(sort), -1) + 1 AS s FROM sq_labor_rate_lines WHERE year_id = ?", yearId).get("s");
-                db.insert("INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, note, sort)"
-                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?)", yearId, code, r.get("role_name"), grade, v.get("wage_md"), v.get("wage_mm"),
-                        v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), note, sort);
+                db.insert("INSERT INTO sq_labor_rate_lines (year_id, role_code, role_name, grade, wage_md, wage_mm, overhead, tech_fee, apply_price, company_price, note, sort)"
+                        + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", yearId, code, r.get("role_name"), grade, v.get("wage_md"), v.get("wage_mm"),
+                        v.get("overhead"), v.get("tech_fee"), v.get("apply_price"), v.get("company_price"), note, sort);
                 inserted++;
             }
         }
@@ -257,8 +287,16 @@ public class LaborRateController {
         return (int) y;
     }
 
+    // 이름 짝짓기 — 공백을 빼고 협회 표기를 회사 표기로(응용SW개발자 → 응용소프트웨어개발자, UI/UX기획/개발자 → UI/UX개발자)
     private static String key(Object name) {
-        return name == null ? "" : String.valueOf(name).replaceAll("\\s+", "");
+        return name == null ? "" : String.valueOf(name).replaceAll("\\s+", "").replace("SW", "소프트웨어").replace("기획/", "");
+    }
+
+    private static final BigDecimal DEFAULT_DAYS = new BigDecimal("20.5");
+
+    private static BigDecimal workDaysOf(Object v) {
+        double d = v == null ? Double.NaN : Js.toNumber(v);
+        return Double.isNaN(d) || d < 15 || d > 25 ? null : BigDecimal.valueOf(d);
     }
 
     private static Object blankToNull(Object v) {

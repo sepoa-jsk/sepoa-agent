@@ -162,13 +162,31 @@ public class PricingController {
     private void replaceVariants(Object itemId, Object variants) {
         db.update("DELETE FROM sq_price_variants WHERE item_id = ?", itemId);
         List<Object> list = QuoteCalc.asList(variants);
+        boolean step = hasStepPrice(); // V20 — 추가 1단위당 금액
         for (int i = 0; i < list.size(); i++) {
             Map<String, Object> v = QuoteCalc.asMap(list.get(i));
-            db.update("INSERT INTO sq_price_variants (item_id, `key`, label, min_qty, max_qty, rate, price, sort)"
-                    + " VALUES (?,?,?,?,?,?,?,?)",
-                    itemId, v.get("key"), v.get("label"), v.get("min_qty"), v.get("max_qty"), v.get("rate"), v.get("price"),
-                    nn(v.get("sort"), i));
+            if (step) {
+                db.update("INSERT INTO sq_price_variants (item_id, `key`, label, min_qty, max_qty, rate, price, step_price, sort)"
+                        + " VALUES (?,?,?,?,?,?,?,?,?)",
+                        itemId, v.get("key"), v.get("label"), v.get("min_qty"), v.get("max_qty"), v.get("rate"), v.get("price"),
+                        v.get("step_price"), nn(v.get("sort"), i));
+            } else {
+                db.update("INSERT INTO sq_price_variants (item_id, `key`, label, min_qty, max_qty, rate, price, sort)"
+                        + " VALUES (?,?,?,?,?,?,?,?)",
+                        itemId, v.get("key"), v.get("label"), v.get("min_qty"), v.get("max_qty"), v.get("rate"), v.get("price"),
+                        nn(v.get("sort"), i));
+            }
         }
+    }
+
+    private Boolean stepPrice;
+    /** V20 sq_price_variants.step_price 가 있는가 — 한 번 확인하면 기억한다(없으면 매번 다시 본다: SQL 을 실행하면 바로 쓴다) */
+    private boolean hasStepPrice() {
+        if (Boolean.TRUE.equals(stepPrice)) return true;
+        Map<String, Object> r = db.first("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'sq_price_variants' AND column_name = 'step_price'");
+        stepPrice = r != null && r.get("n") instanceof Number n && n.longValue() > 0;
+        return stepPrice;
     }
 
     /** {@code {item: rows[0]}} — 행이 없으면 키가 빠진다 */

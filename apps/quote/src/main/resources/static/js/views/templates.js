@@ -1,7 +1,8 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
 import { h, toast, clear, resizableColumns, numInput, won, openModal, previewControls } from '../ui.js';
-import { BAND_KINDS, bandOf, bandLine, bandUnitOf, POLICY_GROUPS, policyGroup, payPlanDefault } from './quote/wizard/step3-config.js';
+import { BAND_KINDS, bandOf, bandLine, bandUnitOf, bandKindOf, POLICY_GROUPS, policyGroup, payPlanDefault } from './quote/wizard/step3-config.js';
+import { laborBase } from './quote/pickers.js';
 
 // 견적 템플릿 관리(ADMIN) — 2026-10-29 다시 만듦.
 // M1 좌측 레일(d형: 코드 빨강 / 이름) + 본문(제목 줄 · 신규 · 복사 · 저장 → 기본정보 → 탭 상자[기본 모듈 | 인력]).
@@ -304,6 +305,12 @@ export async function renderTemplates(root) {
     numInput(value, (v) => onchange(v === '' ? null : Number(v)), { class: 'ss-cellinput', 'aria-label': label, style: 'text-align:right' }));
   const checkCell = (r) => h('td', {}, h('input', { type: 'checkbox', checked: r.checked, 'aria-label': '선택', onchange: (e) => { r.checked = e.target.checked; } }));
 
+  // 품목이 들어갈 블록 — 품목에 블록이 있으면 그것, 없으면 구분으로(개발인건비 · 유지보수 · 데이터서비스), 나머지는 솔루션 견적
+  //   3rd party(THIRDPARTY — PKI 툴킷 등)는 견적서에서 솔루션 견적 블록에 들어간다
+  const itemBlockOf = (x) => (x.block === 'THIRDPARTY' ? 'SOLUTION' : x.block) || ({ 개발인건비: 'LABOR', 유지보수: 'MAINT', 데이터서비스: 'DATASVC' }[x.category]) || 'SOLUTION';
+  // 구축형태 묶음 — 온프레미스(ONPREM · 일시불 · 분납)는 서로 같은 품목을 쓴다
+  const sameDep = (a, b) => (String(a).startsWith('ONPREM') && String(b).startsWith('ONPREM')) || a === b;
+
   function itemsGrid(body) {
     if (cur.form.deployment === 'SAAS') return saasItems(body);
     const blockOpts = blocksDef.filter((b) => cur.blocks.has(b.code) && !NO_ITEM_BLOCKS.includes(b.code)).map((b) => [b.code, b.name]);
@@ -322,7 +329,9 @@ export async function renderTemplates(root) {
     for (const r of cur.items) {
       const p = prices.find((x) => x.code === r.item_code);
       // 가격정책에 없는 코드도 그대로 보여준다 (미등록)
-      const opts = prices.map((x) => [x.code, `${x.name}${x.deployment !== cur.form.deployment ? ` · ${depName(x.deployment)}` : ''}`]);
+      // 이 템플릿의 구축형태(온프레미스 · Private Cloud)와 이 행의 블록에 맞는 품목만(2026-11-04 사용자 요청 — SaaS · 인력 · 유지보수가 섞여 나왔다)
+      const opts = prices.filter((x) => sameDep(x.deployment, cur.form.deployment) && itemBlockOf(x) === r.block_code)
+        .map((x) => [x.code, x.name]);
       if (r.item_code && !p) opts.unshift([r.item_code, `${r.item_code} (가격정책 미등록)`]);
       const variants = bandVariants(p);
       const priceTd = h('td', { style: 'text-align:right' });
@@ -396,30 +405,18 @@ export async function renderTemplates(root) {
           h('tbody', {}, ...rows.map((r) => h('tr', {}, ...r.map((v, i) => h('td', { style: `white-space:pre-line;text-align:${i ? 'left' : 'center'}` }, v)))))))));
   }
 
-  // 견적조건 탭 — 고른 문구 세트(위 '견적조건 문구')의 문장. SaaS 는 가격정책(SaaS) 현재 버전의 견적조건만 쓴다(있으면 문구 세트 대신 — 서버 apply-template 과 같은 규칙).
+  // 견적조건 탭 — 고른 문구 세트(기준정보 > 견적조건 문구)의 문장을 그대로 쓴다. SaaS 도 같다 — 가격정책에는 견적조건을 두지 않는다(2026-11-04 사용자 요청).
   // 견적 작성에서 템플릿을 고르면 이 순서 그대로 들어가고, 견적마다 고칠 수 있다
-  const policyConds = {};
   async function condTab(body) {
     const f = cur.form;
     const set = conditionSets.find((c) => c.code === f.condition_set);
     const lines = (set && set.lines) || [];
-    let extra = [];
-    if (f.deployment === 'SAAS' && f.solution) {
-      if (!policyConds[f.solution]) {
-        try {
-          const pv = await api.pricePolicy(f.solution, 'SAAS');
-          policyConds[f.solution] = ((pv.current && pv.current.content && pv.current.content.conds) || []).map((x) => String(x || '').trim()).filter(Boolean);
-        } catch { policyConds[f.solution] = []; }
-      }
-      extra = [...new Set(policyConds[f.solution])];
-    }
-    const usePolicy = extra.length > 0;
     const sel = h('select', { class: 'ss-select', style: 'width:240px', onchange: (e) => { f.condition_set = e.target.value; paint(); } }, // 위 기본정보의 견적조건 문구도 같이 바뀌게 전체를 다시 그린다
       ...conditionSets.map((c) => h('option', { value: c.code, selected: c.code === f.condition_set }, c.name)));
     body.appendChild(h('div', { class: 'ss-detailbar', style: 'margin-top:12px' },
       h('span', { class: 'ss-detailbar__note' }, '견적 작성에서 이 템플릿을 고르면 아래 문장이 이 순서로 견적조건에 들어갑니다. 견적마다 고칠 수 있습니다.')));
     const tbody = h('tbody');
-    const all = usePolicy ? extra.map((t) => [t, '가격정책 견적조건']) : lines.map((t) => [t, set ? set.name : '']);
+    const all = lines.map((t) => [t, set ? set.name : '']);
     all.forEach(([t, src], i) => tbody.appendChild(h('tr', {},
       h('td', { style: 'text-align:center' }, String(i + 1)),
       h('td', { style: 'text-align:left;white-space:pre-line' }, t),
@@ -429,7 +426,7 @@ export async function renderTemplates(root) {
     body.appendChild(h('div', { class: 'card', style: 'margin-top:12px;padding:10px 12px' },
       h('div', { class: 'ss-detailbar', style: 'margin-top:0' },
         h('span', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink-1)' }, '▣ 견적조건'),
-        usePolicy ? h('span', { style: 'font-size:12px;color:var(--ss-ink-3);margin-left:12px' }, '가격정책(SaaS) 견적조건 탭의 문장을 씁니다') : h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '문구 세트', sel)),
+        h('label', { style: 'display:flex;align-items:center;gap:6px;font-size:12.5px;margin-left:12px' }, '문구 세트', sel)),
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' },
         h('table', { class: 'ss-grid ss-grid--sized', style: `width:${cols.reduce((a, [, w]) => a + w, 0)}px;min-width:100%` },
           h('colgroup', {}, ...cols.map(([, w]) => h('col', { style: `width:${w}px` }))),
@@ -438,7 +435,11 @@ export async function renderTemplates(root) {
   }
 
   function saasBlockCard(b, no, prices, only) {
-    const rows = only || cur.items.filter((r) => r.block_code === b.code);
+    // 모듈(가격정책 SaaS 모듈 탭, 분류 '모듈') — 서비스 이용료 행 바로 아래에 '포함' 체크로 보인다(2026-11-04 사용자 요청).
+    //   체크하면 이 블록의 품목 행(수량 0 = 이용료에 묶인 참고 행)으로 저장하고, 일반 행의 모듈 목록에는 넣지 않는다
+    const modules = prices.filter(isModuleItem);
+    const allRows = only || cur.items.filter((r) => r.block_code === b.code);
+    const rows = allRows.filter((r) => !modules.some((m) => m.code === r.item_code));
     const hasBand = rows.some((r) => bandVariants(prices.find((x) => x.code === r.item_code)));
     const cols = [['선택', 44], ['구분', 90], ['모듈', 220], ['세부기능', 320], ...(hasBand ? [['인원·건수', 170]] : []),
       ['수량', 76], ['단위', 72], ['품목코드', 140]];
@@ -470,6 +471,7 @@ export async function renderTemplates(root) {
       const svcCode = variants ? r.item_code : (inGroup.find((x) => bandVariants(x)) || {}).code;
       const opts = [];
       for (const x of inGroup) {
+        if (isModuleItem(x)) continue;
         if (!bandVariants(x)) opts.push([x.code, x.name]);
         else if (x.code === svcCode) opts.push([x.code, SVC_TERM]);
       }
@@ -502,6 +504,7 @@ export async function renderTemplates(root) {
         unitTd,
         h('td', { class: 'ss-cell--link' }, r.item_code || ''));
       tbody.appendChild(tr);
+      if (variants && !only) for (const m of modules) tbody.appendChild(moduleRow(b, r, m, hasBand));
     }
     if (!rows.length) tbody.appendChild(h('tr', {}, h('td', { colspan: cols.length, class: 'ss-cell--empty', style: 'height:60px' }, '[행추가] 로 모듈을 넣으세요.')));
 
@@ -514,10 +517,40 @@ export async function renderTemplates(root) {
       h('div', { class: 'ss-gridwrap', style: 'margin-top:8px;overflow:auto' }, table));
   }
 
+  // 서비스 이용료 행 아래 모듈 한 줄 — [포함] 체크 · 모듈 · 세부기능. 체크한 모듈은 서비스 행 바로 뒤에 품목 행(수량 0)으로 둔다
+  function moduleRow(b, svcRow, m, hasBand) {
+    const on = cur.items.some((x) => x.block_code === b.code && x.item_code === m.code);
+    const toggle = (checked) => {
+      if (checked) {
+        // 순서 — 서비스 행 뒤, 이미 넣은 모듈들 뒤
+        let at = cur.items.indexOf(svcRow) + 1;
+        while (at < cur.items.length && cur.items[at].block_code === b.code && isModuleItem(findPrice(cur.items[at].item_code))) at++;
+        // 별도 금액 모듈(기준단가가 있는 모듈)은 수량 1, 이용료에 포함 모듈은 0
+        cur.items.splice(at, 0, { block_code: b.code, item_code: m.code, qty_default: Number(m.base_price) > 0 ? 1 : 0, band_key: null, band_qty: null, checked: false });
+      } else {
+        cur.items = cur.items.filter((x) => !(x.block_code === b.code && x.item_code === m.code));
+      }
+      paintTabs();
+    };
+    return h('tr', { style: on ? '' : 'color:var(--ss-ink-3)' },
+      h('td', {}),
+      h('td', { style: 'text-align:center;font-size:12px;color:var(--ss-ink-3)' }, '└ 모듈'),
+      h('td', {}, h('label', { style: 'display:flex;align-items:center;gap:6px;cursor:pointer;padding:0 6px' },
+        h('input', { type: 'checkbox', checked: on, 'aria-label': `${m.name} 포함`, onchange: (e) => toggle(e.target.checked) }),
+        h('span', { style: on ? 'font-weight:600' : '' }, m.name))),
+      h('td', { style: 'text-align:left;white-space:pre-line;color:var(--ss-ink-2)' }, m.spec || ''),
+      ...(hasBand ? [h('td', {})] : []),
+      h('td', { style: 'text-align:center;font-size:12px' }, on ? (Number(m.base_price) > 0 ? '1' : '이용료에 포함') : ''),
+      h('td', {}),
+      h('td', { class: 'ss-cell--link' }, m.code));
+  }
+  const isModuleItem = (p) => !!p && p.category === '모듈' && p.pricing_type !== 'BAND';
+  const findPrice = (code) => (priceCache[cur.form.solution] || []).find((x) => x.code === code);
+
   const SVC_TERM = '서비스 이용료'; // 가격정책 기본정보의 세부 이름
 
   // 구간형 서비스(pricing_type BAND)의 구간 — 없으면 null. 예전 인원 구간은 key 가 비어 있다(COUNT 가 아니면 인원)
-  const bandKey = (v) => (v.key === 'COUNT' ? 'COUNT' : 'USER');
+  const bandKey = bandKindOf;
   const bandVariants = (p) => (p && p.pricing_type === 'BAND' && (p.variants || []).length ? p.variants : null);
 
   function laborGrid(body) {
@@ -578,7 +611,7 @@ export async function renderTemplates(root) {
       });
       const labor = cur.labor.filter((r) => r.block_code === b.code && r.role_code).map((r) => {
         const rate = roles.find((x) => x.role_code === r.role_code);
-        const base = rate && rate.apply_price != null ? Number(rate.apply_price) : null;
+        const base = rate ? laborBase(rate) : null;
         const out = { role_code: r.role_code, role_name: rate?.role_name || null, role_label: r.role_label || null,
           grade: r.grade || null, task: r.task || null, mm: num(r.mm_default, 0) };
         return isLabor ? { ...out, base_price: base, proposed_price: base || 0 } : out;

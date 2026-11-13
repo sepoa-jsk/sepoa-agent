@@ -43,6 +43,14 @@ export function toast(msg, kind = '') {
   setTimeout(() => t.remove(), 3200);
 }
 
+// 바깥(어두운 바탕)을 눌러 닫기 — 누르기 시작한 곳도 바깥일 때만. 창 안에서 글자를 끌어 고르다
+// 마우스를 바깥에서 놓으면 click 이 바탕에 떨어져 창이 닫히던 것(2026-11-03 사용자 요청)
+function closeOnBackdrop(back, onClose) {
+  let downOnBack = false;
+  back.addEventListener('mousedown', (e) => { downOnBack = e.target === back; });
+  back.addEventListener('click', (e) => { if (e.target === back && downOnBack) onClose(); downOnBack = false; });
+}
+
 export function confirmModal({ title, message, okLabel = '확인', danger = false }) {
   return new Promise((resolve) => {
     const back = h('div', { class: 'modal-back' });
@@ -50,7 +58,7 @@ export function confirmModal({ title, message, okLabel = '확인', danger = fals
     const cancel = h('button', { class: 'btn' }, '취소');
     ok.onclick = () => { back.remove(); resolve(true); };
     cancel.onclick = () => { back.remove(); resolve(false); };
-    back.onclick = (e) => { if (e.target === back) { back.remove(); resolve(false); } };
+    closeOnBackdrop(back, () => { back.remove(); resolve(false); });
     back.appendChild(h('div', { class: 'modal' },
       h('div', { class: 'modal-head' }, title),
       h('div', { class: 'modal-body' }, message),
@@ -62,7 +70,7 @@ export function confirmModal({ title, message, okLabel = '확인', danger = fals
 
 export function openModal({ title, body, footer }) {
   const back = h('div', { class: 'modal-back' });
-  back.onclick = (e) => { if (e.target === back) back.remove(); };
+  closeOnBackdrop(back, () => back.remove());
   const modal = h('div', { class: 'modal' },
     h('div', { class: 'modal-head' }, title),
     h('div', { class: 'modal-body' }, body),
@@ -82,6 +90,46 @@ const WIN_ICON = {
   restore: '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="2.5" y="4.5" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M4.5 4.5V2.5h7v7h-2" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>',
   close: '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 2.5l9 9M11.5 2.5l-9 9" stroke="currentColor" stroke-width="1.2"/></svg>',
 };
+// 창 버튼 [—] 최소화 · [□] 최대화(다시 누르면 이전 크기) — 머리 줄이 따로 있는 창(결재요청 · 날인 신청)용(2026-11-03 사용자 요청).
+// box — .modal, parts — 최소화할 때 숨길 것들(머리 줄 빼고). 돌려준 버튼 묶음을 머리 줄에 넣는다
+export function windowControls(box, parts) {
+  const back = box.parentElement;
+  const orig = { width: box.style.width, maxWidth: box.style.maxWidth, maxHeight: box.style.maxHeight, height: box.style.height };
+  let max = false;
+  let min = false;
+  const btn = (title, icon, onclick) => h('button', { type: 'button', title, 'aria-label': title, html: icon, onclick,
+    style: 'width:34px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;background:none;color:var(--ss-ink-2,#475569);cursor:pointer;border-radius:4px',
+    onmouseenter: (e) => { e.currentTarget.style.background = '#EEF2F6'; },
+    onmouseleave: (e) => { e.currentTarget.style.background = 'none'; } });
+  const size = () => {
+    box.style.width = min ? '440px' : max ? 'calc(100vw - 24px)' : orig.width;
+    box.style.maxWidth = min || max ? 'none' : orig.maxWidth;
+    box.style.maxHeight = max && !min ? 'calc(100vh - 24px)' : orig.maxHeight;
+    box.style.height = max && !min ? 'calc(100vh - 24px)' : orig.height;
+  };
+  const minBtn = btn('최소화', WIN_ICON.min, () => {
+    min = !min;
+    parts.forEach((el) => { el.style.display = min ? 'none' : ''; });
+    // 오른쪽 아래에 머리 줄만 — 뒤 화면을 보고 누를 수 있게
+    back.style.background = min ? 'transparent' : '';
+    back.style.pointerEvents = min ? 'none' : '';
+    back.style.alignItems = min ? 'flex-end' : '';
+    back.style.justifyContent = min ? 'flex-end' : '';
+    back.style.padding = min ? '0 24px 24px 0' : '';
+    box.style.pointerEvents = 'auto';
+    minBtn.title = min ? '원래 크기' : '최소화';
+    size();
+  });
+  const maxBtn = btn('최대화', WIN_ICON.max, () => {
+    if (min) minBtn.click();
+    max = !max;
+    maxBtn.innerHTML = max ? WIN_ICON.restore : WIN_ICON.max;
+    maxBtn.title = max ? '이전 크기' : '최대화';
+    size();
+  });
+  return h('span', { style: 'display:inline-flex;gap:2px;margin-right:6px' }, minBtn, maxBtn);
+}
+
 export function previewControls(frame, box, close) {
   const back = box.parentElement;
   const head = box.querySelector('.modal-head');
@@ -212,15 +260,129 @@ export const cleanNum = (v) => {
 export function numInput(raw, onRaw, attrs, plain = false) {
   let cur = raw == null ? '' : String(raw);
   const show = (v) => (plain ? v : comma(v));
+  // Ctrl+Z 되돌리기 — 포커스 · 콤마 때문에 값을 코드로 바꿔 넣어서 브라우저 기본 되돌리기가 지워진다.
+  // 그래서 칸마다 입력 이력을 따로 두고 Ctrl+Z(Mac 은 Cmd+Z)로 한 단계씩 되돌린다(2026-11-03 사용자 요청)
+  const hist = [cur];
+  let undoing = false;
   return h('input', {
     ...attrs, type: 'text', inputMode: 'decimal', value: show(cur),
-    onfocus: (e) => { if (!e.target.readOnly) e.target.value = cur; },
+    // 누르면 값 전체를 골라 둔다 — 그대로 치면 원래 값(예: 1)을 덮어쓴다(2026-11-02 사용자 요청: '1' 뒤에 붙어 101 이 되던 것)
+    onfocus: (e) => { if (e.target.readOnly) return; e.target.value = cur; const el = e.target; setTimeout(() => { if (document.activeElement === el) el.select(); }, 0); },
     onblur: (e) => { e.target.value = show(cur); },
+    onkeydown: (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z' || e.target.readOnly) return;
+      e.preventDefault();
+      if (hist.length < 2) return;
+      hist.pop();
+      undoing = true;
+      e.target.value = hist[hist.length - 1];
+      e.target.dispatchEvent(new Event('input', { bubbles: true })); // 다른 input 리스너도 같은 값을 받게
+      undoing = false;
+      e.target.select();
+    },
     oninput: (e) => {
       const t = cleanNum(e.target.value);
       if (t !== e.target.value) e.target.value = t;
       cur = t;
+      if (!undoing && t !== hist[hist.length - 1]) { hist.push(t); if (hist.length > 50) hist.shift(); }
       onRaw(t);
     },
+  });
+}
+
+// 여러 개 체크 드롭다운 — 칸 바로 아래에 체크 목록. 체크하면 바로 onChange('A,B' | null), 바깥을 누르거나 Esc 로 닫는다.
+// 표가 상자 안에서 스크롤되므로 목록은 화면 위(body)에 띄운다. options 순서대로 이어 담는다(고객사 사용 솔루션 · 사용자 담당 솔루션)
+let openCheckDrop = null;
+export function checkDropdown(anchor, options, value, onChange) {
+  if (openCheckDrop) { const same = openCheckDrop.anchor === anchor; openCheckDrop.close(); if (same) return; }
+  const cur = new Set(String(value || '').split(',').map((s) => s.trim()).filter(Boolean));
+  const boxes = options.map(([code]) => h('input', { type: 'checkbox', checked: cur.has(code), value: code,
+    onchange: () => onChange(boxes.filter((x) => x.checked).map((x) => x.value).join(',') || null) }));
+  const r = anchor.getBoundingClientRect();
+  const box = h('div', { style: `position:fixed;top:${r.bottom + 2}px;left:${r.left}px;min-width:${Math.max(r.width, 180)}px;z-index:1000;`
+    + 'background:#fff;border:1px solid var(--ss-bd, #D0D7E2);box-shadow:0 6px 18px rgba(0,0,0,.15);padding:4px 0' },
+  ...boxes.map((cb, i) => h('label', { style: 'display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap' },
+    cb, options[i][1])));
+  document.body.appendChild(box);
+  const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') close(); };
+  function close() {
+    box.remove(); openCheckDrop = null;
+    document.removeEventListener('mousedown', outside, true);
+    document.removeEventListener('keydown', esc);
+    window.removeEventListener('scroll', close, true);
+  }
+  setTimeout(() => {
+    document.addEventListener('mousedown', outside, true);
+    document.addEventListener('keydown', esc);
+    window.addEventListener('scroll', close, true); // 표를 스크롤하면 닫는다(목록이 칸에서 떨어지지 않게)
+  }, 0);
+  openCheckDrop = { anchor, close };
+}
+
+// 편집 그리드 키보드 이동(2026-11-04 사용자 요청) — 표(.ss-grid · .grid) 안 입력 칸에서
+//   Tab / Shift+Tab: 다음 · 앞 입력 칸(체크박스 · 버튼은 건너뛴다, 줄 끝이면 다음 줄로)
+//   ← →: 글자 맨 앞 · 맨 끝에서 옆 칸으로 / ↑ ↓: 위 · 아래 줄의 같은 자리 칸으로(여러 줄 글은 첫 줄 · 끝 줄에서만, 선택 상자는 ↑ ↓ 로 값을 고른다)
+const GRID_EDIT = 'input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly]), select:not([disabled])';
+let gridKeysOn = false;
+export function enableGridKeys() {
+  if (gridKeysOn) return;
+  gridKeysOn = true;
+  const visible = (el) => el.offsetParent !== null;
+  const cellsOf = (root) => [...root.querySelectorAll(GRID_EDIT)].filter((x) => x.closest('td') && visible(x));
+  const go = (to) => {
+    to.focus();
+    if (to.tagName === 'INPUT' && typeof to.select === 'function') to.select();
+    else if (to.tagName === 'TEXTAREA') { const n = to.value.length; to.setSelectionRange(n, n); }
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+    const el = e.target;
+    if (!(el instanceof Element) || !el.matches(GRID_EDIT)) return;
+    const td = el.closest('td');
+    const table = td && td.closest('table.ss-grid, table.grid');
+    if (!table) return;
+    const k = e.key;
+    if (k === 'Tab') {
+      const all = cellsOf(table.tBodies[0] || table);
+      const i = all.indexOf(el);
+      const to = all[i + (e.shiftKey ? -1 : 1)];
+      if (i < 0 || !to) return; // 표 끝 — 브라우저 기본 이동
+      e.preventDefault();
+      go(to);
+      return;
+    }
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k) || e.shiftKey) return;
+    const sel = el.tagName === 'SELECT';
+    if (sel && (k === 'ArrowUp' || k === 'ArrowDown')) return;
+    const text = !sel && typeof el.selectionStart === 'number';
+    if (text) {
+      const v = el.value || '';
+      let s = el.selectionStart, en = el.selectionEnd;
+      // 칸으로 옮겨 오면 글자 전체가 골라진다 — 전체 선택이면 바로 옆 · 위아래로 옮긴다(일부만 고른 중이면 그대로)
+      if (s !== en) { if (s === 0 && en === v.length) { s = k === 'ArrowLeft' || k === 'ArrowUp' ? 0 : v.length; en = s; } else return; }
+      if (k === 'ArrowLeft' && s > 0) return;
+      if (k === 'ArrowRight' && en < v.length) return;
+      if (el.tagName === 'TEXTAREA' && k === 'ArrowUp' && v.slice(0, s).includes('\n')) return;
+      if (el.tagName === 'TEXTAREA' && k === 'ArrowDown' && v.slice(en).includes('\n')) return;
+    }
+    const tr = td.parentElement;
+    let to = null;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      const row = cellsOf(tr);
+      to = row[row.indexOf(el) + (k === 'ArrowLeft' ? -1 : 1)] || null;
+    } else {
+      // 같은 자리(칸 가운데 가로 위치)에 입력 칸이 있는 위 · 아래 줄 — 합친 칸(rowspan)이 있어도 맞는다
+      const rows = [...(tr.parentElement ? tr.parentElement.rows : [])];
+      const x = td.getBoundingClientRect().left + td.getBoundingClientRect().width / 2;
+      const step = k === 'ArrowUp' ? -1 : 1;
+      for (let i = rows.indexOf(tr) + step; i >= 0 && i < rows.length && !to; i += step) {
+        const c = [...rows[i].cells].find((cell) => { const r = cell.getBoundingClientRect(); return x >= r.left && x <= r.right; });
+        to = c ? cellsOf(c)[0] || null : null;
+      }
+    }
+    if (!to) return;
+    e.preventDefault();
+    go(to);
   });
 }

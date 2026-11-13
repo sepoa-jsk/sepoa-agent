@@ -1,4 +1,4 @@
-// 전체 메뉴 — SingleSuite GNB 의 햄버거 버튼으로 여는 메뉴판.
+// 전체 메뉴 — SingleSuite GNB 의 햄버거 버튼으로 여는 왼쪽 사이드바(2026-11-04 위 가로 메뉴판에서 바꿈).
 // 예전 좌측 네이비 사이드바를 대신한다(SingleSuite 셸에는 좌측 사이드바가 없다).
 // 파일 이름은 app.js 의 import 를 그대로 두려고 유지한다.
 import { toast } from '../ui.js';
@@ -22,14 +22,14 @@ export const MENU = [
     { nav: 'master', label: '마스터 관리', href: '#/master', admin: true },
     { nav: 'customer', label: '고객사관리', href: '#/customers', admin: true },
     { nav: 'risk', label: '리스크 계수', href: '#/risk', admin: true },
-    { nav: 'labor-rates', label: '노임단가', href: '#/labor-rates', admin: true },
+    { nav: 'labor-rates', label: '협회노임단가', href: '#/labor-rates', admin: true },
     { nav: 'term', label: '견적조건 문구', href: '#/conditions', admin: true },
     { nav: 'templates', label: '견적 템플릿', href: '#/templates', admin: true },
   ] },
   { group: '시스템관리', items: [
     { nav: 'user', label: '사용자관리', href: '#/users', admin: true, system: true },
     { nav: 'role', label: '역할·권한', href: '#/roles', admin: true, system: true },
-    { nav: 'dept', label: '조직', href: '#/depts', admin: true, system: true },
+    { nav: 'dept', label: '조직관리', href: '#/depts', admin: true, system: true }, // 2026-11-03 '조직' 에서 이름 변경
     { nav: 'settings', label: '설정', href: '#/settings', admin: true, system: true },
   ] },
 ];

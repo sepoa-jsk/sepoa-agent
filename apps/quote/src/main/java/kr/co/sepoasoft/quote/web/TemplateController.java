@@ -102,7 +102,7 @@ public class TemplateController {
         // 인건비 기본단가는 active 연도 임금단가에서 끌어온다(스냅샷은 견적 저장 시점에)
         List<Map<String, Object>> labor = db.query(
                 "SELECT tl.block_code, tl.role_code, tl.role_label, tl.grade, tl.task, tl.mm_default, tl.sort,"
-                        + " r.role_name, r.apply_price AS base_price"
+                        + " r.role_name, COALESCE(r.company_price, r.apply_price) AS base_price"
                         + " FROM sq_template_labor tl"
                         + " LEFT JOIN sq_labor_rate_lines r"
                         + " ON r.role_code = tl.role_code"
@@ -209,7 +209,7 @@ public class TemplateController {
             Map<String, Object> it = QuoteCalc.asMap(items.get(i));
             // band_key · band_qty — SaaS 구간형 서비스의 구간 단위 USER(인원) / COUNT(건수)와 그 숫자. 그 밖의 품목은 NULL (V8 · V9)
             Object band = it.get("band_key");
-            boolean isBand = "USER".equals(band) || "COUNT".equals(band);
+            boolean isBand = "USER".equals(band) || "COUNT".equals(band) || "COMPANY".equals(band); // COMPANY — 회사 수(2026-11-04)
             db.update("INSERT INTO sq_template_items (template_id, block_code, item_code, qty_default, band_key, band_qty, sort) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     tid, it.get("block_code"), it.get("item_code"), QuoteCalc.nn(it.get("qty_default"), 1),
                     isBand ? band : null, isBand ? it.get("band_qty") : null, i);

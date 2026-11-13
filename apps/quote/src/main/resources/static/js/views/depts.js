@@ -17,8 +17,7 @@ export async function renderDepts(root) {
   let deleted = [];
 
   root.appendChild(h('div', { class: 'ss-edithead' },
-    h('div', { class: 'ss-edithead__fields' },
-      h('span', { class: 'ss-detailbar__note' }, '사람의 부서는 사용자 화면에서 정합니다. 행삭제한 부서는 사용 중지됩니다(사람이 남은 부서는 지울 수 없습니다).')),
+    h('div', { class: 'ss-edithead__fields' }), // 안내 문구는 뺐다(2026-11-03 사용자 요청)
     h('div', { class: 'ss-actions' },
       h('button', { class: 'ss-btn ss-btn--gridrow', onclick: addRow }, '행추가'),
       h('button', { class: 'ss-btn ss-btn--gridrow', onclick: removeRows }, '행삭제'),

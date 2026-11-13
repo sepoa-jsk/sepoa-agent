@@ -35,7 +35,9 @@ function paint() {
   for (const act of state.actions || []) {
     if (act.node) { a.appendChild(act.node); continue; } // 화면이 직접 만든 버튼 묶음(예: 검토·발행의 발행 · 내려받기)
     const b = document.createElement('button');
-    b.className = 'ss-btn ' + (act.primary ? 'ss-btn--save' : 'ss-btn--default');
+    // kind — 버튼 색(secondary · delete 등 ss-btn--*). gap — 앞 버튼과 띄워 묶음을 나눈다(2026-11-03 상세 화면)
+    b.className = 'ss-btn ' + (act.primary ? 'ss-btn--save' : act.kind ? 'ss-btn--' + act.kind : 'ss-btn--default');
+    if (act.gap) b.style.marginLeft = '16px';
     b.textContent = act.label;
     if (act.id) b.id = act.id;
     if (act.disabled) b.disabled = true; // 예: 마지막 단계의 [다음]
@@ -53,7 +55,7 @@ export const PAGE_META = {
   pricing: { title: '가격정책', path: '기준정보 / 가격정책' },
   master: { title: '마스터 관리', path: '기준정보 / 마스터 관리' },
   customer: { title: '고객사관리', path: '기준정보 / 고객사관리' },
-  'labor-rates': { title: '노임단가', path: '기준정보 / 노임단가' },
+  'labor-rates': { title: '협회노임단가', path: '기준정보 / 협회노임단가' },
   templates: { title: '견적 템플릿', path: '기준정보 / 견적 템플릿' },
   term: { title: '견적조건 문구', path: '기준정보 / 견적조건 문구' },
   risk: { title: '리스크 계수', path: '기준정보 / 리스크 계수' },
@@ -61,6 +63,6 @@ export const PAGE_META = {
   dispatch: { title: '발송·열람 현황', path: '견적관리 / 발송·열람 현황' },
   user: { title: '사용자관리', path: '시스템관리 / 사용자관리' },
   role: { title: '역할·권한', path: '시스템관리 / 역할·권한' },
-  dept: { title: '조직', path: '시스템관리 / 조직' },
+  dept: { title: '조직관리', path: '시스템관리 / 조직관리' },
   settings: { title: '설정', path: '시스템관리 / 설정' },
 };

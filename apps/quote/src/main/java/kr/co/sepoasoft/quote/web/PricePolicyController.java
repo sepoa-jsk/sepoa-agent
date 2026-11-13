@@ -80,6 +80,14 @@ public class PricePolicyController {
         }
         String note = Rows.truthy(b.get("note")) ? Js.string(b.get("note")).trim() : null;
         SessionUser user = AccessInterceptor.currentUser(req);
+        // 같은 버전 번호가 있으면 그 버전을 덮어쓴다 — 프로젝트 완료 전까지 v1.0 하나로 유지(2026-11-04 사용자 요청)
+        Map<String, Object> same = db.first("SELECT id FROM sq_price_policy_versions WHERE solution = ? AND deployment = ? AND version = ?",
+                b.get("solution"), Rows.truthy(b.get("deployment")) ? b.get("deployment") : "SAAS", version);
+        if (same != null) {
+            db.update("UPDATE sq_price_policy_versions SET content = ?, note = COALESCE(?, note), created_by = ?, created_at = NOW() WHERE id = ?",
+                    db.stringify(b.get("content")), note == null || note.isEmpty() ? null : note, user == null ? null : user.id(), same.get("id"));
+            return ResponseEntity.ok(Map.of("version", one(same.get("id"))));
+        }
         long id;
         try {
             id = db.insert("INSERT INTO sq_price_policy_versions (solution, deployment, version, note, content, created_by) VALUES (?,?,?,?,?,?)",

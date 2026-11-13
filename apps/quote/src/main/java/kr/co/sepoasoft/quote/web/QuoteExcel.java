@@ -88,7 +88,7 @@ public class QuoteExcel {
         String payTerms = tag(memo, "결제조건");
         if (payTerms.isEmpty()) payTerms = "고객사 결제조건";
         // 설정이 비어 있으면(빈 문자열 포함) 견적서 HTML 과 같은 기본값
-        String supplier = QuoteHtml.or(settings.get("supplier_name"), "㈜세포아소프트");
+        String supplier = QuoteHtml.or(settings.get("supplier_name"), "(주)세포아소프트");
         String ceo = QuoteHtml.or(settings.get("supplier_ceo"), "이 희 림");
         String addr = QuoteHtml.or(settings.get("supplier_addr"), "서울시 구로구 디지털로31길 62, 아티스포럼 714~717호");
         String tel = QuoteHtml.or(settings.get("supplier_tel"), "02-6242-3094");
@@ -162,7 +162,7 @@ public class QuoteExcel {
             boolean rec = QuoteCalc.truthy(b.get("recurring"));
             String mark = !rec && onetimeCount >= 2 && seq < CIRCLED.length ? CIRCLED[seq++] : "";
             if (!mark.isEmpty()) marks.add(mark);
-            r = blockTable(ws, r, b, defs, mark);
+            r = blockTable(ws, r, b, defs, mark, masters);
             if (i == lastOnetime) {
                 if (onetimeCount >= 2) r = sumRow(ws, r, "구축금액 Total (" + String.join("+", marks) + ")", null, onetimeSub);
                 if (onetimeSub - onetimeTotal > 0) {
@@ -207,12 +207,19 @@ public class QuoteExcel {
         if (conds.isEmpty()) return;
         text(ws, r, 1, "▣ 견적조건", style("sec"));
         r += 1;
+        // 바깥 테두리만 실선 — 줄마다 선은 긋지 않는다(견적서 HTML 과 같다, 2026-11-04 사용자 요청)
+        int first = r;
         for (String c : conds) {
-            cell(ws, r, 1, "-. " + c, style("wrapL"));
-            for (int col = 2; col <= 7; col++) cell(ws, r, col, "", style("wrapL"));
+            cell(ws, r, 1, "-. " + c, style("condL"));
+            for (int col = 2; col <= 7; col++) cell(ws, r, col, "", style("condL"));
             merge(ws, r, r, 1, 7);
             r += 1;
         }
+        CellRangeAddress box = new CellRangeAddress(first, r - 1, 1, 7);
+        RegionUtil.setBorderTop(BorderStyle.THIN, box, ws);
+        RegionUtil.setBorderBottom(BorderStyle.THIN, box, ws);
+        RegionUtil.setBorderLeft(BorderStyle.THIN, box, ws);
+        RegionUtil.setBorderRight(BorderStyle.THIN, box, ws);
     }
 
     private void hdrLeft(XSSFSheet ws, int r, String label, String value) {
@@ -224,13 +231,41 @@ public class QuoteExcel {
     }
 
     /** 블록 1개 — 머리행 · 품목/인력 행(같은 구분은 세로로 묶는다) · 소계 행. 다음 줄 번호를 돌려준다 */
-    private int blockTable(XSSFSheet ws, int r, Map<String, Object> b, Map<String, Object> defs, String mark) {
+    private int blockTable(XSSFSheet ws, int r, Map<String, Object> b, Map<String, Object> defs, String mark, Map<String, Object> masters) {
         String code = str(b.get("block_code"));
         boolean isLabor = "LABOR".equals(code);
         boolean rec = QuoteCalc.truthy(b.get("recurring"));
         Map<?, ?> def = defs.get(code) instanceof Map<?, ?> d ? d : Map.of();
         String title = firstNonEmpty(b.get("title"), def.get("name"), code);
-        text(ws, r, 1, "▣ " + title, style("sec"));
+        // SaaS 서비스 비용 모듈 묶음 — 견적서(QuoteHtml)와 같은 규칙: 서비스 이용료 행(note 'BAND:…') 뒤 모듈 행(…_SAAS_M01, 수량 0)에 수량 · 단가 · 금액을 합친다
+        List<Map<String, Object>> items = new ArrayList<>(maps(b.get("items")));
+        int bundleAt = -1, bundleN = 0;
+        String bundleTitle = null, bQty = null;
+        double bBase = 0, bProposed = 0, bAmount = 0;
+        for (int i = 0; !isLabor && i < items.size(); i++) {
+            String note = str(items.get(i).get("note"));
+            if (!note.startsWith("BAND:")) continue;
+            int n = 0;
+            while (i + 1 + n < items.size() && str(items.get(i + 1 + n).get("item_code")).matches(".*_SAAS_M\\d+$") && num(items.get(i + 1 + n).get("qty")) == 0) n++;
+            if (n == 0) continue;
+            String[] parts = note.split(":");
+            boolean count = parts.length > 1 && "COUNT".equals(parts[1]);
+            double bq = parts.length > 2 ? num(parts[2]) : 0;
+            Map<String, Object> svc = items.get(i);
+            bAmount = num(svc.get("amount"));
+            Object ub = masters.get("saasUnitBase") instanceof Map<?, ?> m ? m.get(str(svc.get("item_code"))) : null;
+            bBase = ub == null ? 0 : num(ub);
+            bProposed = bq > 0 ? Math.round(bAmount / bq) : num(svc.get("proposed_price"));
+            bQty = bq > 0 ? QuoteHtml.numText(bq) + (count ? " 건" : " 계정") : QuoteHtml.qtyText(num(svc.get("qty")), str(svc.get("unit")), false);
+            if (bq > 0) bundleTitle = count ? "월 " + QuoteHtml.numText(bq) + "건 이하"
+                    : ("PROCURE".equals(str(masters.get("solution"))) ? "구매담당자 " : "사용자 ") + QuoteHtml.numText(bq) + "계정 이하";
+            items.remove(i);
+            bundleAt = i;
+            bundleN = n;
+            break;
+        }
+        String brand = bundleAt >= 0 ? str(masters.get("brand")) : "";
+        text(ws, r, 1, "▣ " + (bundleTitle != null ? "서비스 비용 (" + bundleTitle + ")" : title), style("sec"));
         cell(ws, r, 7, "(단위 : 원)", style("unitR"));
         r += 1;
         head(ws, r, new String[] { "구분", isLabor ? "역할" : rec ? "시스템" : "모듈", isLabor ? "세부내역" : "세부기능",
@@ -238,8 +273,8 @@ public class QuoteExcel {
         r += 1;
 
         List<Object[]> rows = new ArrayList<>(); // gubun, name, spec, qty, unit, base, proposed, amount, labor
-        for (Map<String, Object> it : maps(b.get("items"))) {
-            rows.add(new Object[] { firstNonEmpty(it.get("category"), title), str(it.get("name")), str(it.get("spec")), num(it.get("qty")),
+        for (Map<String, Object> it : items) {
+            rows.add(new Object[] { brand.isEmpty() ? firstNonEmpty(it.get("category"), title) : brand, str(it.get("name")), str(it.get("spec")), num(it.get("qty")),
                     str(it.get("unit")), it.get("base_price"), it.get("proposed_price") != null ? it.get("proposed_price") : it.get("unit_price"),
                     num(it.get("amount")), false });
         }
@@ -248,6 +283,15 @@ public class QuoteExcel {
             rows.add(new Object[] { firstNonEmpty(l.get("category"), "시스템구축 개발인건비"), firstNonEmpty(l.get("role_label"), l.get("role_name"), l.get("role_code")),
                     str(l.get("task")), num(l.get("mm")), "MM", l.get("base_price"), l.get("proposed_price"), num(l.get("amount")), true });
             mmSum += num(l.get("mm"));
+        }
+        // 금액 0 행 합치기 — 견적서(QuoteHtml.zeroSpans)와 같은 규칙. 기준단가 · 제안단가 · 제안금액 칸을 위 행과 한 칸으로
+        int[] zs = new int[rows.size()];
+        java.util.Arrays.fill(zs, 1);
+        if (!isLabor && bundleAt < 0) {
+            List<Object> gubuns = new ArrayList<>();
+            List<Double> amounts = new ArrayList<>(), qtys = new ArrayList<>();
+            for (Object[] v : rows) { gubuns.add(v[0]); qtys.add((double) v[3]); amounts.add((double) v[7]); }
+            zs = QuoteHtml.zeroSpans(gubuns, amounts, qtys);
         }
         int start = r;
         for (int i = 0; i < rows.size(); i++) {
@@ -258,7 +302,17 @@ public class QuoteExcel {
             cell(ws, r, 1, (String) v[0], style("cwrap"));
             cell(ws, r, 2, (String) v[1], style("cwrap"));
             cell(ws, r, 3, (String) v[2], style("wrap"));
-            if (qty == 0) { // 묶음에 포함된 참고 행 — 수량 · 단가 · 금액을 비운다
+            if (i == bundleAt) { // 모듈 묶음 첫 행 — 합친 칸
+                cell(ws, r, 4, bQty, style("center"));
+                if (bBase > 0) money(ws, r, 5, bBase, style("money")); else cell(ws, r, 5, "", style("val"));
+                money(ws, r, 6, bProposed, style("money"));
+                money(ws, r, 7, bAmount, style("money"));
+            } else if (zs[i] == 0) { // 위 행과 합친 금액 칸 — 수량만
+                cell(ws, r, 4, qty == 0 ? "" : QuoteHtml.qtyText(qty, (String) v[4], (boolean) v[8]), style("center"));
+                for (int c = 5; c <= 7; c++) cell(ws, r, c, "", style("val"));
+            } else if (bundleAt >= 0 && i > bundleAt && i < bundleAt + bundleN) {
+                for (int c = 4; c <= 7; c++) cell(ws, r, c, "", style("val"));
+            } else if (qty == 0) { // 묶음에 포함된 참고 행 — 수량 · 단가 · 금액을 비운다
                 for (int c = 4; c <= 7; c++) cell(ws, r, c, "", style("val"));
             } else {
                 cell(ws, r, 4, QuoteHtml.qtyText(qty, (String) v[4], (boolean) v[8]), style("center"));
@@ -275,13 +329,15 @@ public class QuoteExcel {
             if (j > i) merge(ws, start + i, start + j, 1, 1);
             i = j + 1;
         }
+        if (bundleN > 1) for (int c = 4; c <= 7; c++) merge(ws, start + bundleAt, start + bundleAt + bundleN - 1, c, c);
+        for (int i = 0; i < zs.length; i++) if (zs[i] > 1) for (int c = 5; c <= 7; c++) merge(ws, start + i, start + i + zs[i] - 1, c, c);
         if (rows.isEmpty()) {
             cell(ws, r, 1, "(항목 없음)", style("center"));
             for (int c = 2; c <= 7; c++) cell(ws, r, c, "", style("val"));
             merge(ws, r, r, 1, 7);
             r += 1;
         }
-        String subLabel = isLabor ? "인건비 소계" : title.endsWith("소계") ? title : title + " 소계";
+        String subLabel = isLabor ? "인건비 소계" : bundleTitle != null ? "서비스 사용료 소계" : title.endsWith("소계") ? title : title + " 소계";
         return sumRow(ws, r, subLabel + (mark.isEmpty() ? "" : "(" + mark + ")"), isLabor ? fixed1(mmSum) : null, num(b.get("subtotal")));
     }
 
@@ -420,7 +476,7 @@ public class QuoteExcel {
             f.setFontName("맑은 고딕");
             f.setFontHeightInPoints((short) 9);
             s.setVerticalAlignment(VerticalAlignment.CENTER);
-            boolean boxed = !Set.of("addr", "title", "plain", "sec", "unitR").contains(k);
+            boolean boxed = !Set.of("addr", "title", "plain", "sec", "unitR", "condL").contains(k);
             if (boxed) {
                 s.setBorderTop(BorderStyle.THIN);
                 s.setBorderBottom(BorderStyle.THIN);
@@ -450,7 +506,7 @@ public class QuoteExcel {
                 case "mm" -> s.setDataFormat(wb.createDataFormat().getFormat("0.0"));
                 case "center" -> s.setAlignment(HorizontalAlignment.CENTER);
                 case "cwrap" -> { s.setAlignment(HorizontalAlignment.CENTER); s.setWrapText(true); }
-                case "wrap", "wrapL" -> s.setWrapText(true);
+                case "wrap", "wrapL", "condL" -> s.setWrapText(true);
                 default -> { }
             }
             s.setFont(f);

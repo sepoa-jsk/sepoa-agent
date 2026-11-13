@@ -5,7 +5,7 @@
 //   삭제      : 확인 후 지우고 목록으로 간다
 //   내려받기  : PDF(표지 포함) · Excel — 서버에 저장된 내용으로 만든다
 import { api } from '../../api.js';
-import { h, toast, confirmModal, openModal, previewControls } from '../../ui.js';
+import { h, toast, confirmModal, openModal, previewControls, windowControls } from '../../ui.js';
 
 // 차수 추가 — 사유(필수, 500자)를 받는다. 사유는 새 차수의 기본정보에 읽기 전용으로 보인다(V13)
 export function reviseQuote(quote) {
@@ -46,8 +46,9 @@ export async function copyQuote(quote) {
   } catch (err) { toast(err.message, 'err'); }
 }
 
-export async function viewQuote(quote) {
-  const frame = h('iframe', { style: 'width:100%;height:72vh;border:1px solid #E7EAF0;background:#fff' });
+// opts.large — 크게(화면 폭 90% · 높이 84%). 결재요청 창의 날인서류 [견적서]에서 연다(2026-11-03 사용자 요청)
+export async function viewQuote(quote, opts = {}) {
+  const frame = h('iframe', { style: `width:100%;height:${opts.large ? 84 : 72}vh;border:1px solid #E7EAF0;background:#fff` });
   const printBtn = h('button', { class: 'btn', disabled: true, onclick: () => frame.contentWindow.print() }, '인쇄 · PDF 저장');
   const m = openModal({
     title: `견적서 — ${quote.quote_no}`,
@@ -55,7 +56,8 @@ export async function viewQuote(quote) {
     footer: [printBtn, h('button', { class: 'btn btn-primary', onclick: () => m.close() }, '닫기')],
   });
   const box = m.back.querySelector('.modal');
-  box.style.width = '880px';
+  box.style.width = opts.large ? '90vw' : '880px';
+  if (opts.large) box.style.maxWidth = '1400px';
   box.querySelector('.modal-body').style.padding = '12px';
   previewControls(frame, box, () => m.close());
   try {
@@ -110,6 +112,9 @@ export async function downloadQuote(quote, kind, btn) {
 export async function sealPreview(quote) {
   let q;
   try { q = (await api.getQuote(quote.id)).quote; } catch (err) { return toast(err.message, 'err'); }
+  // 견적에 올린 첨부파일 — 있으면 날인대상서류 아래에 같이 보여 준다(2026-11-04 사용자 요청). 못 읽으면 칸만 뺀다
+  let attach = [];
+  try { attach = (await api.quoteFiles(q.id, 'ATTACH')).files || []; } catch { /* 첨부 없이 연다 */ }
   const tag = (t) => (String(q.memo || '').match(new RegExp(`\\[${t}\\]\\s*(.+)`)) || [])[1] || '';
   const purpose = tag('견적용도');
   const won = (n) => (Number(n) || 0).toLocaleString('ko-KR');
@@ -117,27 +122,57 @@ export async function sealPreview(quote) {
   const customer = q.customer_name || '';
   const fileName = `견적서_${customer}_${q.quote_no}.pdf`;
   const ymd = (d) => String(d || '').slice(0, 10);
-  // 상세설명 템플릿(2026-11-02 사용자 요청) — 1. 견적 요약 + 의견란(제목과 빈칸, 영업팀이 채운다) / 2. 원가(제목과 빈칸)
-  function detailTemplate() {
-    const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const li = (k, v) => `<li><b>${esc(k)}</b> ${esc(v)}</li>`;
-    const blocks = (q.blocks || []).map((b) => `${b.title} ${won(b.subtotal)}원${b.recurring ? '/월' : ''}`).join(' · ');
+  // 상세설명(2026-11-04 사용자 요청) — 데이터로 만든다: 1. 견적 요약 / 2. 원가내역(공수 기반 예측) / 3. AI 의견(AI 가 검증한 결과)
+  const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const li = (k, v) => `<li><b>${esc(k)}</b> ${esc(v)}</li>`;
+  // 원가 — 실투입공수(M/M) × 1 M/M 원가(내부 8,000,000 · 외주 6,000,000 · 파트너사턴키 10,000,000). 투입형태는 이 창에서 고른다
+  //   내부 · 외주 · 파트너사턴키 — 실투입공수 하나 / 내부+외주 — 내부 · 외주 투입공수를 따로 받는다(2026-11-04 사용자 요청)
+  const COST_MM = { IN: 8000000, OUT: 6000000, TURNKEY: 10000000 };
+  const MODES = [['IN', '내부'], ['OUT', '외주'], ['TURNKEY', '파트너사턴키'], ['MIX', '내부+외주']];
+  const labor = (q.blocks || []).filter((b) => b.block_code === 'LABOR').flatMap((b) => b.labor || []);
+  const totalMm = labor.reduce((a, r) => a + (Number(r.mm) || 0), 0);
+  // 처음 값은 견적 투입공수(내부+외주는 전부 내부로 시작)
+  const cost = { mode: 'IN', mm: totalMm, inMm: totalMm, outMm: 0 };
+  const mmText = (n) => (Math.round(n * 100) / 100).toLocaleString('ko-KR');
+  function costCalc() {
+    const mix = cost.mode === 'MIX';
+    const mm = mix ? cost.inMm + cost.outMm : cost.mm;
+    const total = mix ? Math.round(cost.inMm * COST_MM.IN + cost.outMm * COST_MM.OUT) : Math.round(cost.mm * COST_MM[cost.mode]);
+    return { mm, total };
+  }
+  function costHtml() {
+    const c = costCalc();
+    const modeName = MODES.find(([v]) => v === cost.mode)[1];
+    // 원가는 공수 × 1 M/M 원가 = 합계 한 줄로(2026-11-04 사용자 요청 — 인력별 줄은 뺀다). 내부+외주는 두 항을 더한다
+    const term = (label, mm, side) => `${label}${mmText(mm)} M/M × ${won(COST_MM[side])}원`;
+    const formula = cost.mode === 'MIX'
+      ? `${[cost.inMm ? term('내부 ', cost.inMm, 'IN') : '', cost.outMm ? term('외주 ', cost.outMm, 'OUT') : ''].filter(Boolean).join(' + ') || '0 M/M'} = ${won(c.total)}원`
+      : `${term(cost.mode === 'TURNKEY' ? '파트너사 턴키 ' : '', cost.mm, cost.mode)} = ${won(c.total)}원`;
+    return [
+      '<p><b>2. 원가내역 (공수 기반 예측)</b></p>',
+      '<ul>',
+      li('투입형태', modeName),
+      li('견적 투입공수', `${mmText(totalMm)} M/M`),
+      li('실투입공수', `${mmText(c.mm)} M/M${cost.mode === 'MIX' ? ` (내부 ${mmText(cost.inMm)} · 외주 ${mmText(cost.outMm)})` : ''}`),
+      li('예상 원가', formula),
+      '</ul>',
+    ].join('');
+  }
+  // 3. 담당자 의견 — 상세설명 맨 아래에 직접 적는다(2026-11-04 사용자 요청). 원가를 다시 만들 때 적은 의견은 남긴다
+  const OPINION_HEAD = '<p><b>3. 담당자 의견</b></p>';
+  function detailTemplate(opinion = '<p><br></p>') {
+    const blocks = (q.blocks || []).map((b) => [b.block_code === 'LABOR' ? '개발인건비' : b.block_code === 'SOLUTION' ? '솔루션 라이선스' : b.title, `${won(b.subtotal)}원${b.recurring ? '/월' : ''}`]);
     const dc = Number(q.discount_amount) ? ` (특별 DC -${won(q.discount_amount)}원 반영)` : '';
     return [
       '<p><b>1. 견적 요약</b></p>',
       '<ul>',
-      li('견적번호', `${q.quote_no}${rev}`),
-      li('수신처', `${customer}${q.customer_contact ? ' / 담당 ' + q.customer_contact : ''}`),
-      purpose ? li('견적용도', purpose) : '',
+      // 금액 관련 줄만(2026-11-04 사용자 요청)
       li('견적금액', `일시불 ${won(q.onetime_total)}원${Number(q.monthly_total) ? ` / 월 ${won(q.monthly_total)}원` : ''} (부가세 별도)${dc}`),
-      blocks ? li('구성', blocks) : '',
-      li('견적일', `${ymd(q.quote_date)}${q.valid_until ? ' / 유효일 ' + ymd(q.valid_until) : ''}`),
-      q.revision > 1 && q.revision_reason ? li('차수 추가 사유', q.revision_reason) : '',
+      // 구성은 블록마다 한 줄(2026-11-04 사용자 요청 — 한 줄로 이어 쓰면 읽기 어렵다)
+      blocks.length ? `<li><b>구성</b><ul>${blocks.map(([k, v]) => li(k, v)).join('')}</ul></li>` : '',
       '</ul>',
-      '<p><b>의견란</b></p>',
-      '<p><br></p><p><br></p><p><br></p>',
-      '<p><b>2. 원가</b></p>',
-      '<p><br></p><p><br></p><p><br></p>',
+      costHtml(),
+      OPINION_HEAD + opinion,
     ].join('');
   }
   const data = {
@@ -145,7 +180,7 @@ export async function sealPreview(quote) {
     title: `${purpose && customer && purpose.includes(customer) ? purpose : `${customer} ${purpose || '견적서'}`} 날인`.trim(),
     detail: detailTemplate(),
     sealKind: '사용인감', medium: '전자', use: '견적서', submitTo: customer,
-    note: `세포아 견적 시스템 ${q.quote_no} 에서 연계`,
+    note: `<p>세포아 견적 시스템 ${q.quote_no} 에서 연계</p>`, // 비고도 에디터(HTML)
     docKind: '사용인감', docSeal: '사용인감', docName: fileName, docCount: 1,
   };
   // 고르는 칸은 목록에서 고르거나 직접 친다(datalist)
@@ -153,58 +188,117 @@ export async function sealPreview(quote) {
   const lists = Object.entries(LISTS).map(([id, vs]) => h('datalist', { id: 'q2-' + id }, ...vs.map((v) => h('option', { value: v }))));
   const ed = (key, extra = {}) => h('input', { class: 'ss-input', value: data[key] ?? '', style: 'width:100%', ...extra,
     oninput: (e) => { data[key] = e.target.value; } });
-  const field = (label, ctrl, req, span) => h('div', { class: 'ss-field', style: `margin-bottom:12px;${span ? 'grid-column:1/-1' : ''}` },
-    h('label', {}, label, req ? h('span', { class: 'req' }, ' *') : null), ctrl);
-  // 상세설명 에디터 — 인장시스템 상세설명처럼 서식 있는 글(굵게 등). 브라우저 기본 편집(contenteditable)
-  const area = h('div', { class: 'q2-editor__area', contenteditable: 'true', html: data.detail,
-    oninput: () => { data.detail = area.innerHTML; } });
-  const tool = (label, cmd, title, style = '') => h('button', { type: 'button', class: 'q2-editor__btn', title, style,
-    onmousedown: (e) => { e.preventDefault(); document.execCommand(cmd); data.detail = area.innerHTML; area.focus(); } }, label);
-  const detail = h('div', { class: 'q2-editor' },
-    h('div', { class: 'q2-editor__bar' },
-      tool('B', 'bold', '굵게', 'font-weight:700'), tool('I', 'italic', '기울임', 'font-style:italic'), tool('U', 'underline', '밑줄', 'text-decoration:underline'),
-      h('span', { class: 'q2-editor__sep' }),
-      tool('• 목록', 'insertUnorderedList', '글머리 목록'), tool('1. 목록', 'insertOrderedList', '번호 목록')),
-    area);
+  // 화면 구성(2026-11-03 사용자 요청 — 가독성): 위 고정 줄(제목 · 닫기 · 전송) → 1 신청 정보(라벨 | 값 표) → 2 상세설명 → 3 날인대상서류 → 4 비고
+  const sec = (no, title, ...body) => h('section', { class: 'q2-sec' },
+    h('h3', { class: 'q2-sec__h' }, h('span', { class: 'q2-sec__no' }, String(no)), title), ...body);
+  const th = (label, req) => h('th', {}, label, req ? h('span', { class: 'q2-req' }, ' *') : null);
+  const td = (ctrl, span) => h('td', span ? { colspan: span } : {}, ctrl);
+  // 서식 있는 글 에디터(굵게 · 목록 등) — 상세설명 · 비고(2026-11-03 사용자 요청: 비고도 에디터로). 브라우저 기본 편집(contenteditable)
+  // key — data 의 칸(HTML 로 담는다) · minH — 처음 높이(px)
+  const editor = (key, minH) => {
+    const area = h('div', { class: 'q2-editor__area', contenteditable: 'true', html: data[key], style: minH ? `min-height:${minH}px` : null,
+      oninput: () => { data[key] = area.innerHTML; } });
+    const tool = (label, cmd, title, style = '') => h('button', { type: 'button', class: 'q2-editor__btn', title, style,
+      onmousedown: (e) => { e.preventDefault(); area.focus(); document.execCommand(cmd); data[key] = area.innerHTML; } }, label);
+    return h('div', { class: 'q2-editor' },
+      h('div', { class: 'q2-editor__bar' },
+        tool('B', 'bold', '굵게', 'font-weight:700'), tool('I', 'italic', '기울임', 'font-style:italic'), tool('U', 'underline', '밑줄', 'text-decoration:underline'),
+        h('span', { class: 'q2-editor__sep' }),
+        tool('• 목록', 'insertUnorderedList', '글머리 목록'), tool('1. 목록', 'insertOrderedList', '번호 목록')),
+      area);
+  };
+  const detail = editor('detail');
+  const repaintDetail = () => {
+    const area = detail.querySelector('.q2-editor__area');
+    const at = area.innerHTML.indexOf(OPINION_HEAD);
+    data.detail = detailTemplate(at >= 0 ? area.innerHTML.slice(at + OPINION_HEAD.length) || undefined : undefined);
+    area.innerHTML = data.detail;
+  };
+  // 공수 칸 — 숫자를 바꾸고 '원가 반영'을 누르면 그 공수로 원가를 다시 내고 상세설명을 다시 만든다(AI 의견은 뺐다 — 2026-11-04 사용자 요청)
+  //   내부 · 외주 · 파트너사턴키는 실투입공수 하나, 내부+외주는 내부 · 외주 투입공수 두 칸
+  const mmBox = (label, key) => {
+    const input = h('input', { class: 'ss-input', style: 'width:80px;text-align:right', value: mmText(cost[key]), inputMode: 'decimal', 'aria-label': label });
+    const wrap = h('label', { class: 'q2-cost__tk' }, h('span', { class: 'q2-cost__label' }, label), input, 'M/M');
+    return { key, input, wrap };
+  };
+  const boxes = { mm: mmBox('실투입공수', 'mm'), inMm: mmBox('내부 투입공수', 'inMm'), outMm: mmBox('외주 투입공수', 'outMm') };
+  const paintCost = () => {
+    const mix = cost.mode === 'MIX';
+    boxes.mm.wrap.style.display = mix ? 'none' : '';
+    boxes.inMm.wrap.style.display = boxes.outMm.wrap.style.display = mix ? '' : 'none';
+  };
+  const modeSel = h('select', { class: 'ss-select', style: 'width:140px', 'aria-label': '투입형태',
+    onchange: (e) => { cost.mode = e.target.value; paintCost(); repaintDetail(); } },
+    ...MODES.map(([v, t]) => h('option', { value: v, selected: v === cost.mode }, t)));
+  paintCost();
+  const rewrite = () => {
+    Object.values(boxes).forEach(({ key, input }) => {
+      const v = Number(String(input.value).replace(/[^\d.]/g, ''));
+      if (Number.isFinite(v) && v >= 0) cost[key] = v;
+      input.value = mmText(cost[key]);
+    });
+    repaintDetail();
+  };
+  const costBar = labor.length ? h('div', { class: 'q2-cost' }, h('span', { class: 'q2-cost__label' }, '투입형태'), modeSel,
+    boxes.mm.wrap, boxes.inMm.wrap, boxes.outMm.wrap,
+    h('button', { type: 'button', class: 'ss-btn ss-btn--default', onclick: rewrite }, '원가 반영'),
+    h('span', { class: 'q2-cost__note' }, `※ 1 M/M 원가: 내부 ${won(COST_MM.IN)}원 · 외주 ${won(COST_MM.OUT)}원 · 파트너사턴키 ${won(COST_MM.TURNKEY)}원`)) : null;
   const medium = h('select', { class: 'ss-select', style: 'width:100%', onchange: (e) => { data.medium = e.target.value; } },
     ...['전자', '실물'].map((v) => h('option', { value: v, selected: v === data.medium }, v)));
   const cellIn = (key, extra = {}) => h('input', { class: 'ss-cellinput', value: data[key] ?? '', ...extra, oninput: (e) => { data[key] = e.target.value; } });
-  // 날인서류 — 내려받지 않고 견적서를 미리보기 창으로 연다(2026-11-02 사용자 요청). 이 창 위에 겹쳐 열린다
-  const pdfLink = h('a', { href: '#', title: '이 견적서 미리보기', style: 'color:var(--ss-link);font-weight:600',
-    onclick: (e) => { e.preventDefault(); viewQuote(q); } }, 'PDF');
+  // 날인서류 — 내려받지 않고 견적서를 큰 미리보기 창으로 연다(2026-11-02 · 11-03 사용자 요청). 이 창 위에 겹쳐 열린다
+  const docLink = h('button', { type: 'button', class: 'q2-doclink', title: '이 견적서 미리보기',
+    onclick: () => viewQuote(q, { large: true }) }, '견적서');
   const docs = h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
-    h('colgroup', {}, ...[110, 100, 0, 80, 80, 90, 80].map((w) => h('col', { style: w ? `width:${w}px` : '' }))),
+    h('colgroup', {}, ...[110, 100, 0, 80, 90, 100, 80].map((w) => h('col', { style: w ? `width:${w}px` : '' }))),
     h('thead', {}, h('tr', {}, ...['인감구분 *', '인감명 *', '서류명 *', '날인횟수', '날인서류', '실물 날인서류', '기타파일'].map((t) => h('th', {}, t)))),
     h('tbody', {}, h('tr', {},
       h('td', { class: 'ss-cell--input' }, cellIn('docKind', { list: 'q2-seal-kinds', style: 'text-align:center' })),
       h('td', { class: 'ss-cell--input' }, cellIn('docSeal', { style: 'text-align:center' })),
       h('td', { class: 'ss-cell--input' }, cellIn('docName', { style: 'text-align:left' })),
       h('td', { class: 'ss-cell--input' }, cellIn('docCount', { inputMode: 'numeric', style: 'text-align:right' })),
-      h('td', {}, pdfLink), h('td', {}, '-'), h('td', {}, '-'))));
-  const m = openModal({
-    title: `인장시스템 연계 — ${q.quote_no}`,
-    body: h('div', {},
-      // 버튼은 위에 — 창이 길어 아래 버튼이 잘렸다(2026-11-02 사용자 요청)
-      h('div', { style: 'display:flex;gap:12px;align-items:center;margin-bottom:14px' },
-        h('div', { style: 'flex:1;background:#F0F5FF;border:1px solid #BFD3F2;border-radius:4px;padding:8px 10px;font-size:12px;line-height:1.6' },
-          '인장시스템 날인 신청 화면에 들어갈 내용입니다. 칸은 모두 고칠 수 있습니다. 아직 연동 전이라 보내지 않으며, 고친 값은 창을 닫으면 처음 값으로 돌아갑니다.'),
-        h('div', { style: 'display:flex;gap:4px;flex:none' },
-          h('button', { class: 'ss-btn ss-btn--default', onclick: () => m.close() }, '닫기'),
-          // 전송 — 자리만 둔다(2026-11-02 사용자 요청 "기능은 이후 추가"). 누르면 준비 중이라고 알린다
-          h('button', { class: 'ss-btn ss-btn--save', onclick: () => toast('전송 기능은 준비 중입니다. 인장시스템 연동 후 사용할 수 있습니다.', 'err') }, '전송'))),
+      h('td', {}, docLink), h('td', {}, '-'), h('td', {}, '-'))));
+  const sizeText = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+  const attachGrid = h('table', { class: 'ss-grid ss-grid--sized', style: 'width:100%' },
+    h('colgroup', {}, h('col', {}), h('col', { style: 'width:90px' }), h('col', { style: 'width:100px' }), h('col', { style: 'width:140px' })),
+    h('thead', {}, h('tr', {}, ...['파일명', '크기', '올린 사람', '올린 날'].map((t) => h('th', {}, t)))),
+    h('tbody', {}, ...attach.map((f) => h('tr', {},
+      h('td', { style: 'text-align:left' }, h('a', { href: api.quoteFileUrl(q.id, f.id), 'data-keep': '', style: 'color:var(--ss-link);font-weight:600' }, f.file_name)),
+      h('td', { class: 'num' }, sizeText(Number(f.size) || 0)),
+      h('td', {}, f.uploaded_by_name || '-'),
+      h('td', {}, String(f.created_at || '').slice(0, 16))))));
+  let m;
+  const winSlot = h('span', { style: 'display:inline-flex' });
+  const top = h('div', { class: 'q2-seal__top' },
+    h('div', { class: 'q2-seal__title' }, '인장시스템 날인 신청', h('span', { class: 'q2-seal__no' }, `${q.quote_no}${rev}`)),
+    h('div', { style: 'display:flex;gap:4px;align-items:center' },
+      winSlot, // 최소화 · 최대화(창이 만들어진 뒤 채운다)
+      h('button', { class: 'ss-btn ss-btn--default', onclick: () => m.close() }, '닫기'),
+      // 전송 — 자리만 둔다(2026-11-02 사용자 요청 "기능은 이후 추가"). 누르면 준비 중이라고 알린다
+      h('button', { class: 'ss-btn ss-btn--save', onclick: () => toast('전송 기능은 준비 중입니다. 인장시스템 연동 후 사용할 수 있습니다.', 'err') }, '전송')));
+  m = openModal({
+    title: '',
+    body: h('div', { class: 'q2-seal' },
+      top,
+      h('p', { class: 'q2-seal__note' }, '인장시스템 날인 신청 화면에 들어갈 내용입니다. 칸은 모두 고칠 수 있으며, 아직 연동 전이라 보내지 않습니다. 고친 값은 창을 닫으면 처음 값으로 돌아갑니다.'),
       ...lists,
-      h('div', { style: 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px' },
-        field('신청명', ed('title'), true, true),
-        field('상세설명', detail, false, true),
-        field('인감/증명 구분', ed('sealKind', { list: 'q2-seal-kinds' }), true),
-        field('전자/실물 구분', medium),
-        field('날인용도', ed('use', { list: 'q2-seal-uses' })),
-        field('제출처', ed('submitTo'), true, true)),
-      h('div', { style: 'font-size:14px;font-weight:600;color:var(--ss-ink);margin:4px 0 8px' }, '날인대상서류'),
-      h('div', { class: 'ss-gridwrap', style: 'margin-bottom:12px' }, docs),
-      field('비고', ed('note'), false, true)),
+      sec(1, '신청 정보',
+        h('table', { class: 'q2-form' },
+          h('colgroup', {}, h('col', { style: 'width:130px' }), h('col', {}), h('col', { style: 'width:130px' }), h('col', {})),
+          h('tbody', {},
+            h('tr', {}, th('신청명', true), td(ed('title'), 3)),
+            h('tr', {}, th('인감/증명 구분', true), td(ed('sealKind', { list: 'q2-seal-kinds' })), th('전자/실물 구분'), td(medium)),
+            h('tr', {}, th('날인용도'), td(ed('use', { list: 'q2-seal-uses' })), th('제출처', true), td(ed('submitTo')))))),
+      sec(2, '상세설명', costBar, detail),
+      sec(3, '날인대상서류', h('div', { class: 'ss-gridwrap' }, docs)),
+      attach.length ? sec(4, '첨부파일', h('div', { class: 'ss-gridwrap' }, attachGrid)) : null,
+      sec(attach.length ? 5 : 4, '비고', editor('note', 120))),
   });
-  m.back.querySelector('.modal').style.width = '860px';
+  const box = m.back.querySelector('.modal');
+  box.classList.add('q2-seal-modal');
+  box.querySelector('.modal-head')?.remove(); // 제목은 위 고정 줄에
+  // 창 확대 · 축소(2026-11-03 사용자 요청) — 최소화하면 위 고정 줄만 오른쪽 아래에 남는다
+  winSlot.appendChild(windowControls(box, [...box.querySelector('.q2-seal').children].filter((el) => el !== top)));
 }
 
 // 메일 발송 창 — 받는 사람(견적의 이메일) · 참조 · 제목 · 본문을 채워 두고, 견적서 PDF(표지 포함)를 붙인다. Excel 은 고르면.

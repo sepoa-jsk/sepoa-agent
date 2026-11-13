@@ -1,5 +1,6 @@
 import { api } from '../api.js';
-import { h, toast, clear, debounce, resizableColumns } from '../ui.js';
+import { store } from '../app.js';
+import { h, toast, clear, debounce, resizableColumns, checkDropdown } from '../ui.js';
 
 // 사용자관리(시스템관리) — 2026-10-31. 로그인한 적 있는 계정 목록(sq_users).
 // 계정은 처음 로그인할 때 저절로 생긴다(Google 로그인 · 회사 도메인) — 여기서 새로 만들거나 비밀번호를 다루지 않는다.
@@ -17,8 +18,18 @@ const icon = {
 };
 const when = (v) => (v ? String(v).replace('T', ' ').slice(0, 16) : '-');
 
+// 핸드폰번호 꼴 맞추기 — 숫자 10 · 11자리면 010-123-4567 · 010-1234-5678. 그 밖에는 넣은 그대로
+const fmtPhone = (v) => {
+  const d = String(v || '').replace(/\D/g, '');
+  if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  return String(v || '').trim();
+};
+
 export async function renderUsers(root) {
   let org = false;
+  let hasSol = false; // 담당 솔루션 칸(V16)이 DB 에 있는가
+  let hasPhone = false; // 핸드폰번호 칸(V19)이 DB 에 있는가
   let depts = [];
   let roles = [];
   let rows = []; // [{ orig, form }]
@@ -101,9 +112,13 @@ export async function renderUsers(root) {
     ...(org ? [
       { key: 'dept_code', label: '부서', width: 150, options: depts.filter((d) => d.active).map((d) => [d.code, d.name]), blank: '미지정' },
       { key: 'position', label: '직위', width: 100 },
+      // 핸드폰번호(V19) — 숫자만 넣어도 010-1234-5678 꼴로 맞춘다. 견적 작성 '영업 연락처' 기본값
+      ...(hasPhone ? [{ key: 'phone', label: '핸드폰번호', width: 140, phone: true }] : []),
       { key: 'role_code', label: '업무 역할', width: 140, options: roles.filter((r) => r.active).map((r) => [r.code, r.name]), blank: '미지정' },
       { key: 'active', label: '사용', width: 80, options: ACTIVE_OPTS },
     ] : []),
+    // 담당 솔루션(V16) — 여러 개 체크. 견적 작성 1단계는 첫 번째를 기본으로 고른다(2026-11-03 사용자 요청)
+    ...(hasSol ? [{ key: 'solutions', label: '담당 솔루션', width: 200, multi: true }] : []),
     { key: 'last_login_at', label: '최근 로그인', width: 140, ro: true, date: true },
     { key: 'created_at', label: '등록일', width: 140, ro: true, date: true },
   ];
@@ -111,6 +126,8 @@ export async function renderUsers(root) {
   const formOf = (u) => Object.fromEntries(editKeys().map((k) => [k, k === 'active' ? String(u.active ?? 1) : (u[k] ?? '')]));
   const changed = (r) => editKeys().some((k) => String(r.form[k] ?? '') !== String(formOf(r.orig)[k] ?? ''));
 
+  const solutionOpts = () => (store.master?.solutions || []).map((s) => [s.code, s.name]);
+  const solName = (code) => (solutionOpts().find(([c]) => c === code) || [, code])[1];
   const nameOf = (list, code) => (list.find((x) => x.code === code) || {}).name || code;
   function paintChips() {
     clear(chips);
@@ -150,6 +167,19 @@ export async function renderUsers(root) {
         if (c.ro) {
           tr.appendChild(h('td', { class: c.link ? 'ss-cell--link' : null, style: c.date ? 'text-align:center' : null },
             c.date ? when(r.orig[c.key]) : (r.orig[c.key] ?? '')));
+        } else if (c.multi) {
+          const label = h('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' });
+          const paintLabel = () => {
+            const names = String(r.form[c.key] || '').split(',').filter(Boolean).map(solName).join(', ');
+            label.replaceChildren(names || h('span', { style: 'color:var(--ss-ink-3)' }, '선택'));
+            btn.title = names;
+          };
+          const btn = h('button', { type: 'button', class: 'ss-cellinput', 'aria-label': c.label,
+            style: 'display:flex;align-items:center;gap:4px;text-align:left;cursor:pointer;width:100%',
+            onclick: () => checkDropdown(btn, solutionOpts(), r.form[c.key], (v) => { r.form[c.key] = v || ''; paintLabel(); }) },
+          label, h('span', { style: 'font-size:10px;color:var(--ss-ink-3)' }, '▾'));
+          paintLabel();
+          tr.appendChild(h('td', { class: 'ss-cell--input' }, btn));
         } else if (c.options) {
           tr.appendChild(h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': c.label,
             onchange: (e) => { r.form[c.key] = e.target.value; } },
@@ -157,6 +187,8 @@ export async function renderUsers(root) {
           ...c.options.map(([v, t]) => h('option', { value: v, selected: String(v) === String(r.form[c.key]) }, t)))));
         } else {
           tr.appendChild(h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', value: r.form[c.key] ?? '', 'aria-label': c.label,
+            ...(c.phone ? { inputMode: 'tel', placeholder: '010-0000-0000', style: 'text-align:center',
+              onblur: (e) => { e.target.value = fmtPhone(e.target.value); r.form[c.key] = e.target.value; } } : {}),
             oninput: (e) => { r.form[c.key] = e.target.value; } })));
         }
       }
@@ -199,6 +231,8 @@ export async function renderUsers(root) {
     try {
       const r = await api.users();
       org = !!r.org;
+      hasSol = (r.users || []).some((u) => 'solutions' in u); // V16 칸이 있으면 SELECT * 에 들어온다
+      hasPhone = (r.users || []).some((u) => 'phone' in u); // V19
       if (org) {
         [depts, roles] = await Promise.all([
           api.depts().then((x) => x.rows || []).catch(() => []),

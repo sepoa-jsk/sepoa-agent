@@ -200,6 +200,7 @@ html, body {
 .ss-btn--icon      { display: inline-flex; align-items: center; justify-content: center; width: 60px; padding: 0;
                      background: #FFFFFF; border-color: var(--ss-bd); color: var(--ss-ink-2); }          /* 업로드 · 다운로드 */
 .ss-btn--delete    { background: #FFFFFF;                border-color: var(--ss-danger-bd); color: var(--ss-danger-fg); }
+.ss-btn--nav       { background: #475569;                border-color: #475569;           color: #FFFFFF; }   /* 단계 이동(이전 · 다음) — 2026-11-03 */
 .ss-btn--gridrow   { background: var(--ss-gridrow-bg);   border-color: var(--ss-gridrow-bd); color: var(--ss-ink-3); }
 
 .ss-actions { display: flex; gap: 4px; }   /* 버튼 사이 4px (운영 화면 캡처) */

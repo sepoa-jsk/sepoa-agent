@@ -12,7 +12,8 @@ const STATUS_LABEL = { DRAFT: '작성중', SUBMITTED: '제출', SENT: '발송', 
 const purposeOf = (memo) => (String(memo || '').match(/\[견적용도\]\s*(.+)/) || [])[1] || '';
 const looksLikeQuoteNo = (s) => /^(qt|s)?\d/i.test(s);
 
-export async function openQuotePicker({ currentId, onPick }) {
+// 유지보수 견적의 [구축 견적 불러오기](2026-11-07)도 이 창을 쓴다 — title · note · okLabel · filter(목록 거르기)
+export async function openQuotePicker({ currentId, onPick, title, note, okLabel, filter }) {
   let quotes = [];
   let picked = null;           // { quote }
   let seq = 0;                 // 늦게 온 응답이 새 선택을 덮지 않게
@@ -23,7 +24,7 @@ export async function openQuotePicker({ currentId, onPick }) {
   const list = h('div', { style: 'flex:1;overflow:auto;border-top:1px solid #E7EAF0' });
   const info = h('div', { style: 'font-size:12px;color:var(--ss-ink-3);min-height:18px' }, '왼쪽에서 견적서를 고르세요.');
   const frame = h('iframe', { style: 'flex:1;width:100%;border:1px solid #E7EAF0;background:#fff' });
-  const okBtn = h('button', { class: 'btn btn-primary', disabled: true }, '불러오기');
+  const okBtn = h('button', { class: 'btn btn-primary', disabled: true }, okLabel || '불러오기');
   const previewBtn = h('button', { class: 'btn', disabled: true, onclick: () => { if (picked) viewQuote(picked.quote); } }, '미리보기');
 
   const body = h('div', { style: 'display:grid;grid-template-columns:360px 1fr;gap:12px;height:70vh' },
@@ -32,10 +33,10 @@ export async function openQuotePicker({ currentId, onPick }) {
     h('div', { style: 'display:flex;flex-direction:column;gap:6px;min-height:0' }, info, frame));
 
   const m = openModal({
-    title: '기존 견적서 불러오기',
+    title: title || '기존 견적서 불러오기',
     body,
     footer: [h('span', { style: 'margin-right:auto;font-size:12px;color:var(--ss-ink-3)' },
-      '구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져옵니다. 지금 입력한 기본정보(수신처 등)는 그대로 둡니다.'),
+      note != null ? note : '구성 · 단가 · 특별DC · 결제 방안 · 견적조건을 가져옵니다. 지금 입력한 기본정보(수신처 등)는 그대로 둡니다.'),
     previewBtn, h('button', { class: 'btn', onclick: () => m.close() }, '취소'), okBtn],
   });
   const box = m.back.querySelector('.modal');
@@ -45,7 +46,7 @@ export async function openQuotePicker({ currentId, onPick }) {
 
   function paintList() {
     clear(list);
-    const rows = quotes.filter((q) => q.id !== currentId); // 지금 고치는 견적 자신은 뺀다
+    const rows = quotes.filter((q) => q.id !== currentId && (!filter || filter(q))); // 지금 고치는 견적 자신은 뺀다
     if (!rows.length) { list.appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '견적서가 없습니다.')); return; }
     for (const q of rows) {
       const on = picked && picked.quote.id === q.id;

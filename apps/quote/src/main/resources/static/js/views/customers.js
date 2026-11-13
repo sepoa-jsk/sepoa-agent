@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../app.js';
-import { h, toast, clear, confirmModal, openModal, debounce, resizableColumns } from '../ui.js';
+import { h, toast, clear, confirmModal, debounce, resizableColumns, checkDropdown } from '../ui.js';
 
 // 고객사관리 = sq_mst_customer (V4, 2026-10-29). 수신처는 고객사명으로 쓴다.
 // L1 조회형(인라인 편집) — 2026-10-31 공통 패턴으로 다시 맞춤:
@@ -8,15 +8,21 @@ import { h, toast, clear, confirmModal, openModal, debounce, resizableColumns } 
 //   걸린 조건은 필터칩 줄, 건수는 명세바 오른쪽. 거르기만 하므로 고치던 값은 조건을 바꿔도 남는다.
 // 코드는 자동 채번(서버 — 새 행을 저장할 때 C0001 …). 기업구분코드 · 정렬 칸은 뺐다(목록은 고객사명 순).
 // 사용 솔루션(V12) — 한 고객사가 여러 솔루션을 쓸 수 있다. 칸을 누르면 체크로 고른다. V12 전 DB 에서는 칸이 보이지 않는다.
-// 채널 — 고객사와 바로 하는지, 컨설팅펌 · SI 업체 등을 끼고 하는지(2026-11-02 사용자 요청으로 이름만 바꿈, 코드는 그대로)
-export const CHANNELS = [['DIRECT', '직접 (고객사)'], ['AGENCY', '간접 (컨설팅펌 · SI 경유)']];
+// 채널 — 고객사와 직접 계약하는지, SI · 컨설팅사가 원청으로 우리를 데리고 들어가는지(2026-11-02 사용자 요청으로 이름만 바꿈, 코드는 그대로)
+export const CHANNELS = [['DIRECT', '직접 계약'], ['AGENCY', '원청사 경유 (SI · 컨설팅)']];
+// 거래 구분(V15 kind) — 원청사(BSG 같은 SI · 컨설팅사)도 한 줄로 등록하고, 원청사 경유 고객(JW)은 원청사 칸에서 그 줄을 고른다
+export const KINDS = [['CUSTOMER', '고객사'], ['PARTNER', '원청사 (SI · 컨설팅)']];
 
 const FIELDS = [
+  // 거래 구분을 먼저 고른다 — 새 행은 고르기 전까지 다른 칸이 잠긴다(2026-11-02 사용자 요청)
+  { key: 'kind', label: '거래 구분', type: 'preset', options: KINDS, width: 150, v15: true, required: true },
   { key: 'code', label: '코드', type: 'auto', width: 100 },
   { key: 'name', label: '고객사명', type: 'text', required: true, width: 200 },
   { key: 'solutions', label: '사용 솔루션', type: 'multi', width: 200, v12: true },
   { key: 'company_key', label: '기업구분', type: 'preset', options: 'company', width: 140 },
-  { key: 'channel', label: '채널', type: 'preset', options: CHANNELS, width: 110 },
+  { key: 'channel', label: '채널', type: 'preset', options: CHANNELS, width: 170 },
+  // 원청사 — 채널이 원청사 경유인 고객사만. 거래 구분이 원청사인 행에서 고른다(코드로 저장)
+  { key: 'via_code', label: '원청사', type: 'preset', options: 'partners', width: 150, v15: true },
   { key: 'contact_name', label: '담당자', type: 'text', width: 110 },
   { key: 'contact_phone', label: '연락처', type: 'text', width: 130 },
   { key: 'contact_email', label: '이메일', type: 'text', width: 200 },
@@ -35,13 +41,16 @@ export async function renderCustomers(root) {
   let companyOpts = [];
   const solutionOpts = (store.master?.solutions || []).map((s) => [s.code, s.name]);
   let hasSol = false; // V12 칸이 있는가(서버가 has_solutions 로 알려 준다)
+  let hasPartner = false; // V15 칸(거래 구분 · 원청사)이 있는가(has_partner)
   let rows = [];     // [{ orig, form, isNew, checked, seq }] — 사용 중인 고객사 전부. 화면에는 조건에 맞는 것만 그린다
   let deleted = [];
   let sort = { key: null, dir: null };
   let seq = 0;
 
-  const fields = () => FIELDS.filter((f) => !f.v12 || hasSol);
-  const optionsOf = (f) => (f.options === 'company' ? companyOpts : f.options);
+  const fields = () => FIELDS.filter((f) => (!f.v12 || hasSol) && (!f.v15 || hasPartner));
+  // 원청사 선택지 — 저장된 원청사 행(코드가 있는 행)
+  const partnerOpts = () => rows.filter((r) => r.form.kind === 'PARTNER' && r.form.code).map((r) => [r.form.code, r.form.name]);
+  const optionsOf = (f) => (f.options === 'company' ? companyOpts : f.options === 'partners' ? partnerOpts() : f.options);
   const solName = (code) => (solutionOpts.find(([c]) => c === code) || [])[1] || code;
   const nameOf = (opts, v) => (opts.find(([k]) => k === v) || [])[1] || v;
 
@@ -116,8 +125,9 @@ export async function renderCustomers(root) {
     rows = []; deleted = [];
     clear(gridBox).appendChild(h('div', { class: 'ss-cell--empty', style: 'padding:16px' }, '불러오는 중...'));
     try {
-      const { rows: list, has_solutions: hs } = await api.masterList('customers');
+      const { rows: list, has_solutions: hs, has_partner: hp } = await api.masterList('customers');
       hasSol = !!hs;
+      hasPartner = !!hp;
       solRow.hidden = !hasSol;
       rows = (list || []).filter((r) => r.active)
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'))
@@ -142,9 +152,10 @@ export async function renderCustomers(root) {
     form.solutions = filter.solution || null;
     form.company_key = filter.company || null;
     form.channel = filter.channel || null;
+    form.kind = hasPartner ? null : 'CUSTOMER'; // 거래 구분부터 고르게 비워 둔다
     rows.push({ orig: null, form, isNew: true, checked: false, seq: seq++ });
     paintRows();
-    gridBox.querySelector('tbody tr:last-child input.ss-cellinput')?.focus();
+    gridBox.querySelector('tbody tr:last-child .ss-cellinput:not([disabled])')?.focus();
   }
 
   function removeRows() {
@@ -221,7 +232,7 @@ export async function renderCustomers(root) {
         }))),
       tbody);
     clear(gridBox).appendChild(table);
-    resizableColumns(table, `quote2:customer-cols2:${hasSol ? 'sol' : 'base'}`);
+    resizableColumns(table, `quote2:customer-cols3:${hasSol ? 'sol' : 'base'}${hasPartner ? '-p' : ''}`); // 칸 순서가 바뀌면 키도 바꾼다
     clear(note).append(h('span', { class: 'ss-detailbar__note' }, '코드는 저장할 때 자동으로 붙습니다. 행삭제한 고객사는 사용 중지됩니다.'),
       h('div', { class: 'ss-detailbar__spacer' }),
       h('span', { class: 'ss-detailbar__count' }, h('b', {}, String(list.length)), ' 건'));
@@ -236,45 +247,48 @@ export async function renderCustomers(root) {
 
   function cellEl(f, r, repaint) {
     const form = r.form;
+    // 새 행 — 거래 구분을 고르기 전에는 다른 칸을 잠근다
+    const locked = hasPartner && r.isNew && !form.kind && f.key !== 'kind';
     if (f.type === 'auto') {
       return h('td', { class: 'ss-cell--link', style: 'text-align:center' }, form.code || h('span', { style: 'color:var(--ss-ink-3);font-weight:400' }, '자동'));
     }
     if (f.type === 'multi') {
-      const names = splitSol(form[f.key]).map(solName).join(', ');
-      return h('td', { class: 'ss-cell--input' }, h('button', { type: 'button', class: 'ss-cellinput', title: '눌러서 고르기',
-        style: 'text-align:left;cursor:pointer;background:none;border:0;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap',
-        onclick: () => pickSolutions(form[f.key], (v) => { form[f.key] = v; repaint(); }) },
-      names || h('span', { style: 'color:var(--ss-ink-3)' }, '선택')));
+      // 드롭다운(여러 개 체크) — 칸을 누르면 바로 아래에 목록이 열린다(2026-11-02 사용자 요청: 팝업 대신 드롭다운)
+      const label = h('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' });
+      const paintLabel = () => {
+        const names = splitSol(form[f.key]).map(solName).join(', ');
+        label.replaceChildren(names || h('span', { style: 'color:var(--ss-ink-3)' }, '선택'));
+        btn.title = names || '';
+      };
+      const btn = h('button', { type: 'button', class: 'ss-cellinput', disabled: locked, 'aria-label': f.label,
+        style: 'display:flex;align-items:center;gap:4px;text-align:left;cursor:pointer;width:100%',
+        onclick: () => solDropdown(btn, form[f.key], (v) => { form[f.key] = v; paintLabel(); }) },
+      label, h('span', { style: 'font-size:10px;color:var(--ss-ink-3)' }, '▾'));
+      paintLabel();
+      return h('td', { class: 'ss-cell--input' }, btn);
     }
     if (f.type === 'preset') {
-      return h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': f.label,
-        onchange: (e) => { form[f.key] = e.target.value || null; } },
+      // 원청사는 채널이 원청사 경유인 고객사만 고른다 — 그 밖에는 막아 둔다. 거래 구분 · 채널을 바꾸면 줄을 다시 그린다
+      const viaOff = f.key === 'via_code' && (form.channel !== 'AGENCY' || form.kind === 'PARTNER');
+      return h('td', { class: 'ss-cell--input' }, h('select', { class: 'ss-cellinput', 'aria-label': f.label, disabled: viaOff || locked,
+        title: locked ? '거래 구분을 먼저 고르세요' : viaOff ? '채널이 원청사 경유인 고객사만 원청사를 고릅니다' : '',
+        onchange: (e) => {
+          form[f.key] = e.target.value || null;
+          if (f.key === 'kind' || f.key === 'channel') {
+            if (form.channel !== 'AGENCY' || form.kind === 'PARTNER') form.via_code = null;
+            repaint();
+          }
+        } },
       h('option', { value: '', selected: !form[f.key] }, '선택'),
       ...optionsOf(f).map(([v, t]) => h('option', { value: v, selected: v === form[f.key] }, t))));
     }
     return h('td', { class: 'ss-cell--input' }, h('input', { class: 'ss-cellinput', 'aria-label': f.label, type: 'text', value: form[f.key] ?? '',
+      disabled: locked, placeholder: locked ? '거래 구분 먼저' : '',
       oninput: (e) => { form[f.key] = e.target.value; } }));
   }
 
-  // 사용 솔루션 고르기 — 체크(여러 개). 솔루션 마스터 순서대로 'PROCURE,SEAL' 로 담는다
-  function pickSolutions(value, onDone) {
-    const cur = new Set(splitSol(value));
-    const boxes = solutionOpts.map(([code, name]) => {
-      const cb = h('input', { type: 'checkbox', checked: cur.has(code), value: code });
-      return h('label', { style: 'display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;cursor:pointer' }, cb, name, h('span', { style: 'color:var(--ss-ink-3);font-size:11px' }, code));
-    });
-    const m = openModal({
-      title: '사용 솔루션',
-      body: h('div', {}, ...boxes),
-      footer: [h('button', { class: 'btn', onclick: () => m.close() }, '취소'),
-        h('button', { class: 'btn btn-primary', onclick: () => {
-          const v = boxes.map((b) => b.querySelector('input')).filter((cb) => cb.checked).map((cb) => cb.value).join(',');
-          m.close();
-          onDone(v || null);
-        } }, '확인')],
-    });
-    m.back.querySelector('.modal').style.width = '320px';
-  }
+  // 사용 솔루션 드롭다운 — 칸 바로 아래에 체크 목록(여러 개, 2026-11-02 사용자 요청). ui.js checkDropdown(사용자 담당 솔루션과 같이 쓴다)
+  const solDropdown = (anchor, value, onChange) => checkDropdown(anchor, solutionOpts, value, onChange);
 
   function payloadOf(form, isNew) {
     const payload = {};
@@ -282,6 +296,7 @@ export async function renderCustomers(root) {
     FIELDS.forEach((f) => {
       if (f.type === 'auto') return; // 코드는 서버가 붙인다(새 행) · 바꾸지 않는다(기존 행)
       if (f.v12 && !hasSol) return;
+      if (f.v15 && !hasPartner) return;
       let v = form[f.key];
       if (f.type === 'preset' || f.type === 'multi') v = v || null;
       else v = v == null || String(v).trim() === '' ? null : String(v).trim();

@@ -89,6 +89,22 @@ public class SystemController {
             Object v = b.get(c);
             cols.add(c); params.add(v == null || String.valueOf(v).isBlank() ? null : String.valueOf(v).trim());
         }
+        // 핸드폰번호(V19) — 비우면 지운다
+        if (b.containsKey("phone")) {
+            if (!hasColumn("sq_users", "phone")) {
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_NOT_READY", "DB 변경(V19 — 사용자 핸드폰번호 칸)이 아직 적용되지 않았습니다.");
+            }
+            Object v = b.get("phone");
+            cols.add("phone"); params.add(v == null || String.valueOf(v).isBlank() ? null : String.valueOf(v).trim());
+        }
+        // 담당 솔루션(V16) — 코드 쉼표 구분. 비우면 미지정
+        if (b.containsKey("solutions")) {
+            if (!hasColumn("sq_users", "solutions")) {
+                throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "DB_NOT_READY", "DB 변경(V16 — 사용자 담당 솔루션 칸)이 아직 적용되지 않았습니다.");
+            }
+            Object v = b.get("solutions");
+            cols.add("solutions"); params.add(v == null || String.valueOf(v).isBlank() ? null : String.valueOf(v).trim());
+        }
         if (b.containsKey("active")) {
             if (!org) throw notApplied();
             cols.add("active"); params.add(Rows.truthy(b.get("active")) ? 1 : 0);
@@ -253,7 +269,11 @@ public class SystemController {
         // 내 정보 — 견적 작성 기본정보의 담당자 · 이메일 기본값(2026-10-31). 직위는 V10 뒤에만 있다
         if (me != null) {
             boolean org = hasColumn("sq_users", "position");
-            Map<String, Object> p = db.first("SELECT name, email" + (org ? ", position" : "") + " FROM sq_users WHERE id = ?", me.id());
+            // 담당 솔루션(V16) — 견적 작성 1단계의 솔루션 기본값
+            boolean sol = hasColumn("sq_users", "solutions");
+            boolean tel = hasColumn("sq_users", "phone"); // 핸드폰번호(V19) — 견적 작성 '영업 연락처' 기본값
+            Map<String, Object> p = db.first("SELECT name, email" + (org ? ", position" : "") + (sol ? ", solutions" : "") + (tel ? ", phone" : "")
+                    + " FROM sq_users WHERE id = ?", me.id());
             if (p != null) out.put("profile", p);
         }
         if (me == null || me.isAdmin() || !hasColumn("sq_users", "role_code")) return out;

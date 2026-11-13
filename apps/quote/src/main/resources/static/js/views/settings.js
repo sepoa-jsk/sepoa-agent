@@ -1,5 +1,6 @@
 import { api } from '../api.js';
 import { h, toast, loading, clear } from '../ui.js';
+import { COMPANY_KEYS } from './company.js';
 
 // 공급자 정보 등 알려진 설정 키 (추가 키도 표시)
 const KNOWN = [
@@ -35,7 +36,8 @@ export async function renderSettings(root) {
 
   // ── 공급자 정보(일반 key-value) — 템플릿 키는 제외 ──
   const inputs = {};
-  const keys = [...new Set([...KNOWN.map((k) => k[0]), ...Object.keys(settings)])].filter((k) => k !== TEMPLATE_KEY && k !== 'risk_factors'); // 리스크 계수는 기준정보 > 리스크 계수 화면에서
+  const keys = [...new Set([...KNOWN.map((k) => k[0]), ...Object.keys(settings)])].filter((k) => k !== TEMPLATE_KEY && k !== 'risk_factors' // 리스크 계수는 기준정보 > 리스크 계수 화면에서
+    && !COMPANY_KEYS.some(([c]) => c === k)); // 자사 정보(supplier_* · 인감)는 기준정보 > 자사 정보 화면에서(2026-11-03)
   const labelOf = (k) => (KNOWN.find((x) => x[0] === k)?.[1]) || k;
   const rows = keys.map((k) => {
     const isAddr = k === 'supplier_addr';
@@ -68,7 +70,7 @@ export async function renderSettings(root) {
   renderTpl();
   const addTpl = h('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { tplRows.push({ text: '', auto: false }); renderTpl(); } }, '+ 조건 추가');
   const varHelp = h('div', { class: 'page-sub', style: 'margin-bottom:10px;line-height:1.7' },
-    '치환 변수: {laborRate}=인력 적용네고율 · {moduleRate}=모듈 적용네고율 · {onsiteLabel}=상주(상주로/부분상주로) · {companyLabel}=기업구분명. ',
+    '치환 변수: {laborRate}=인력 기준단가 적용율 · {moduleRate}=모듈 기준단가 적용율 · {onsiteLabel}=상주(상주로/부분상주로) · {companyLabel}=기업구분명. ',
     h('br'), '"자동" 체크 시 견적 작성에서 변수 치환·자동 갱신됩니다(직접 수정한 줄은 고정).');
 
   // ── 저장 (공급자 + 템플릿 함께) ──

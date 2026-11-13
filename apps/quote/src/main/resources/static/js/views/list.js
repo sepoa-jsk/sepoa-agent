@@ -3,19 +3,24 @@
 //   툴바 우: 신규 · 수정 · 차수 추가 · 삭제 — 수정 · 차수 추가는 선택 1건, 삭제는 선택한 견적 전부(확인 후)
 //   차수(V11): 같은 건(1차 · 2차 …)은 붙어서 나온다(서버 정렬). 차수 칸이 없는 DB 에서는 모두 1차
 //   건수: 툴바 아래 상태별 건수 줄 (전체 n  작성중 n …)
-//   기간 선택기는 두지 않는다 — 목록 API 에 기간 조건이 없다
+//   상세 검색(2026-11-03): 담당자(작성자) · 구축형태 · 견적일(기간) · 고객사 · 견적번호.
+//   관리자는 전체를, 일반 사용자는 처음에 본인이 작성한 견적만 본다(담당자 = 본인). 필터에서 담당자를 '전체'로 바꾸면 모두 본다
 import { api } from '../api.js';
 import { h, won, toast, clear, debounce, resizableColumns, confirmModal } from '../ui.js';
 import { reviseQuote } from './quote/quote-actions.js';
+import { clearNewQuote } from './quote/wizard/index.js';
+import { store } from '../app.js';
 
 const STATUS = { DRAFT: '작성중', SENT: '발송', WON: '수주', LOST: '실주' };
 const STATUS_OPTS = [['', '전체'], ...Object.entries(STATUS)];
+// 구축형태 조건 — 구축형은 일시불 · 분납을 함께 찾는다(서버가 ONPREM → ONPREM_*)
+const DEP_OPTS = [['', '전체'], ['ONPREM', '구축형'], ['SAAS', 'SaaS'], ['PCLOUD', 'Private Cloud']];
 const DEP = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', ONPREM: '구축형', SAAS: 'SaaS', PCLOUD: 'Private Cloud' };
 // 견적용도는 메모의 [견적용도] 줄이다
 const purposeOf = (memo) => (String(memo || '').match(/\[견적용도\]\s*(.+)/) || [])[1] || '';
 // 칸 너비 고정 — 한 칸(고객사)이 남는 폭을 다 먹지 않게. 선택 칸 60px
 const COLS = [
-  ['선택', 60], ['고객사', 200], ['견적용도', 340], ['견적일자', 100], ['견적번호', 160], ['차수', 60], ['구축형태', 120],
+  ['선택', 60], ['고객사', 200], ['견적용도', 340], ['견적일자', 100], ['견적번호', 160], ['차수', 60], ['솔루션', 100], ['구축형태', 120],
   ['공급가액', 130], ['부가세', 110], ['합계금액', 130], ['월사용료', 120], ['상태', 80], ['작성자', 90],
 ];
 const PAGE_SIZE = 100; // API 최대치. 넘칠 때만 아래에 페이지 이동이 나온다
@@ -33,7 +38,11 @@ const icon = {
 };
 
 export async function renderList(root) {
-  const state = { q: '', customer: '', quoteNo: '', status: '', page: 1 };
+  // 일반 사용자는 처음에 본인 견적만(담당자 = 본인), 관리자는 전체(2026-11-03 사용자 요청)
+  const me = store.user || {};
+  const myOwner = me.role === 'ADMIN' || me.id == null ? '' : String(me.id);
+  const state = { q: '', customer: '', quoteNo: '', status: '', owner: myOwner, dep: '', from: '', to: '', page: 1 };
+  let owners = [];
 
   // ── 툴바 좌: Search ──
   const searchInput = h('input', {
@@ -49,10 +58,26 @@ export async function renderList(root) {
     searchInput,
     h('button', { class: 'ss-search__btn', 'aria-label': '검색', html: icon.search, onclick: () => load() }));
 
-  // ── 필터: 상세 검색 팝오버 (고객사 · 견적번호) ──
+  // ── 필터: 상세 검색 팝오버 (담당자 · 구축형태 · 견적일 · 고객사 · 견적번호) ──
   const custInput = h('input', { class: 'ss-input' });
   const noInput = h('input', { class: 'ss-input' });
-  const popover = h('div', { class: 'ss-popover', hidden: true },
+  const ownerSel = h('select', { class: 'ss-select', 'aria-label': '담당자' });
+  const paintOwners = () => {
+    clear(ownerSel).append(h('option', { value: '' }, '전체'),
+      ...owners.map((u) => h('option', { value: String(u.id) }, (u.name || u.email) + (String(u.id) === String(me.id) ? ' (본인)' : ''))));
+    // 본인이 아직 견적을 쓰지 않았으면 목록에 없다 — 본인 칸을 따로 둔다
+    if (myOwner && !owners.some((u) => String(u.id) === myOwner)) ownerSel.append(h('option', { value: myOwner }, (me.name || me.email || '') + ' (본인)'));
+    ownerSel.value = state.owner;
+  };
+  const depSel = h('select', { class: 'ss-select', 'aria-label': '구축형태' }, ...DEP_OPTS.map(([v, t]) => h('option', { value: v }, t)));
+  const fromInput = h('input', { class: 'ss-input', type: 'date', 'aria-label': '견적일 시작', style: 'flex:1;min-width:0' });
+  const toInput = h('input', { class: 'ss-input', type: 'date', 'aria-label': '견적일 끝', style: 'flex:1;min-width:0' });
+  const syncInputs = () => {
+    custInput.value = state.customer; noInput.value = state.quoteNo; ownerSel.value = state.owner;
+    depSel.value = state.dep; fromInput.value = state.from; toInput.value = state.to;
+  };
+  // 견적일 두 칸(시작 ~ 끝)이 들어가도록 이 창만 조금 넓힌다
+  const popover = h('div', { class: 'ss-popover', style: 'width:420px', hidden: true },
     h('div', { class: 'ss-popover__head' }, '상세 검색',
       h('button', { class: 'ss-popover__close', 'aria-label': '닫기', html: '&times;', onclick: () => { popover.hidden = true; } })),
     h('div', { class: 'ss-popover__body' },
@@ -60,19 +85,25 @@ export async function renderList(root) {
         h('button', { class: 'ss-btn ss-btn--save', onclick: () => {
           state.customer = custInput.value.trim();
           state.quoteNo = noInput.value.trim();
+          state.owner = ownerSel.value; state.dep = depSel.value;
+          state.from = fromInput.value; state.to = toInput.value;
           state.page = 1;
           popover.hidden = true;
           load();
         } }, '조회'),
         h('button', { class: 'ss-btn ss-btn--default', onclick: () => {
-          custInput.value = ''; noInput.value = '';
-          state.customer = ''; state.quoteNo = '';
+          Object.assign(state, { customer: '', quoteNo: '', owner: '', dep: '', from: '', to: '' });
+          syncInputs();
           state.page = 1;
           load();
         } }, '초기화')),
+      h('div', { class: 'ss-popover__row' }, h('label', {}, '담당자'), ownerSel),
+      h('div', { class: 'ss-popover__row' }, h('label', {}, '구축형태'), depSel),
+      h('div', { class: 'ss-popover__row' }, h('label', {}, '견적일'),
+        h('div', { style: 'flex:1;min-width:0;display:flex;align-items:center;gap:4px' }, fromInput, '~', toInput)),
       h('div', { class: 'ss-popover__row' }, h('label', {}, '고객사'), custInput),
       h('div', { class: 'ss-popover__row' }, h('label', {}, '견적번호'), noInput)));
-  const filterBtn = h('button', { class: 'ss-tbtn', onclick: (e) => { e.stopPropagation(); statusMenu.hidden = true; popover.hidden = !popover.hidden; } },
+  const filterBtn = h('button', { class: 'ss-tbtn', onclick: (e) => { e.stopPropagation(); statusMenu.hidden = true; syncInputs(); popover.hidden = !popover.hidden; } },
     h('span', { class: 'ss-tbtn__ico--filter', html: icon.filter }), ' 필터');
 
   // ── 상태 드롭다운 ──
@@ -105,7 +136,7 @@ export async function renderList(root) {
       h('div', { class: 'ss-dropdown' }, statusBtn, statusMenu)),
     h('div', { class: 'ss-toolbar__spacer' }),
     h('div', { class: 'ss-actions' },
-      h('button', { class: 'ss-btn ss-btn--save', onclick: () => { location.hash = '#/quotes/new'; } }, '신규'),
+      h('button', { class: 'ss-btn ss-btn--save', onclick: () => { clearNewQuote(); location.hash = '#/quotes/new'; } }, '신규'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: onEdit }, '수정'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: onRevise }, '차수 추가'),
       h('button', { class: 'ss-btn ss-btn--save', onclick: onDelete }, '삭제'))));
@@ -145,9 +176,16 @@ export async function renderList(root) {
     if (state.customer) list.push(['고객사 ' + state.customer, () => { state.customer = ''; custInput.value = ''; }]);
     if (state.quoteNo) list.push(['견적번호 ' + state.quoteNo, () => { state.quoteNo = ''; noInput.value = ''; }]);
     if (state.status) list.push(['상태 ' + STATUS[state.status], () => { state.status = ''; }]);
+    if (state.owner) {
+      const u = owners.find((x) => String(x.id) === state.owner);
+      const nm = state.owner === String(me.id) ? '본인' : (u && (u.name || u.email)) || state.owner;
+      list.push(['담당자 ' + nm, () => { state.owner = ''; }]);
+    }
+    if (state.dep) list.push(['구축형태 ' + DEP_OPTS.find(([v]) => v === state.dep)[1], () => { state.dep = ''; }]);
+    if (state.from || state.to) list.push([`견적일 ${ymd(state.from) || '처음'} ~ ${ymd(state.to) || '끝'}`, () => { state.from = ''; state.to = ''; }]);
     chips.hidden = !list.length;
     statusBtn.classList.toggle('is-active', !!state.status);
-    filterBtn.classList.toggle('is-active', !!(state.customer || state.quoteNo));
+    filterBtn.classList.toggle('is-active', !!(state.customer || state.quoteNo || state.owner || state.dep || state.from || state.to));
     if (!list.length) return;
     chips.appendChild(h('span', {}, '필터 조건'));
     for (const [label, off] of list) {
@@ -155,8 +193,8 @@ export async function renderList(root) {
         h('span', { style: 'cursor:pointer', title: '제거', html: '&times;', onclick: () => { off(); state.page = 1; load(); } })));
     }
     chips.appendChild(h('span', { style: 'cursor:pointer', title: '전체 지우기', html: '&#9003;', onclick: () => {
-      state.q = state.customer = state.quoteNo = state.status = '';
-      searchInput.value = custInput.value = noInput.value = '';
+      Object.assign(state, { q: '', customer: '', quoteNo: '', status: '', owner: '', dep: '', from: '', to: '' });
+      searchInput.value = ''; syncInputs();
       state.page = 1;
       load();
     } }));
@@ -174,6 +212,10 @@ export async function renderList(root) {
       if (state.q) cond[looksLikeQuoteNo(state.q) ? 'quote_no' : 'customer'] = state.q;
       if (state.customer) cond.customer = state.customer;
       if (state.quoteNo) cond.quote_no = state.quoteNo;
+      if (state.owner) cond.owner = state.owner;
+      if (state.dep) cond.deployment = state.dep;
+      if (state.from) cond.from = state.from;
+      if (state.to) cond.to = state.to;
       const params = { ...cond, page: state.page, size: PAGE_SIZE };
       if (state.status) params.status = state.status;
       paintStatusCounts(cond);
@@ -196,6 +238,7 @@ export async function renderList(root) {
           h('td', { class: 'ss-cell--date' }, ymd(q.quote_date)),
           h('td', { class: 'ss-cell--link' }, h('a', { href: `#/quotes/${q.id}` }, q.quote_no)),
           h('td', {}, `${q.revision || 1}차`),
+          h('td', {}, store.solutionName(q.solution) || q.solution || ''),
           h('td', {}, DEP[q.deployment] || q.deployment || ''),
           h('td', { class: 'ss-cell--amount' }, won(q.supply_amount)),
           h('td', { class: 'ss-cell--amount' }, won(q.vat_amount)),
@@ -269,5 +312,7 @@ export async function renderList(root) {
       h('button', { class: 'ss-btn ss-btn--default', disabled: state.page >= pages, onclick: () => { state.page++; load(); } }, '다음'));
   }
 
+  // 담당자 목록을 받은 뒤 칩 이름이 보이게 다시 그린다(목록은 바로 불러온다)
+  api.quoteOwners().then((r) => { owners = r.rows || []; paintOwners(); paintChips(); }).catch(() => paintOwners());
   load();
 }

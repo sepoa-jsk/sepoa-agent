@@ -293,7 +293,7 @@ export async function renderEditor(root, { mode, id }) {
     condWrap.appendChild(h('div', { class: 'panel' },
       h('div', { style: S.blockHead },
         h('div', {}, h('strong', {}, '▣ 견적조건'),
-          h('span', { class: 'page-sub', style: 'margin-left:8px' }, '자동(파랑) 문구는 네고율·상주여부에 따라 갱신됩니다. 직접 수정한 줄은 고정됩니다.')),
+          h('span', { class: 'page-sub', style: 'margin-left:8px' }, '자동(파랑) 문구는 기준단가 적용율·상주여부에 따라 갱신됩니다. 직접 수정한 줄은 고정됩니다.')),
         h('span', {})),
       h('div', { style: 'padding:12px 14px' }, list,
         h('button', { class: 'add-section', style: 'margin-top:8px', onclick: () => { condRows.push({ raw: '', text: '', auto: false, edited: true }); renderConditions(); } }, '+ 조건 추가'))));
@@ -313,7 +313,7 @@ export async function renderEditor(root, { mode, id }) {
     modRows.forEach((r) => tb.appendChild(moduleRow(r)));
     solSubEl = h('strong', {});
     return h('div', { class: 'panel' },
-      blockHead('▣ 솔루션 견적', `기준 네고율 ${pctOf(negoModule).toFixed(0)}%`, solSubEl),
+      blockHead('▣ 솔루션 견적', `기준단가 적용율 ${pctOf(negoModule).toFixed(0)}%`, solSubEl),
       h('div', { class: 'table-wrap' }, h('table', { class: 'grid master-grid' },
         theadRow(['구분', '모듈', '세부기능', '수량(식)', '기준단가', '제안단가', '제안금액', '']), tb)),
       h('div', { style: 'padding:0 14px 14px;display:flex;gap:8px' },
@@ -358,7 +358,7 @@ export async function renderEditor(root, { mode, id }) {
     return h('div', { class: 'panel' },
       h('div', { style: S.blockHead },
         h('div', {}, h('strong', {}, '▣ 시스템 구축 견적 (인건비)'),
-          h('span', { class: 'page-sub', style: 'margin-left:8px' }, `기준 네고율 ${pctOf(negoLabor).toFixed(0)}% · 공수합 `), mmSumEl),
+          h('span', { class: 'page-sub', style: 'margin-left:8px' }, `기준단가 적용율 ${pctOf(negoLabor).toFixed(0)}% · 공수합 `), mmSumEl),
         h('div', { class: 'num' }, '소계 ', laborSubEl)),
       h('div', { class: 'table-wrap' }, h('table', { class: 'grid master-grid' },
         theadRow(['구분', '역할(등급)', '세부내역', '공수(MM)', '기준단가', '제안단가', '제안금액', '']), tb)),
@@ -463,13 +463,13 @@ export async function renderEditor(root, { mode, id }) {
       const rawUp = r.bundle ? num(r.unitPrice) : num(r.m.base_price) * (num(r.applyRate) / 100);
       return { code: r.bundle ? null : r.m.code, category: r.bundle ? '묶음' : '솔루션', name: r.bundle ? (r.name || '묶음 항목') : r.m.name,
         spec: r.spec || null, qty: num(r.qty), base_price: Math.round(base), unit_price: Math.round(rawUp), amount: Math.round(rawUp * num(r.qty)),
-        note: r.bundle ? '1식' : `네고율 ${num(r.applyRate)}%` };
+        note: r.bundle ? '1식' : `적용율 ${num(r.applyRate)}%` };
     })));
     if (laborRows.length) sections.push(sectionPayload('시스템구축', laborRows.map((r) => {
       const base = laborBaseRate(r.role); const rawUp = base * (num(r.applyRate) / 100);
       return { code: r.role.code, category: '시스템구축', name: r.role.name, spec: r.spec || null, qty: num(r.qty),
         base_price: Math.round(base), unit_price: Math.round(rawUp), amount: Math.round(rawUp * num(r.qty)),
-        note: `협회기준 ${won(base)} · 네고율 ${num(r.applyRate)}%` };
+        note: `협회기준 ${won(base)} · 적용율 ${num(r.applyRate)}%` };
     })));
     if (!sections.length || sections.every((s) => s.items.length === 0)) return toast('담긴 항목이 없습니다.', 'err');
 

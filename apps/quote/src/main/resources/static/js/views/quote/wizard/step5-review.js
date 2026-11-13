@@ -1,18 +1,13 @@
-// STEP⑤ 검토·발행 — 검증 배너 자리 + 미리보기 + 발행.
+// 결재요청 · 내려받기 버튼 묶음 — 마지막 단계(인력투입계획) 맨 위 액션 줄에 얹는다.
+// 예전 5단계(검토·결재요청) 탭은 없앴다(2026-11-03 사용자 요청). 그 화면의 검사(localChecks)는 [결재요청]을 누를 때 한다.
 // 새 견적은 POST /api/quotes, 이미 저장된 견적(임시저장·수정)은 PUT /api/quotes/:id. 저장 후 #/quotes/:id 로 이동.
 import { api as http } from '../../../api.js';
-import { h, won, toast } from '../../../ui.js';
-import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload } from './step3-config.js';
-import { downloadQuote } from '../quote-actions.js';
-import { store } from '../../../app.js';
+import { h, toast } from '../../../ui.js';
+import { recalcBlocks, toBlocksPayload, previewHeader, discountPayload, monthlyDiscountPayload, svcFeeMissing, configMissing, priceMissingRows, zeroBlocks, focusZero } from './step3-config.js';
+import { downloadQuote, sealPreview } from '../quote-actions.js';
+import { uploadPendingFiles } from './step1-basic.js';
 
 const num = (v) => Number(v) || 0;
-// 코드 대신 이름으로 보인다(2026-11-02 사용자 요청) — 유형은 구 상세 화면(detail.js)과 같은 이름
-const TYPE_LABEL = { BUILD: '구축·서비스', MAINT: '유지보수', ADDDEV: '추가개발' };
-// 유형 — SaaS 는 '서비스', 그 밖(구축형 · Private Cloud)은 '구축'(2026-11-02 사용자 요청). 유지보수 · 추가개발은 그 이름
-const typeLabel = (t) => (t.quote_type && t.quote_type !== 'BUILD' ? TYPE_LABEL[t.quote_type] || t.quote_type : t.deployment === 'SAAS' ? '서비스' : '구축');
-const ymd = (d) => (d ? String(d).slice(0, 10) : '-');
-const DEP_LABEL = { ONPREM_LUMP: '구축형 일시불', ONPREM_INSTALL: '구축형 분납', ONPREM: '구축형', SAAS: 'SaaS', PCLOUD: 'Private Cloud' };
 
 // 저장 페이로드 — 발행과 임시저장이 같은 모양을 쓴다
 export function quotePayload(s) {
@@ -28,7 +23,7 @@ export function quotePayload(s) {
   };
 }
 
-// 발행 전 확인 — 서버측 강제는 작업 16 검증 엔진 소관이다.
+// 결재요청 전 확인 — 서버측 강제는 작업 16 검증 엔진 소관이다. 경고(WARN)는 막지 않는다
 function localChecks(state) {
   const out = [];
   const b = state.basic;
@@ -38,99 +33,60 @@ function localChecks(state) {
   if (!state.blocks || !state.blocks.length) out.push({ level: 'ERROR', msg: '견적 구성이 비어 있습니다.' });
   const c = recalcBlocks(state);
   if (c.onetime === 0 && c.monthly === 0) out.push({ level: 'ERROR', msg: '금액이 0원입니다.' });
+  for (const t of configMissing(state)) out.push({ level: 'ERROR', msg: t });
+  for (const t of zeroBlocks(state)) out.push({ level: 'ERROR', msg: t });
+  const noPrice = priceMissingRows(state);
+  if (noPrice.length) out.push({ level: 'ERROR', msg: `수량이 있는 행의 제안단가가 비어 있습니다: ${noPrice.join(', ')}` });
+  if (svcFeeMissing(state)) out.push({ level: 'ERROR', msg: 'SaaS 서비스 이용료 금액이 비어 있습니다(필수).' });
   for (const e of c.laborErrors) out.push({ level: 'WARN', msg: e });
   if (!b.purpose || !b.purpose.trim()) out.push({ level: 'WARN', msg: '견적용도가 비어 있습니다.' });
   return out;
 }
 
-export function renderStep5(root, state, wiz) {
-  root.replaceChildren();
-  const checks = localChecks(state);
-  const errs = checks.filter((c) => c.level === 'ERROR');
-  const warns = checks.filter((c) => c.level === 'WARN');
-  const calc = recalcBlocks(state);
-
-  // ── 검증 배너 (규칙 엔진은 작업 16) ──
-  // 수신처가 비면(템플릿 불러오기로 2단계(기본정보)를 건너뛴 경우) 화면 위 기본정보 줄의 수신처 칸으로 보낸다
-  const noCustomer = !state.basic.customer_name || !state.basic.customer_name.trim();
-  const customerBtn = noCustomer ? h('button', { class: 'btn btn-sm', style: 'margin-top:6px', onclick: () => wiz.focusCustomer() }, '수신처 입력') : null;
-  const banner = errs.length
-    ? h('div', { class: 'banner err' }, h('div', {},
-        h('b', {}, `발행할 수 없습니다 — 오류 ${errs.length}건`),
-        h('ul', {}, ...errs.map((e) => h('li', {}, e.msg))), customerBtn))
-    : warns.length
-      ? h('div', { class: 'banner wrn' }, h('div', {},
-          h('b', {}, `확인 필요 ${warns.length}건 (발행은 가능)`),
-          h('ul', {}, ...warns.map((e) => h('li', {}, e.msg)))))
-      : h('div', { class: 'banner inf' }, h('div', {},
-          h('b', {}, '기본 확인 통과'),
-          '정합성 검증 규칙 R-01~R-16 은 작업 16 에서 서버 측으로 들어옵니다.'));
-  if (!wiz.readOnly) root.appendChild(banner); // 상세(읽기 전용)에서는 발행 전 확인이 필요 없다
-
-  // 전체 폭 — 견적서 미리보기는 위쪽 [미리보기] 버튼으로 연다
-  const left = h('div', { style: 'min-width:0' });
-  root.appendChild(left);
-
-  // ── 요약 — 발행 · 내려받기 · 메일 버튼은 맨 위 액션 줄(미리보기 왼쪽)에 얹는다(2026-10-31 사용자 요청 — '산출물' 칸은 없앰) ──
-  const row = (k, v, strong) => h('div', { style: 'display:flex;justify-content:space-between;padding:7px 0;font-size:12.5px' },
-    h('span', { style: 'color:var(--text-2)' }, k),
-    h('span', { class: 'num', style: strong ? 'font-weight:700' : '' }, v));
-
-  const hasMonthly = !!calc.monthly || (state.blocks || []).some((b) => b.recurring);
-  const outBox = h('span', { style: 'display:contents' });
+export function reviewActions(state, wiz) {
   // 내려받기는 서버에 저장된 견적 기준이다 — 저장 전 견적은 끄고, 저장된 견적은 고친 내용을 저장해야 반영된다고 버튼 풍선말로 알린다
-  const savedNote = state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 발행(저장) 후 반영됩니다.' : '발행(저장) 후 내려받을 수 있습니다.';
-  left.appendChild(h('div', { class: 'card', style: 'margin-bottom:12px' },
-    h('div', { class: 'card-h' }, h('h2', {}, '견적 요약')),
-    h('div', { class: 'card-b' },
-      row('수신처', state.basic.customer_name || '-'),
-      row('견적용도', state.basic.purpose || '-'),
-      row('솔루션', (state.applied && state.applied.solution && store.solutionName(state.applied.solution)) || '-'),
-      row('유형 / 구축형태', `${typeLabel(state.type)} / ${DEP_LABEL[state.type.deployment] || store.deploymentName(state.type.deployment) || '-'}`),
-      row('템플릿', state.type.template_code ? (state.applied && state.applied.name ? `${state.applied.name} (${state.type.template_code})` : state.type.template_code)
-        : state.type.manual ? '직접 작성' : '-'),
-      // 두 날짜 사이는 ' / ' — 칸 이름(견적일 / 유효일)과 같은 구분(2026-11-02 사용자 요청)
-      row('견적일 / 유효일', `${ymd(state.basic.quote_date)} / ${ymd(state.basic.valid_until)}`),
-      h('hr', { style: 'border:0;border-top:1px solid var(--line-2);margin:8px 0' }),
-      row('일시불 소계 (원)', won(calc.onetime)),
-      row('특별 DC (원)', calc.dcAmt ? '-' + won(calc.dcAmt) : '0'),
-      row('절사액 (원)', calc.trunc ? '-' + won(calc.trunc) : '0'),
-      row('최종견적금액 (원)', won(calc.final), true),
-      row('부가세 (원, 별도 10%)', won(calc.vat)),
-      // 월 사용료 — 월정액 블록이 있으면 금액이 0 이어도 늘 보인다
-      ...(hasMonthly ? [
-        h('hr', { style: 'border:0;border-top:1px solid var(--line-2);margin:8px 0' }),
-        row('월 사용료 소계 (원)', won(calc.monthly)),
-        row('월 특별 DC (원)', calc.mdcAmt ? '-' + won(calc.mdcAmt) : '0'),
-        row('월 사용료 (원, 부가세 별도)', won(calc.monthlyFinal), true),
-      ] : []))));
-
+  const savedNote = state.quoteId ? 'PDF · Excel 은 서버에 저장된 내용으로 만듭니다. 고친 내용은 임시저장 · 결재요청 후 반영됩니다.' : '임시저장 · 결재요청 후 내려받을 수 있습니다.';
   // 맨 위 액션 줄과 같은 모양(ss-btn)으로 만든다
-  const publishBtn = h('button', { class: 'ss-btn ss-btn--save' }, '발행 (저장)');
-  publishBtn.disabled = errs.length > 0;
+  // [결재요청] — 예전 [발행 (저장)](2026-11-03 사용자 요청). 검사를 통과하면 저장한 뒤 인장시스템 연계(날인 신청) 창을 연다
+  const publishBtn = h('button', { class: 'ss-btn ss-btn--save' }, '결재요청');
   const saved = { id: state.quoteId, quote_no: state.quoteNo };
-  const pdfBtn = h('button', { class: 'ss-btn ss-btn--default', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
-  const xlsBtn = h('button', { class: 'ss-btn ss-btn--default', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
-  const mailBtn = h('button', { class: 'ss-btn ss-btn--default', disabled: !state.quoteId, onclick: () => wiz.mail() }, '메일 발송');
-  outBox.appendChild(publishBtn); outBox.appendChild(pdfBtn); outBox.appendChild(xlsBtn); outBox.appendChild(mailBtn);
-  // 상세(읽기 전용)에는 얹지 않는다 — 상세 위쪽에 이미 PDF · Excel · 메일 버튼이 있다
-  if (!wiz.readOnly && wiz.setTopActions) wiz.setTopActions(outBox);
+  // PDF · Excel 은 출력 묶음 — 상세 화면과 같은 파란 테두리(secondary). 메일 발송은 뺐다(2026-11-03 사용자 요청)
+  const pdfBtn = h('button', { class: 'ss-btn ss-btn--secondary', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'pdf', pdfBtn) }, 'PDF 다운로드');
+  const xlsBtn = h('button', { class: 'ss-btn ss-btn--secondary', disabled: !state.quoteId, title: savedNote, onclick: () => downloadQuote(saved, 'excel', xlsBtn) }, 'Excel 다운로드');
 
   publishBtn.addEventListener('click', async () => {
     const s = wiz.get();
+    // 오류가 있으면 알리고 고칠 칸으로 보낸다 — 수신처면 수신처 칸, 수량 · 공수가 전부 0 이면 3단계 그 칸
+    const errs = localChecks(s).filter((c) => c.level === 'ERROR');
+    if (errs.length) {
+      toast(`결재요청할 수 없습니다 — ${errs.map((e) => e.msg).join(' / ')}`, 'err');
+      // 임시저장과 같이 고칠 칸으로 커서를 옮긴다(2026-11-03 사용자 요청) — 템플릿 · 구성이 없으면 1단계,
+      // 수신처가 비면 수신처 칸, 그 밖(수량 · 공수 전부 0, 제안단가 · 서비스 이용료 빈칸 등)은 3단계(구성)
+      const noTpl = (!s.type.template_code && !s.type.manual) || !(s.blocks || []).length;
+      if (noTpl) { if (s.step !== 1) wiz.go(1); return; }
+      if (!s.basic.customer_name || !s.basic.customer_name.trim()) { wiz.focusCustomer(); return; }
+      if (s.step !== 3) wiz.go(3);
+      focusZero(wiz.get());
+      return;
+    }
     publishBtn.disabled = true; publishBtn.textContent = '저장 중…';
     try {
       const payload = quotePayload(s);
       const { quote } = s.quoteId
         ? await http.updateQuote(s.quoteId, payload)
         : await http.createQuote(payload);
+      s.quoteId = quote.id;
+      await uploadPendingFiles(s); // 저장 전에 담아 둔 파일(2026-11-03)
       wiz.finish(quote.id);
       toast(`견적 ${quote.quote_no} 을(를) 저장했습니다.`, 'ok');
       location.hash = `#/quotes/${quote.id}`;
+      // 상세 화면이 그려진 뒤 날인 신청 창을 띄운다(저장된 내용으로 채운다)
+      setTimeout(() => sealPreview(quote), 300);
     } catch (err) {
-      publishBtn.disabled = false; publishBtn.textContent = '발행 (저장)';
+      publishBtn.disabled = false; publishBtn.textContent = '결재요청';
       toast(err.message, 'err');
     }
   });
-
+  // 업무 버튼(결재요청)과 문서 보기 버튼(PDF · Excel)은 액션 줄에서 다른 묶음에 놓는다(index.js paintTitle)
+  return { approve: publishBtn, docs: h('span', { style: 'display:contents' }, pdfBtn, xlsBtn) };
 }

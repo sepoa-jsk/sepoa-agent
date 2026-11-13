@@ -7,8 +7,10 @@ import { api } from '../../api.js';
 import { store } from '../../app.js';
 import { h, won, clear, openModal } from '../../ui.js';
 
-const DEPLOYMENTS = [['', '전체 구축형태'], ['ONPREM', '구축형(공통)'], ['ONPREM_LUMP', '구축형 일시불'], ['ONPREM_INSTALL', '구축형 분납'], ['SAAS', 'SaaS'], ['PCLOUD', 'Private Cloud']];
-const depName = (c) => (DEPLOYMENTS.find(([k]) => k === c) || [])[1] || c || '';
+// 구축형은 하나로 보인다(공통 · 일시불 · 분납을 합침, 2026-11-02 사용자 요청)
+const DEPLOYMENTS = [['', '전체 구축형태'], ['ONPREM', '구축형'], ['SAAS', 'SaaS'], ['PCLOUD', 'Private Cloud']];
+const depKey = (c) => (String(c || '').startsWith('ONPREM') ? 'ONPREM' : c || '');
+const depName = (c) => (DEPLOYMENTS.find(([k]) => k === depKey(c)) || [])[1] || c || '';
 
 // 공통 틀 — 위에 거르기 줄, 가운데 표, 아래 확인 · 취소
 function pickerModal({ title, filters, head, width = '920px', multi, onOk }) {
@@ -27,7 +29,7 @@ function pickerModal({ title, filters, head, width = '920px', multi, onOk }) {
   return { tbody, okBtn, m };
 }
 
-export function pickItems({ solution, deployment } = {}) {
+export function pickItems({ solution, deployment, exclude } = {}) {
   return new Promise(async (resolve) => {
     const solutions = (await store.getMaster()).solutions || [];
     let items = [];
@@ -37,7 +39,7 @@ export function pickItems({ solution, deployment } = {}) {
     const solSel = h('select', { class: 'ss-select', style: 'width:130px', onchange: () => load() },
       ...solutions.map((s) => h('option', { value: s.code, selected: s.code === solution }, s.name || s.code)));
     const depSel = h('select', { class: 'ss-select', style: 'width:140px', onchange: () => load() },
-      ...DEPLOYMENTS.map(([v, l]) => h('option', { value: v, selected: v === (deployment || '') }, l)));
+      ...DEPLOYMENTS.map(([v, l]) => h('option', { value: v, selected: v === depKey(deployment) }, l)));
     const { tbody, okBtn, m } = pickerModal({
       title: '품목 선택', multi: true, filters: [search, solSel, depSel],
       head: ['', '코드', '구분', '품목명', '세부기능', '단위', '기준단가 (원)', '구축형태'],
@@ -48,7 +50,11 @@ export function pickItems({ solution, deployment } = {}) {
     obs.observe(document.body, { childList: true });
     async function load() {
       clear(tbody).appendChild(h('tr', {}, h('td', { colspan: 8, class: 'ss-cell--empty' }, '불러오는 중...')));
-      try { items = (await api.pricing(solSel.value, depSel.value || undefined)).items || []; } catch { items = []; }
+      // 구축형은 전체를 받아 ONPREM* 를 모두 보인다
+      const dep = depSel.value;
+      try { items = (await api.pricing(solSel.value, dep && dep !== 'ONPREM' ? dep : undefined)).items || []; } catch { items = []; }
+      if (dep) items = items.filter((i) => depKey(i.deployment) === dep);
+      if (exclude) items = items.filter((i) => !exclude.has(i.code));
       paint();
     }
     function paint() {
@@ -96,22 +102,31 @@ function singlePick({ title, head, load, row, empty, width }) {
   });
 }
 
+// 견적 인건비 기준단가 — 회사 기준단가(company_price), 없으면 협회 기준단가(apply_price) (2026-11-10 사용자 요청)
+export const laborBase = (r) => (r == null ? null : r.company_price != null ? Number(r.company_price) : r.apply_price != null ? Number(r.apply_price) : null);
+
 export function pickRole() {
   return singlePick({
-    title: '직무 선택 (노임단가)', width: '760px', empty: '노임단가가 없습니다. 노임단가 화면에서 등록하세요.',
-    head: ['직무코드', '직무명', '등급', '노임단가 (M/D)', '적용단가 (원)', '비고'],
+    title: '직무 선택 (노임단가)', width: '760px', empty: '노임단가가 없습니다. 협회노임단가 화면에서 등록하세요.',
+    head: ['직무코드', '직무명', '등급', '노임단가 (M/D)', '회사 기준단가 (원)', '비고'],
     load: async () => (await api.laborRates()).rates || [],
     row: (r) => [h('td', { class: 'ss-cell--link' }, r.role_code), h('td', { class: 'ss-cell--left' }, r.role_name), h('td', {}, r.grade || ''),
-      h('td', { class: 'ss-cell--amount' }, won(r.wage_md)), h('td', { class: 'ss-cell--amount' }, won(r.apply_price)), h('td', { class: 'ss-cell--left' }, r.note || '')],
+      h('td', { class: 'ss-cell--amount' }, won(r.wage_md)), h('td', { class: 'ss-cell--amount' }, won(laborBase(r))), h('td', { class: 'ss-cell--left' }, r.note || '')],
   });
 }
 
 export function pickCustomer() {
   return singlePick({
     title: '고객사 선택', width: '820px', empty: '등록된 고객사가 없습니다. 기준정보 > 고객사에서 등록하거나 직접 입력하세요.',
-    head: ['코드', '고객사명', '담당자', '연락처', '이메일'],
-    load: async () => ((await api.masterList('customers')).rows || []).filter((c) => c.active !== 0),
-    row: (c) => [h('td', { class: 'ss-cell--link' }, c.code), h('td', { class: 'ss-cell--left' }, c.name), h('td', {}, c.contact_name || ''),
+    head: ['코드', '고객사명', '원청사', '담당자', '연락처', '이메일'],
+    // 간접 고객(경유 업체가 있는 행)은 경유 업체 행을 _via 로 붙여 돌려준다 — 견적에서 수신처 = 경유 업체, 최종 고객사 = 이 고객
+    load: async () => {
+      const all = ((await api.masterList('customers')).rows || []).filter((c) => c.active !== 0);
+      return all.map((c) => ({ ...c, _via: c.via_code ? all.find((p) => p.code === c.via_code) || null : null }));
+    },
+    row: (c) => [h('td', { class: 'ss-cell--link' }, c.code),
+      h('td', { class: 'ss-cell--left' }, c.name, c.kind === 'PARTNER' ? h('span', { style: 'margin-left:6px;font-size:11px;color:var(--ss-ink-3)' }, '원청사') : null),
+      h('td', { class: 'ss-cell--left' }, c._via ? c._via.name : ''), h('td', {}, c.contact_name || ''),
       h('td', {}, c.contact_phone || ''), h('td', { class: 'ss-cell--left' }, c.contact_email || '')],
   });
 }
